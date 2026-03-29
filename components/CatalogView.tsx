@@ -40,9 +40,9 @@ export default function CatalogView({ products }: CatalogViewProps) {
     });
   }, [products]);
 
-  // Фильтрация: по группе + по поиску
+  // Фильтрация: по группе + по поиску (товары с stock <= 1 скрыты)
   const filtered = useMemo(() => {
-    let result = products;
+    let result = products.filter((p) => p.stock > 1);
 
     if (activeGroup) {
       result = result.filter((p) => p.group === activeGroup);
