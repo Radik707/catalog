@@ -1,65 +1,80 @@
 # Каталог торгового представителя
 
 ## О проекте
-Мобильный B2B-каталог товаров для владельцев магазинов. Клиент открывает сайт с телефона → видит товары с ценами и наличием → набирает корзину → отправляет заказ в Telegram.
+Мобильный B2B-каталог товаров для владельцев магазинов.
+Клиент открывает ссылку → видит товары с ценами → набирает корзину → отправляет заказ в Telegram.
+Данные из Excel поставщиков загружаются через Python-скрипт в Google Sheet, сайт читает оттуда.
 
-Данные: Excel-файлы поставщиков → Python-скрипт upload.py → Google Sheet → сайт читает через API.
-
-## Стек технологий
+## Стек
 - **Сайт:** Next.js 14 (App Router) + Tailwind CSS + TypeScript
-- **Данные:** Google Sheets API (публичная таблица, только чтение)
-- **Скрипт-конвертер:** Python (openpyxl + gspread)
-- **Корзина:** localStorage в браузере
-- **Отправка заказа:** deep link Telegram (без сервера)
-- **Хостинг:** Vercel (пока локально)
+- **Данные:** Google Sheets API (только чтение)
+- **Скрипт:** Python (openpyxl, gspread, python-dotenv, cloudinary)
+- **Корзина:** localStorage
+- **Заказ:** deep link Telegram
+- **Фото:** Cloudinary (бесплатный план)
+- **Хостинг:** Vercel (бесплатный план)
 
-## Структура папок
+## Структура файлов
 ```
 C:\catalog\
 ├── app\
-│   ├── api\products\route.ts   # API: товары из Google Sheets
-│   ├── cart\page.tsx            # Страница корзины
+│   ├── catalog\[secret]\         # Защищённый каталог (UUID в URL)
+│   │   ├── page.tsx              # Главная каталога
+│   │   ├── layout.tsx            # Макет с шапкой
+│   │   └── cart\page.tsx         # Страница корзины
+│   ├── api\products\route.ts     # API: товары из Google Sheets
+│   ├── page.tsx                  # Заглушка (404)
 │   ├── globals.css
-│   ├── layout.tsx               # Общий макет (шапка, подвал)
-│   └── page.tsx                 # Главная страница каталога
+│   └── layout.tsx                # Корневой макет
 ├── components\
 │   ├── CartIcon.tsx
 │   ├── CatalogView.tsx
 │   ├── CategoryFilter.tsx
-│   ├── ProductCard.tsx
+│   ├── ProductCard.tsx           # Карточка с бейджиком и фото
 │   └── SearchBar.tsx
 ├── lib\
-│   ├── sheets.ts                # Клиент Google Sheets API
-│   └── types.ts                 # TypeScript типы
-├── scripts\                     # Python-скрипт для загрузки данных
-├── .env.local                   # Переменные для Next.js
-└── CLAUDE.md
+│   ├── sheets.ts
+│   └── types.ts                  # Product: badge?, imageUrl?
+├── scripts\
+│   ├── upload.py                 # Excel → Google Sheet (+ badges + images)
+│   ├── upload_images.py          # Загрузка фото в Cloudinary
+│   ├── category_map.json         # 84 категории → 11 групп
+│   ├── badges.json               # Хиты, новинки, акции
+│   ├── image_map.json            # Название товара → файл фото
+│   ├── requirements.txt
+│   └── credentials.json          # НЕ в Git!
+├── .env                          # Python-переменные (НЕ в Git!)
+├── .env.local                    # Next.js переменные (НЕ в Git!)
+└── .gitignore
 ```
 
 ## Стандарты кода
 - TypeScript для всего нового кода
-- Компоненты — функциональные (не классовые)
-- Стили — только Tailwind CSS, не создавай отдельные CSS-файлы
-- Названия компонентов: PascalCase (ProductCard, OrderForm)
-- Mobile-first: сначала мобильная версия
+- Компоненты — функциональные с хуками
+- Стили — только Tailwind CSS
+- Названия компонентов: PascalCase
 
 ## Команды
-- `npm run dev` — запустить локально (http://localhost:3000)
+- `npm run dev` — запустить локально
 - `npm run build` — проверить сборку
 - `python scripts/upload.py` — обновить данные из Excel
-
-## Данные
-- 959 товаров, 12 категорий (группы в category_map.json)
-- Товар: name, price, stock, category, supplier
-- Google Sheet ID в .env.local
+- `python scripts/upload_images.py` — загрузить фото в Cloudinary
 
 ## Важные правила
-- НЕ трогай .env.local и scripts/credentials.json
-- НЕ меняй логику API в api/products/route.ts без запроса
-- НЕ делай коммит без одобрения
-- Всё должно хорошо выглядеть на телефоне (320px минимум)
-- Проверяй что существующий функционал не сломался после изменений
+- НЕ коммить .env, .env.local, credentials.json — они в .gitignore
+- После upload.py удалять кэш: `Remove-Item -Recurse -Force C:\catalog\.next`
+- PowerShell использует ";" вместо "&&" для цепочки команд
+- UUID для секретной ссылки — ТОЛЬКО в переменных окружения (CATALOG_SECRET)
+- Проверку UUID делать на сервере (серверный компонент)
+- badges.json и image_map.json — поиск по частичному совпадению, регистронезависимый
+- Если badges.json или image_map.json отсутствуют — скрипт работает без ошибок
+- Cloudinary домен добавить в next.config.mjs (remotePatterns)
 
-## Текущий статус
-- ✅ Этап 1 готов: каталог, поиск, фильтр по категориям
-- ⬜ Этап 2 в работе: корзина + отправка заказа в Telegram
+## Текущий этап: 3 — Полировка и деплой
+Задачи в файле tasks_stage3.md, выполнять по порядку: 3.1 → 3.2 → 3.3 → 3.4
+
+## Выполнено
+- Этап 0: upload.py (Excel → Google Sheet) ✅
+- Этап 1: Каталог с фильтрами и поиском ✅
+- Этап 2: Корзина + Telegram ✅
+- Пересортировка категорий, фасовка, скрытие остатков ≤1 ✅
