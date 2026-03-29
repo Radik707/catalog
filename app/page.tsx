@@ -1,9 +1,5 @@
-import { getProducts } from "@/lib/sheets";
-import CatalogView from "@/components/CatalogView";
+import { notFound } from "next/navigation";
 
-export const revalidate = 300; // ISR: обновлять каждые 5 минут
-
-export default async function Home() {
-  const products = await getProducts();
-  return <CatalogView products={products} />;
+export default function Home() {
+  notFound();
 }

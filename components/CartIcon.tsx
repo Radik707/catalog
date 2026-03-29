@@ -2,11 +2,11 @@
 
 import { useCartContext } from './CartProvider';
 
-export default function CartIcon() {
+export default function CartIcon({ secret }: { secret: string }) {
   const { totalItems } = useCartContext();
   const count = totalItems;
   return (
-    <a href="/cart" className="relative p-2">
+    <a href={`/catalog/${secret}/cart`} className="relative p-2">
       <svg
         className="w-6 h-6 text-white"
         fill="none"
