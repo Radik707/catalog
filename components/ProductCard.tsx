@@ -75,16 +75,28 @@ function getPackaging(group: string, name: string): string {
   }
 }
 
+const BADGE_STYLES: Record<string, string> = {
+  хит: "bg-red-500 text-white",
+  новинка: "bg-green-500 text-white",
+  акция: "bg-orange-500 text-white",
+};
+
 export default function ProductCard({ product }: ProductCardProps) {
   const inStock = product.stock > 0;
   const packaging = getPackaging(product.group, product.name);
+  const badgeStyle = product.badge ? BADGE_STYLES[product.badge] : null;
 
   return (
     <div
-      className={`flex items-center justify-between gap-3 px-4 py-3 border-b border-gray-100 ${
+      className={`relative flex items-center justify-between gap-3 px-4 py-3 border-b border-gray-100 ${
         inStock ? "bg-white" : "bg-gray-50 opacity-60"
       }`}
     >
+      {badgeStyle && (
+        <span className={`absolute top-1.5 right-1.5 text-[10px] font-medium px-1.5 py-0.5 rounded ${badgeStyle}`}>
+          {product.badge}
+        </span>
+      )}
       {/* Левая часть: название + мета */}
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-gray-900 leading-tight">

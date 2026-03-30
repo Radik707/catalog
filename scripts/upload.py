@@ -39,6 +39,36 @@ PROJECT_ROOT = SCRIPT_DIR.parent
 DEFAULT_EXCEL_DIR = r"C:\price"
 
 
+def load_badges() -> dict:
+    """Загрузить метки из badges.json. При отсутствии файла возвращает пустую структуру."""
+    badges_path = SCRIPT_DIR / "badges.json"
+    if not badges_path.exists():
+        log.warning("Файл badges.json не найден: %s — метки не будут проставлены", badges_path)
+        return {"исключения": [], "новинка": [], "хит": [], "акция": []}
+    with open(badges_path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def get_badge(name: str, badges: dict) -> str:
+    """Определить метку для товара по его названию.
+
+    Приоритет: исключения → новинка → хит → акция.
+    Поиск по частичному совпадению, регистронезависимый.
+    """
+    name_lower = name.lower()
+
+    for exclusion in badges.get("исключения", []):
+        if exclusion.lower() in name_lower:
+            return ""
+
+    for badge_key in ("новинка", "хит", "акция"):
+        for substring in badges.get(badge_key, []):
+            if substring.lower() in name_lower:
+                return badge_key
+
+    return ""
+
+
 def load_category_map() -> dict:
     """Загрузить маппинг категорий из category_map.json."""
     map_path = SCRIPT_DIR / "category_map.json"
@@ -210,12 +240,14 @@ def apply_group_mapping(products: list[dict], category_map: dict) -> list[dict]:
     return products
 
 
-def products_to_rows(products: list[dict]) -> list[list]:
+def products_to_rows(products: list[dict], badges: dict | None = None) -> list[list]:
     """Преобразовать список товаров в строки для Google Sheet.
 
-    Формат: [Наименование, Цена, Остаток, Категория, Группа, Поставщик]
+    Формат: [Наименование, Цена, Остаток, Категория, Группа, Поставщик, Badge]
     """
-    header = ["Наименование", "Цена", "Остаток", "Категория", "Группа", "Поставщик"]
+    if badges is None:
+        badges = {"исключения": [], "новинка": [], "хит": [], "акция": []}
+    header = ["Наименование", "Цена", "Остаток", "Категория", "Группа", "Поставщик", "Badge"]
     rows = [header]
     for p in products:
         rows.append([
@@ -225,6 +257,7 @@ def products_to_rows(products: list[dict]) -> list[list]:
             p["source_category"],
             p["display_group"],
             p["supplier_file"],
+            get_badge(p["name"], badges),
         ])
     return rows
 
@@ -319,7 +352,7 @@ def upload_to_google_sheet(rows: list[list], num_files: int) -> None:
     except gspread.exceptions.WorksheetNotFound:
         log.info("Лист '%s' не найден — создаю...", sheet_name)
         worksheet = spreadsheet.add_worksheet(
-            title=sheet_name, rows=len(rows) + 10, cols=6
+            title=sheet_name, rows=len(rows) + 10, cols=7
         )
 
     # --- Записать данные пакетно ---
@@ -372,6 +405,11 @@ def main():
     category_map = load_category_map()
     log.info("Загружено категорий в маппинге: %d", len(category_map))
 
+    # Загрузить метки
+    badges = load_badges()
+    badge_count = sum(len(v) for k, v in badges.items() if k != "исключения")
+    log.info("Загружено меток: %d", badge_count)
+
     # Парсить все файлы
     all_products = []
     for filepath in xlsx_files:
@@ -384,7 +422,7 @@ def main():
     all_products = apply_group_mapping(all_products, category_map)
 
     # Подготовить строки для Google Sheet
-    rows = products_to_rows(all_products)
+    rows = products_to_rows(all_products, badges)
 
     # Статистика по группам
     groups = {}

@@ -5,7 +5,7 @@ const API_KEY = process.env.GOOGLE_API_KEY;
 
 /**
  * Получить все товары из Google Sheet.
- * Лист "Товары", колонки: Наименование | Цена | Остаток | Категория | Группа | Поставщик
+ * Лист "Товары", колонки: Наименование | Цена | Остаток | Категория | Группа | Поставщик | Badge
  */
 export async function getProducts(): Promise<Product[]> {
   if (!SHEETS_ID || !API_KEY) {
@@ -13,7 +13,7 @@ export async function getProducts(): Promise<Product[]> {
     return [];
   }
 
-  const range = encodeURIComponent("Товары!A2:F");
+  const range = encodeURIComponent("Товары!A2:G");
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEETS_ID}/values/${range}?key=${API_KEY}`;
 
   const res = await fetch(url, { next: { revalidate: 300 } }); // кеш 5 минут (ISR)
@@ -34,5 +34,6 @@ export async function getProducts(): Promise<Product[]> {
     category: row[3] || "",
     group: row[4] || "",
     supplier: row[5] || "",
+    badge: row[6] || undefined,
   }));
 }

@@ -6,4 +6,5 @@ export interface Product {
   category: string;
   group: string;
   supplier: string;
+  badge?: string;
 }
