@@ -86,7 +86,7 @@ const BADGE_STYLES: Record<string, string> = {
 
 function PhotoPlaceholder() {
   return (
-    <div className="w-full h-full flex items-center justify-center bg-gray-100">
+    <div className="w-full h-full flex items-center justify-center bg-white">
       <svg
         className="w-6 h-6 text-gray-300"
         fill="none"
@@ -139,7 +139,7 @@ export default function ProductCard({ product, showPhotos = true }: ProductCardP
           {showPhotos && (
             <button
               onClick={() => setFlipped(true)}
-              className="flex-shrink-0 w-14 h-14 rounded overflow-hidden border border-gray-100 focus:outline-none"
+              className="flex-shrink-0 w-14 h-14 rounded overflow-hidden border border-gray-100 bg-white focus:outline-none"
               aria-label="Показать описание товара"
             >
               {product.imageUrl ? (
@@ -148,7 +148,7 @@ export default function ProductCard({ product, showPhotos = true }: ProductCardP
                   alt={product.name}
                   width={56}
                   height={56}
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-contain"
                 />
               ) : (
                 <PhotoPlaceholder />

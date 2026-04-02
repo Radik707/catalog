@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Product } from "@/lib/types";
 import ProductCard from "./ProductCard";
 import CategoryFilter from "./CategoryFilter";
@@ -30,6 +30,17 @@ export default function CatalogView({ products }: CatalogViewProps) {
   const [activeGroup, setActiveGroup] = useState("");
   const [search, setSearch] = useState("");
   const [showPhotos, setShowPhotos] = useState(true);
+  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+
+  useEffect(() => {
+    const saved = localStorage.getItem("viewMode");
+    if (saved === "list" || saved === "grid") setViewMode(saved);
+  }, []);
+
+  const handleViewMode = (mode: "list" | "grid") => {
+    setViewMode(mode);
+    localStorage.setItem("viewMode", mode);
+  };
 
   // Собираем уникальные группы из данных, сортируем по заданному порядку
   const groups = useMemo(() => {
@@ -69,8 +80,8 @@ export default function CatalogView({ products }: CatalogViewProps) {
       {/* Поиск */}
       <SearchBar value={search} onChange={setSearch} count={filtered.length} />
 
-      {/* Переключатель режима отображения */}
-      <div className="flex justify-end px-4 py-1.5 bg-white border-b border-gray-100">
+      {/* Переключатели режима отображения */}
+      <div className="flex justify-end items-center gap-2 px-4 py-1.5 bg-white border-b border-gray-100">
         <div className="flex rounded-lg overflow-hidden border border-gray-200 text-xs">
           <button
             onClick={() => setShowPhotos(true)}
@@ -89,10 +100,34 @@ export default function CatalogView({ products }: CatalogViewProps) {
             Без фото
           </button>
         </div>
+        <div className="flex rounded-lg overflow-hidden border border-gray-200 text-xs">
+          <button
+            onClick={() => handleViewMode("list")}
+            className={`px-3 py-1 transition-colors ${
+              viewMode === "list" ? "bg-blue-500 text-white" : "bg-white text-gray-500"
+            }`}
+          >
+            ☰ Список
+          </button>
+          <button
+            onClick={() => handleViewMode("grid")}
+            className={`px-3 py-1 transition-colors ${
+              viewMode === "grid" ? "bg-blue-500 text-white" : "bg-white text-gray-500"
+            }`}
+          >
+            ⊞ Сетка
+          </button>
+        </div>
       </div>
 
-      {/* Список товаров */}
-      <div className="flex-1">
+      {/* Список / Сетка товаров */}
+      <div
+        className={
+          viewMode === "grid"
+            ? "flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 p-3"
+            : "flex-1"
+        }
+      >
         {filtered.length > 0 ? (
           filtered.map((product) => (
             <ProductCard key={product.id} product={product} showPhotos={showPhotos} />
