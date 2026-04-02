@@ -1,10 +1,13 @@
 "use client";
 
+import { useState } from "react";
+import Image from "next/image";
 import { Product } from "@/lib/types";
 import AddToCartButton from "./AddToCartButton";
 
 interface ProductCardProps {
   product: Product;
+  showPhotos?: boolean;
 }
 
 function getPackaging(group: string, name: string): string {
@@ -81,50 +84,131 @@ const BADGE_STYLES: Record<string, string> = {
   акция: "bg-orange-500 text-white",
 };
 
-export default function ProductCard({ product }: ProductCardProps) {
+function PhotoPlaceholder() {
+  return (
+    <div className="w-full h-full flex items-center justify-center bg-gray-100">
+      <svg
+        className="w-6 h-6 text-gray-300"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        strokeWidth={1.5}
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v13.5a1.5 1.5 0 001.5 1.5z"
+        />
+      </svg>
+    </div>
+  );
+}
+
+export default function ProductCard({ product, showPhotos = true }: ProductCardProps) {
+  const [flipped, setFlipped] = useState(false);
   const inStock = product.stock > 0;
   const packaging = getPackaging(product.group, product.name);
   const badgeStyle = product.badge ? BADGE_STYLES[product.badge] : null;
 
   return (
     <div
-      className={`relative flex items-center justify-between gap-3 px-4 py-3 border-b border-gray-100 ${
-        inStock ? "bg-white" : "bg-gray-50 opacity-60"
-      }`}
+      style={{ perspective: "1000px" }}
+      className={`relative border-b border-gray-100${inStock ? "" : " opacity-60"}`}
     >
-      {badgeStyle && (
-        <span className={`absolute top-1.5 right-1.5 text-[10px] font-medium px-1.5 py-0.5 rounded ${badgeStyle}`}>
-          {product.badge}
-        </span>
-      )}
-      {/* Левая часть: название + мета */}
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-gray-900 leading-tight">
-          {product.name}
-        </p>
-        <div className="flex items-center gap-2 mt-0.5">
-          <span className="text-xs text-gray-400">{product.category}</span>
-          {inStock ? (
-            <span className="text-xs text-emerald-600 font-medium">
-              {product.stock} шт
+      {/* Вращающийся контейнер */}
+      <div
+        style={{
+          transformStyle: "preserve-3d",
+          transition: "transform 0.4s ease",
+          transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
+        }}
+        className="relative"
+      >
+        {/* ── ЛИЦЕВАЯ СТОРОНА ── */}
+        <div
+          style={{ backfaceVisibility: "hidden" }}
+          className={`flex items-center gap-3 px-4 py-3${inStock ? " bg-white" : " bg-gray-50"}`}
+        >
+          {badgeStyle && (
+            <span className={`absolute top-1.5 right-1.5 text-[10px] font-medium px-1.5 py-0.5 rounded ${badgeStyle}`}>
+              {product.badge}
             </span>
-          ) : (
-            <span className="text-xs text-gray-400">Нет в наличии</span>
           )}
-        </div>
-      </div>
 
-      {/* Правая часть: цена + кнопка */}
-      <div className="flex items-center gap-3 flex-shrink-0">
-        <div className="text-right">
-          <span className="text-sm font-bold text-gray-900 whitespace-nowrap">
-            {product.price.toFixed(2)} ₽
-          </span>
-          {packaging && (
-            <p className="text-xs text-gray-400">{packaging}</p>
+          {/* Миниатюра — только в режиме «С фото», клик открывает флип */}
+          {showPhotos && (
+            <button
+              onClick={() => setFlipped(true)}
+              className="flex-shrink-0 w-14 h-14 rounded overflow-hidden border border-gray-100 focus:outline-none"
+              aria-label="Показать описание товара"
+            >
+              {product.imageUrl ? (
+                <Image
+                  src={product.imageUrl}
+                  alt={product.name}
+                  width={56}
+                  height={56}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <PhotoPlaceholder />
+              )}
+            </button>
           )}
+
+          {/* Название + мета — клик открывает флип */}
+          <button
+            onClick={() => setFlipped(true)}
+            className="flex-1 min-w-0 text-left focus:outline-none"
+          >
+            <p className="text-sm font-medium text-gray-900 leading-tight">
+              {product.name}
+            </p>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="text-xs text-gray-400">{product.category}</span>
+              {inStock ? (
+                <span className="text-xs text-emerald-600 font-medium">
+                  {product.stock} шт
+                </span>
+              ) : (
+                <span className="text-xs text-gray-400">Нет в наличии</span>
+              )}
+            </div>
+          </button>
+
+          {/* Цена + кнопка — НЕ триггерят флип */}
+          <div className="flex items-center gap-3 flex-shrink-0">
+            <div className="text-right">
+              <span className="text-sm font-bold text-gray-900 whitespace-nowrap">
+                {product.price.toFixed(2)} ₽
+              </span>
+              {packaging && (
+                <p className="text-xs text-gray-400">{packaging}</p>
+              )}
+            </div>
+            <AddToCartButton product={product} />
+          </div>
         </div>
-        <AddToCartButton product={product} />
+
+        {/* ── ОБОРОТНАЯ СТОРОНА ── */}
+        <div
+          style={{
+            backfaceVisibility: "hidden",
+            transform: "rotateY(180deg)",
+          }}
+          className="absolute inset-0 flex flex-col justify-between px-4 py-3 bg-amber-50 cursor-pointer"
+          onClick={() => setFlipped(false)}
+        >
+          <p className="text-xs font-semibold text-gray-700 truncate">
+            {product.name}
+          </p>
+          <p className="text-xs text-gray-600 leading-relaxed mt-1 flex-1 overflow-hidden">
+            {product.description || "Описание не добавлено"}
+          </p>
+          <p className="text-[10px] text-gray-400 mt-1">
+            Нажмите, чтобы вернуться
+          </p>
+        </div>
       </div>
     </div>
   );

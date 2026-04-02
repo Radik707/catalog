@@ -29,6 +29,7 @@ const GROUP_ORDER = [
 export default function CatalogView({ products }: CatalogViewProps) {
   const [activeGroup, setActiveGroup] = useState("");
   const [search, setSearch] = useState("");
+  const [showPhotos, setShowPhotos] = useState(true);
 
   // Собираем уникальные группы из данных, сортируем по заданному порядку
   const groups = useMemo(() => {
@@ -68,11 +69,33 @@ export default function CatalogView({ products }: CatalogViewProps) {
       {/* Поиск */}
       <SearchBar value={search} onChange={setSearch} count={filtered.length} />
 
+      {/* Переключатель режима отображения */}
+      <div className="flex justify-end px-4 py-1.5 bg-white border-b border-gray-100">
+        <div className="flex rounded-lg overflow-hidden border border-gray-200 text-xs">
+          <button
+            onClick={() => setShowPhotos(true)}
+            className={`px-3 py-1 transition-colors ${
+              showPhotos ? "bg-blue-500 text-white" : "bg-white text-gray-500"
+            }`}
+          >
+            С фото
+          </button>
+          <button
+            onClick={() => setShowPhotos(false)}
+            className={`px-3 py-1 transition-colors ${
+              !showPhotos ? "bg-blue-500 text-white" : "bg-white text-gray-500"
+            }`}
+          >
+            Без фото
+          </button>
+        </div>
+      </div>
+
       {/* Список товаров */}
       <div className="flex-1">
         {filtered.length > 0 ? (
           filtered.map((product) => (
-            <ProductCard key={product.id} product={product} />
+            <ProductCard key={product.id} product={product} showPhotos={showPhotos} />
           ))
         ) : (
           <div className="px-4 py-12 text-center text-gray-400">

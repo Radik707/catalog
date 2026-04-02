@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run:*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(python upload.py --dry-run)",
+      "Bash(python -c \":*)",
+      "Bash(python upload.py)",
+      "Bash(python scripts/upload.py)",
+      "Bash(python:*)",
+      "Bash(PYTHONIOENCODING=utf-8 python -c \"\nimport os, sys\nos.chdir\\('C:/catalog'\\)\nsys.stdout.reconfigure\\(encoding='utf-8'\\)\nfor p in ['.env']:\n    if os.path.exists\\(p\\):\n        with open\\(p\\) as f:\n            for line in f:\n                line=line.strip\\(\\)\n                if line and not line.startswith\\('#'\\) and '=' in line:\n                    k,_,v=line.partition\\('='\\)\n                    os.environ.setdefault\\(k.strip\\(\\),v.strip\\(\\).strip\\('\\\\\"'\\)\\)\nimport gspread\nfrom google.oauth2.service_account import Credentials\ncreds=Credentials.from_service_account_file\\('scripts/credentials.json',scopes=['https://www.googleapis.com/auth/spreadsheets']\\)\ngc=gspread.authorize\\(creds\\)\nws=gc.open_by_key\\(os.environ['GOOGLE_SHEETS_ID']\\).worksheet\\('Товары'\\)\nrows=ws.get_all_values\\(\\)\nheader=rows[0]\nname_i=header.index\\('Наименование'\\)\ncat_i=header.index\\('Категория'\\)\ngrp_i=header.index\\('Группа'\\)\nprint\\('=== Строки 784-787 ==='\\)\nfor i in range\\(783,787\\):\n    r=rows[i]\n    print\\(f'{i+1} | {r[name_i][:45]} | кат={r[cat_i]} | гр={r[grp_i]}'\\)\nprint\\(\\)\nprint\\('=== Все товары Категория=Царский ==='\\)\nfor i,r in enumerate\\(rows[1:],2\\):\n    if r[cat_i]=='Царский':\n        print\\(f'{i} | {r[name_i][:50]} | гр={r[grp_i]}'\\)\n\" 2>&1)",
+      "Bash(PYTHONIOENCODING=utf-8 python -c \"\nimport subprocess, sys, os\nr = subprocess.run\\(['python', 'scripts/upload.py'], capture_output=True\\)\nlines = r.stderr.decode\\('utf-8', errors='replace'\\).strip\\(\\).splitlines\\(\\)\nfor l in lines[-8:]:\n    sys.stdout.buffer.write\\(\\(l+'\\\\n'\\).encode\\('utf-8'\\)\\)\nsys.stdout.buffer.write\\(\\('RC: '+str\\(r.returncode\\)+'\\\\n'\\).encode\\('utf-8'\\)\\)\nsys.stdout.buffer.flush\\(\\)\n\" 2>&1)",
+      "Bash(git remote:*)",
+      "Bash(git branch:*)",
+      "Bash(git push:*)",
+      "Bash(ls C:/catalog/scripts/*.json)",
+      "Bash(grep -o [318/318] C:UsersolegzAppDataLocalTempclaudeC--catalog5b3aad84-a6b8-4e7a-a797-21cb19b7f696tasksbjov0ahtb.output)"
+    ]
+  }
+}

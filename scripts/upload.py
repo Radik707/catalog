@@ -240,14 +240,94 @@ def apply_group_mapping(products: list[dict], category_map: dict) -> list[dict]:
     return products
 
 
-def products_to_rows(products: list[dict], badges: dict | None = None) -> list[list]:
+def load_photo_data() -> dict[str, dict[str, str]]:
+    """Загрузить маппинг название_товара → {url, description} из photo_map.json + photo_urls.json.
+
+    Приоритет: photo_overrides.json (ручные привязки) → автоматический маппинг.
+    При отсутствии файлов возвращает пустой словарь — скрипт работает без ошибок.
+    """
+    photo_map_path = SCRIPT_DIR / "photo_map.json"
+    photo_urls_path = SCRIPT_DIR / "photo_urls.json"
+    overrides_path = SCRIPT_DIR / "photo_overrides.json"
+
+    if not photo_map_path.exists() or not photo_urls_path.exists():
+        if not photo_map_path.exists():
+            log.warning("photo_map.json не найден — фото не будут добавлены")
+        if not photo_urls_path.exists():
+            log.warning("photo_urls.json не найден — фото не будут добавлены")
+        return {}
+
+    with open(photo_map_path, "r", encoding="utf-8") as f:
+        photo_map = json.load(f)
+    with open(photo_urls_path, "r", encoding="utf-8") as f:
+        photo_urls: dict[str, str] = json.load(f)
+
+    # Автоматический маппинг: original_name (lower) → {url, description}
+    name_to_data: dict[str, dict[str, str]] = {}
+    for entry in photo_map:
+        original_name = (entry.get("original_name") or "").strip()
+        file_name = entry.get("file_name")
+        description = (entry.get("description") or "").strip()
+        if original_name and file_name and file_name in photo_urls:
+            name_to_data[original_name.lower()] = {
+                "url": photo_urls[file_name],
+                "description": description,
+            }
+
+    # Ручные привязки перезаписывают авто-маппинг (description не перезаписывается)
+    if overrides_path.exists():
+        with open(overrides_path, "r", encoding="utf-8") as f:
+            overrides: dict[str, str] = json.load(f)
+        for product_name, file_name in overrides.items():
+            if file_name in photo_urls:
+                existing = name_to_data.get(product_name.lower(), {})
+                name_to_data[product_name.lower()] = {
+                    "url": photo_urls[file_name],
+                    "description": existing.get("description", ""),
+                }
+        log.info("Загружено ручных привязок фото: %d", len(overrides))
+
+    log.info("Загружено фото в маппинге: %d", len(name_to_data))
+    return name_to_data
+
+
+def _find_photo_entry(name: str, photo_data: dict[str, dict[str, str]]) -> dict[str, str] | None:
+    """Найти запись о фото по частичному совпадению названия (регистронезависимо)."""
+    if not photo_data:
+        return None
+    name_lower = name.lower()
+    for photo_name, data in photo_data.items():
+        if photo_name in name_lower or name_lower in photo_name:
+            return data
+    return None
+
+
+def get_photo_url(name: str, photo_data: dict[str, dict[str, str]]) -> str:
+    """Найти URL фото для товара по частичному совпадению (регистронезависимо)."""
+    entry = _find_photo_entry(name, photo_data)
+    return entry.get("url", "") if entry else ""
+
+
+def get_photo_description(name: str, photo_data: dict[str, dict[str, str]]) -> str:
+    """Найти описание товара по частичному совпадению (регистронезависимо)."""
+    entry = _find_photo_entry(name, photo_data)
+    return entry.get("description", "") if entry else ""
+
+
+def products_to_rows(
+    products: list[dict],
+    badges: dict | None = None,
+    photo_data: dict[str, dict[str, str]] | None = None,
+) -> list[list]:
     """Преобразовать список товаров в строки для Google Sheet.
 
-    Формат: [Наименование, Цена, Остаток, Категория, Группа, Поставщик, Badge]
+    Формат: [Наименование, Цена, Остаток, Категория, Группа, Поставщик, Badge, ImageUrl, Description]
     """
     if badges is None:
         badges = {"исключения": [], "новинка": [], "хит": [], "акция": []}
-    header = ["Наименование", "Цена", "Остаток", "Категория", "Группа", "Поставщик", "Badge"]
+    if photo_data is None:
+        photo_data = {}
+    header = ["Наименование", "Цена", "Остаток", "Категория", "Группа", "Поставщик", "Badge", "ImageUrl", "Description"]
     rows = [header]
     for p in products:
         rows.append([
@@ -258,6 +338,8 @@ def products_to_rows(products: list[dict], badges: dict | None = None) -> list[l
             p["display_group"],
             p["supplier_file"],
             get_badge(p["name"], badges),
+            get_photo_url(p["name"], photo_data),
+            get_photo_description(p["name"], photo_data),
         ])
     return rows
 
@@ -352,7 +434,7 @@ def upload_to_google_sheet(rows: list[list], num_files: int) -> None:
     except gspread.exceptions.WorksheetNotFound:
         log.info("Лист '%s' не найден — создаю...", sheet_name)
         worksheet = spreadsheet.add_worksheet(
-            title=sheet_name, rows=len(rows) + 10, cols=7
+            title=sheet_name, rows=len(rows) + 10, cols=9
         )
 
     # --- Записать данные пакетно ---
@@ -410,6 +492,9 @@ def main():
     badge_count = sum(len(v) for k, v in badges.items() if k != "исключения")
     log.info("Загружено меток: %d", badge_count)
 
+    # Загрузить маппинг фото
+    photo_data = load_photo_data()
+
     # Парсить все файлы
     all_products = []
     for filepath in xlsx_files:
@@ -422,7 +507,7 @@ def main():
     all_products = apply_group_mapping(all_products, category_map)
 
     # Подготовить строки для Google Sheet
-    rows = products_to_rows(all_products, badges)
+    rows = products_to_rows(all_products, badges, photo_data)
 
     # Статистика по группам
     groups = {}
