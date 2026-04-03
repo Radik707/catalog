@@ -6,13 +6,23 @@ export const revalidate = 300;
 
 export default async function CatalogPage({
   params,
+  searchParams,
 }: {
   params: { secret: string };
+  searchParams: { filter?: string };
 }) {
   if (params.secret !== process.env.CATALOG_SECRET) {
     notFound();
   }
 
-  const products = await getProducts();
+  const allProducts = await getProducts();
+
+  let products = allProducts;
+  if (searchParams.filter === "hit") {
+    products = allProducts.filter((p) => p.badge === "хит");
+  } else if (searchParams.filter === "new") {
+    products = allProducts.filter((p) => p.badge === "новинка");
+  }
+
   return <CatalogView products={products} />;
 }

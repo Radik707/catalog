@@ -5,6 +5,7 @@ import { Product } from "@/lib/types";
 import ProductCard from "./ProductCard";
 import CategoryFilter from "./CategoryFilter";
 import SearchBar from "./SearchBar";
+import ScrollToTop from "./ScrollToTop";
 
 interface CatalogViewProps {
   products: Product[];
@@ -70,6 +71,7 @@ export default function CatalogView({ products }: CatalogViewProps) {
 
   return (
     <div className="min-h-screen flex flex-col">
+      <ScrollToTop viewMode={viewMode} />
       {/* Фильтр по группам */}
       <CategoryFilter
         groups={groups}

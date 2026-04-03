@@ -16,7 +16,8 @@
       "Bash(git branch:*)",
       "Bash(git push:*)",
       "Bash(ls C:/catalog/scripts/*.json)",
-      "Bash(grep -o [318/318] C:UsersolegzAppDataLocalTempclaudeC--catalog5b3aad84-a6b8-4e7a-a797-21cb19b7f696tasksbjov0ahtb.output)"
+      "Bash(grep -o [318/318] C:UsersolegzAppDataLocalTempclaudeC--catalog5b3aad84-a6b8-4e7a-a797-21cb19b7f696tasksbjov0ahtb.output)",
+      "Bash(Remove-Item -Recurse -Force .next)"
     ]
   }
 }
