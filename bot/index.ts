@@ -3,6 +3,7 @@ import { registerStartHandler } from "./handlers/start";
 import { registerCatalogHandler } from "./handlers/catalog";
 import { registerCartHandler } from "./handlers/cart";
 import { registerOrderHandler } from "./handlers/order";
+import { handleAIMessage } from "./ai/consultant";
 
 if (!process.env.TELEGRAM_BOT_TOKEN) {
   throw new Error("TELEGRAM_BOT_TOKEN не задан в переменных окружения");
@@ -15,21 +16,9 @@ registerCatalogHandler(bot);
 registerCartHandler(bot);
 registerOrderHandler(bot);
 
-// Обработка неизвестных команд
+// Все текстовые сообщения (не команды) → ИИ-консультант
 bot.on("message:text", async (ctx) => {
-  // В этапе 4 этот обработчик будет передавать сообщения в ИИ-консультант
-  // Пока показываем меню
-  const { InlineKeyboard } = await import("grammy");
-  const keyboard = new InlineKeyboard()
-    .text("📋 Каталог", "catalog")
-    .text("🛒 Корзина", "cart")
-    .row()
-    .text("📤 Отправить заказ", "order");
-
-  await ctx.reply(
-    "Используйте кнопки для навигации. ИИ-консультант будет доступен в следующем обновлении.",
-    { reply_markup: keyboard }
-  );
+  await handleAIMessage(ctx);
 });
 
 export const handleUpdate = webhookCallback(bot, "std/http");
