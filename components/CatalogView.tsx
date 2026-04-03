@@ -9,6 +9,7 @@ import ScrollToTop from "./ScrollToTop";
 
 interface CatalogViewProps {
   products: Product[];
+  initialCategory?: string;
 }
 
 // Порядок групп для отображения
@@ -27,8 +28,8 @@ const GROUP_ORDER = [
   "Подарки и торты",
 ];
 
-export default function CatalogView({ products }: CatalogViewProps) {
-  const [activeGroup, setActiveGroup] = useState("");
+export default function CatalogView({ products, initialCategory = "" }: CatalogViewProps) {
+  const [activeGroup, setActiveGroup] = useState(initialCategory);
   const [search, setSearch] = useState("");
   const [showPhotos, setShowPhotos] = useState(true);
   const [viewMode, setViewMode] = useState<"list" | "grid">("grid");

@@ -9,7 +9,7 @@ export default async function CatalogPage({
   searchParams,
 }: {
   params: { secret: string };
-  searchParams: { filter?: string };
+  searchParams: { filter?: string; category?: string };
 }) {
   if (params.secret !== process.env.CATALOG_SECRET) {
     notFound();
@@ -24,5 +24,5 @@ export default async function CatalogPage({
     products = allProducts.filter((p) => p.badge === "новинка");
   }
 
-  return <CatalogView products={products} />;
+  return <CatalogView products={products} initialCategory={searchParams.category ?? ""} />;
 }

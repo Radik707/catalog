@@ -85,8 +85,16 @@ export async function handleAIMessage(ctx: Context): Promise<void> {
     } else {
       await ctx.reply(FALLBACK_MESSAGE);
     }
-  } catch (err) {
-    console.error("handleAIMessage error:", err);
+  } catch (err: unknown) {
+    const e = err as Record<string, unknown>;
+    console.error("handleAIMessage error:", {
+      message: e?.message,
+      status: e?.status,
+      statusText: e?.statusText,
+      errorDetails: e?.errorDetails,
+      response: e?.response,
+      raw: JSON.stringify(err, Object.getOwnPropertyNames(err as object)),
+    });
     await ctx.reply(FALLBACK_MESSAGE);
   }
 }
