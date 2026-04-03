@@ -18,6 +18,11 @@ credentials.json
 .DS_Store
 Thumbs.db
 
+# local media & docs
+photos/
+pdf/
+~$*.xlsx
+
 # debug
 npm-debug.log*
 
