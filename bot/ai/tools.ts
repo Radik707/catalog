@@ -1,17 +1,17 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { FunctionDeclaration, SchemaType } from "@google/generative-ai";
 import { searchProducts, getProducts } from "../services/products";
 import { addToCart, removeFromCart, getCart, clearCart, calcTotal } from "../services/cart-store";
 import { formatOrderForOwner, formatOrderForClient } from "../services/notify";
 
-export const anthropicTools: Anthropic.Tool[] = [
+export const toolDeclarations: FunctionDeclaration[] = [
   {
     name: "search_products",
     description: "Поиск товаров по названию, категории или описанию",
-    input_schema: {
-      type: "object",
+    parameters: {
+      type: SchemaType.OBJECT,
       properties: {
         query: {
-          type: "string",
+          type: SchemaType.STRING,
           description: "Поисковый запрос (название товара, категория, описание)",
         },
       },
@@ -21,15 +21,15 @@ export const anthropicTools: Anthropic.Tool[] = [
   {
     name: "add_to_cart",
     description: "Добавить товар в корзину клиента",
-    input_schema: {
-      type: "object",
+    parameters: {
+      type: SchemaType.OBJECT,
       properties: {
         product_name: {
-          type: "string",
+          type: SchemaType.STRING,
           description: "Название товара (полное или частичное)",
         },
         quantity: {
-          type: "number",
+          type: SchemaType.NUMBER,
           description: "Количество (в единицах фасовки, по умолчанию 1)",
         },
       },
@@ -39,11 +39,11 @@ export const anthropicTools: Anthropic.Tool[] = [
   {
     name: "remove_from_cart",
     description: "Удалить товар из корзины клиента",
-    input_schema: {
-      type: "object",
+    parameters: {
+      type: SchemaType.OBJECT,
       properties: {
         product_name: {
-          type: "string",
+          type: SchemaType.STRING,
           description: "Название товара для удаления",
         },
       },
@@ -53,16 +53,16 @@ export const anthropicTools: Anthropic.Tool[] = [
   {
     name: "show_cart",
     description: "Показать текущую корзину клиента",
-    input_schema: {
-      type: "object",
+    parameters: {
+      type: SchemaType.OBJECT,
       properties: {},
     },
   },
   {
     name: "send_order",
     description: "Оформить и отправить заказ владельцу магазина",
-    input_schema: {
-      type: "object",
+    parameters: {
+      type: SchemaType.OBJECT,
       properties: {},
     },
   },
