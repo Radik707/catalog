@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import CartIcon from "@/components/CartIcon";
 import NavTabs from "@/components/NavTabs";
+import TelegramButton from "@/components/TelegramButton";
 
 export default function CatalogLayout({
   children,
@@ -24,6 +25,7 @@ export default function CatalogLayout({
         </div>
       </header>
       <main>{children}</main>
+      <TelegramButton />
     </>
   );
 }
