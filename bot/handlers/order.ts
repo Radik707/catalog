@@ -3,20 +3,35 @@ import { getCart, clearCart, calcTotal } from "../services/cart-store";
 import { formatOrderForOwner, formatOrderForClient } from "../services/notify";
 
 export function registerOrderHandler(bot: Bot) {
-  // Показать предварительный заказ + подтверждение
+  // ReplyKeyboard кнопка
+  bot.hears("📤 Отправить заказ", async (ctx) => {
+    const userId = ctx.from!.id;
+    const cart = await getCart(userId);
+
+    if (cart.length === 0) {
+      await ctx.reply("🛒 Корзина пуста, нечего отправлять.");
+      return;
+    }
+
+    const preview = formatOrderForClient(cart);
+    const keyboard = new InlineKeyboard()
+      .text("✅ Подтвердить", "order_confirm")
+      .text("❌ Отмена", "cart");
+
+    await ctx.reply(`${preview}\n\nОтправить заказ?`, {
+      reply_markup: keyboard,
+      parse_mode: "Markdown",
+    });
+  });
+
+  // Callback (из кнопки корзины)
   bot.callbackQuery("order", async (ctx) => {
     await ctx.answerCallbackQuery();
     const userId = ctx.from.id;
     const cart = await getCart(userId);
 
     if (cart.length === 0) {
-      const keyboard = new InlineKeyboard()
-        .text("📋 В каталог", "catalog")
-        .row()
-        .text("🏠 Главное меню", "main_menu");
-      await ctx.editMessageText("🛒 Корзина пуста, нечего отправлять.", {
-        reply_markup: keyboard,
-      });
+      await ctx.editMessageText("🛒 Корзина пуста, нечего отправлять.");
       return;
     }
 
@@ -38,8 +53,7 @@ export function registerOrderHandler(bot: Bot) {
     const cart = await getCart(userId);
 
     if (cart.length === 0) {
-      const keyboard = new InlineKeyboard().text("📋 В каталог", "catalog");
-      await ctx.editMessageText("🛒 Корзина уже пуста.", { reply_markup: keyboard });
+      await ctx.editMessageText("🛒 Корзина уже пуста.");
       return;
     }
 
@@ -61,27 +75,14 @@ export function registerOrderHandler(bot: Bot) {
     });
 
     try {
-      await ctx.api.sendMessage(ownerChatId, orderText, {
-        parse_mode: "Markdown",
-      });
+      await ctx.api.sendMessage(ownerChatId, orderText, { parse_mode: "Markdown" });
     } catch (err) {
       console.error("Ошибка отправки заказа владельцу:", err);
-      await ctx.editMessageText(
-        "⚠️ Не удалось отправить заказ. Попробуйте позже."
-      );
+      await ctx.editMessageText("⚠️ Не удалось отправить заказ. Попробуйте позже.");
       return;
     }
 
     await clearCart(userId);
-
-    const keyboard = new InlineKeyboard()
-      .text("📋 Продолжить покупки", "catalog")
-      .row()
-      .text("🏠 Главное меню", "main_menu");
-
-    await ctx.editMessageText(
-      "✅ Заказ отправлен! Олег свяжется с вами для подтверждения.",
-      { reply_markup: keyboard }
-    );
+    await ctx.editMessageText("✅ Заказ отправлен! Олег свяжется с вами для подтверждения.");
   });
 }

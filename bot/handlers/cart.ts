@@ -28,7 +28,6 @@ function buildCartKeyboard(cart: CartItem[]): InlineKeyboard {
   const keyboard = new InlineKeyboard();
 
   for (const item of cart) {
-    const name = item.productName.slice(0, 20);
     keyboard
       .text("➖", `cart_minus:${encodeURIComponent(item.productName).slice(0, 40)}`)
       .text(`${item.quantity}`, "noop")
@@ -40,29 +39,46 @@ function buildCartKeyboard(cart: CartItem[]): InlineKeyboard {
   keyboard
     .text("📤 Отправить заказ", "order")
     .row()
-    .text("🗑 Очистить корзину", "cart_clear")
-    .row()
-    .text("📋 Продолжить покупки", "catalog");
+    .text("🗑 Очистить корзину", "cart_clear");
 
   return keyboard;
 }
 
 export function registerCartHandler(bot: Bot) {
-  // Показать корзину
+  // ReplyKeyboard кнопка
+  bot.hears("🛒 Корзина", async (ctx) => {
+    const userId = ctx.from!.id;
+    const cart = await getCart(userId);
+
+    if (cart.length === 0) {
+      await ctx.reply("🛒 Корзина пуста. Выберите товары в каталоге!", {
+        reply_markup: new InlineKeyboard().url(
+          "📋 Открыть каталог",
+          buildCatalogUrl()
+        ),
+      });
+      return;
+    }
+
+    await ctx.reply(formatCart(cart), {
+      reply_markup: buildCartKeyboard(cart),
+      parse_mode: "Markdown",
+    });
+  });
+
+  // Callback (обратная совместимость)
   bot.callbackQuery("cart", async (ctx) => {
     await ctx.answerCallbackQuery();
     const userId = ctx.from.id;
     const cart = await getCart(userId);
 
     if (cart.length === 0) {
-      const keyboard = new InlineKeyboard()
-        .text("📋 В каталог", "catalog")
-        .row()
-        .text("🏠 Главное меню", "main_menu");
-      await ctx.editMessageText(
-        "🛒 Корзина пуста. Выберите товары в каталоге!",
-        { reply_markup: keyboard }
-      );
+      await ctx.editMessageText("🛒 Корзина пуста. Выберите товары в каталоге!", {
+        reply_markup: new InlineKeyboard().url(
+          "📋 Открыть каталог",
+          buildCatalogUrl()
+        ),
+      });
       return;
     }
 
@@ -72,18 +88,17 @@ export function registerCartHandler(bot: Bot) {
     });
   });
 
-  // Добавить в корзину из каталога: add:{product_encoded}:{qty}
+  // Добавить в корзину: add:{product_encoded}:{qty}
   bot.callbackQuery(/^add:(.+):(\d+)$/, async (ctx) => {
-    const productEncoded = ctx.match[1];
+    const productName = decodeURIComponent(ctx.match[1]);
     const qty = parseInt(ctx.match[2]);
-    const productName = decodeURIComponent(productEncoded);
     const userId = ctx.from.id;
 
-    // Найти товар в каталоге
     const products = await getProducts();
     const product = products.find(
-      (p) => p.name.toLowerCase().includes(productName.toLowerCase()) ||
-             productName.toLowerCase().includes(p.name.toLowerCase().slice(0, 20))
+      (p) =>
+        p.name.toLowerCase().includes(productName.toLowerCase()) ||
+        productName.toLowerCase().includes(p.name.toLowerCase().slice(0, 20))
     );
 
     if (!product) {
@@ -124,11 +139,9 @@ export function registerCartHandler(bot: Bot) {
     const cart = await updateQuantity(userId, productName, -1);
 
     if (cart.length === 0) {
-      const keyboard = new InlineKeyboard()
-        .text("📋 В каталог", "catalog")
-        .row()
-        .text("🏠 Главное меню", "main_menu");
-      await ctx.editMessageText("🛒 Корзина пуста.", { reply_markup: keyboard });
+      await ctx.editMessageText("🛒 Корзина пуста.", {
+        reply_markup: new InlineKeyboard().url("📋 Открыть каталог", buildCatalogUrl()),
+      });
       return;
     }
 
@@ -146,11 +159,9 @@ export function registerCartHandler(bot: Bot) {
     const cart = await removeFromCart(userId, productName);
 
     if (cart.length === 0) {
-      const keyboard = new InlineKeyboard()
-        .text("📋 В каталог", "catalog")
-        .row()
-        .text("🏠 Главное меню", "main_menu");
-      await ctx.editMessageText("🛒 Корзина пуста.", { reply_markup: keyboard });
+      await ctx.editMessageText("🛒 Корзина пуста.", {
+        reply_markup: new InlineKeyboard().url("📋 Открыть каталог", buildCatalogUrl()),
+      });
       return;
     }
 
@@ -177,10 +188,19 @@ export function registerCartHandler(bot: Bot) {
     const userId = ctx.from.id;
     await clearCart(userId);
 
-    const keyboard = new InlineKeyboard()
-      .text("📋 В каталог", "catalog")
-      .row()
-      .text("🏠 Главное меню", "main_menu");
-    await ctx.editMessageText("🛒 Корзина очищена.", { reply_markup: keyboard });
+    await ctx.editMessageText("🛒 Корзина очищена.", {
+      reply_markup: new InlineKeyboard().url("📋 Открыть каталог", buildCatalogUrl()),
+    });
   });
+
+  // Заглушка для нажатия на кнопку количества
+  bot.callbackQuery("noop", async (ctx) => {
+    await ctx.answerCallbackQuery();
+  });
+}
+
+function buildCatalogUrl(): string {
+  const secret = process.env.CATALOG_SECRET;
+  const base = "https://catalog-khaki.vercel.app/catalog";
+  return secret ? `${base}/${secret}` : base;
 }

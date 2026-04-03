@@ -9,6 +9,7 @@
     "setup-webhook": "npx tsx scripts/setup-webhook.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.82.0",
     "@google/generative-ai": "^0.24.1",
     "@vercel/kv": "^3.0.0",
     "grammy": "^1.41.1",

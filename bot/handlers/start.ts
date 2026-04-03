@@ -1,26 +1,21 @@
-import { Bot, InlineKeyboard } from "grammy";
+import { Bot, Keyboard } from "grammy";
+
+export const mainMenuKeyboard = new Keyboard()
+  .text("💬 Спросить").text("📋 Каталог").row()
+  .text("🛒 Корзина").text("📤 Отправить заказ")
+  .resized();
 
 export function registerStartHandler(bot: Bot) {
   bot.command("start", async (ctx) => {
-    const keyboard = new InlineKeyboard()
-      .text("📋 Каталог", "catalog")
-      .text("💬 Спросить консультанта", "ask_ai")
-      .row()
-      .text("🛒 Корзина", "cart")
-      .text("📤 Отправить заказ", "order");
-
     await ctx.reply(
-      "👋 Привет! Я помощник по каталогу кондитерских изделий.\n\n" +
-        "Могу помочь выбрать товар, подсказать цены и оформить заказ.\n\n" +
-        "Выберите действие:",
-      { reply_markup: keyboard }
+      "Привет! Я помощник по каталогу. Выберите действие или просто напишите что вас интересует.",
+      { reply_markup: mainMenuKeyboard }
     );
   });
 
-  bot.callbackQuery("ask_ai", async (ctx) => {
-    await ctx.answerCallbackQuery();
+  bot.hears("💬 Спросить", async (ctx) => {
     await ctx.reply(
-      "Напишите ваш вопрос, и я помогу! Например:\n" +
+      "Напишите ваш вопрос! Например:\n" +
         "• Какие дешёвые конфеты есть?\n" +
         "• Что популярное из карамели?\n" +
         "• Добавь 5 кг Барбариса в корзину"

@@ -1,17 +1,17 @@
-import { FunctionDeclaration, SchemaType } from "@google/generative-ai";
+import Anthropic from "@anthropic-ai/sdk";
 import { searchProducts, getProducts } from "../services/products";
 import { addToCart, removeFromCart, getCart, clearCart, calcTotal } from "../services/cart-store";
 import { formatOrderForOwner, formatOrderForClient } from "../services/notify";
 
-export const toolDeclarations: FunctionDeclaration[] = [
+export const anthropicTools: Anthropic.Tool[] = [
   {
     name: "search_products",
     description: "Поиск товаров по названию, категории или описанию",
-    parameters: {
-      type: SchemaType.OBJECT,
+    input_schema: {
+      type: "object",
       properties: {
         query: {
-          type: SchemaType.STRING,
+          type: "string",
           description: "Поисковый запрос (название товара, категория, описание)",
         },
       },
@@ -21,15 +21,15 @@ export const toolDeclarations: FunctionDeclaration[] = [
   {
     name: "add_to_cart",
     description: "Добавить товар в корзину клиента",
-    parameters: {
-      type: SchemaType.OBJECT,
+    input_schema: {
+      type: "object",
       properties: {
         product_name: {
-          type: SchemaType.STRING,
+          type: "string",
           description: "Название товара (полное или частичное)",
         },
         quantity: {
-          type: SchemaType.NUMBER,
+          type: "number",
           description: "Количество (в единицах фасовки, по умолчанию 1)",
         },
       },
@@ -39,11 +39,11 @@ export const toolDeclarations: FunctionDeclaration[] = [
   {
     name: "remove_from_cart",
     description: "Удалить товар из корзины клиента",
-    parameters: {
-      type: SchemaType.OBJECT,
+    input_schema: {
+      type: "object",
       properties: {
         product_name: {
-          type: SchemaType.STRING,
+          type: "string",
           description: "Название товара для удаления",
         },
       },
@@ -53,16 +53,16 @@ export const toolDeclarations: FunctionDeclaration[] = [
   {
     name: "show_cart",
     description: "Показать текущую корзину клиента",
-    parameters: {
-      type: SchemaType.OBJECT,
+    input_schema: {
+      type: "object",
       properties: {},
     },
   },
   {
     name: "send_order",
     description: "Оформить и отправить заказ владельцу магазина",
-    parameters: {
-      type: SchemaType.OBJECT,
+    input_schema: {
+      type: "object",
       properties: {},
     },
   },
