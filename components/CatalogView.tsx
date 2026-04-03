@@ -30,7 +30,7 @@ export default function CatalogView({ products }: CatalogViewProps) {
   const [activeGroup, setActiveGroup] = useState("");
   const [search, setSearch] = useState("");
   const [showPhotos, setShowPhotos] = useState(true);
-  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+  const [viewMode, setViewMode] = useState<"list" | "grid">("grid");
 
   useEffect(() => {
     const saved = localStorage.getItem("viewMode");
@@ -130,7 +130,7 @@ export default function CatalogView({ products }: CatalogViewProps) {
       >
         {filtered.length > 0 ? (
           filtered.map((product) => (
-            <ProductCard key={product.id} product={product} showPhotos={showPhotos} />
+            <ProductCard key={product.id} product={product} showPhotos={showPhotos} viewMode={viewMode} />
           ))
         ) : (
           <div className="px-4 py-12 text-center text-gray-400">

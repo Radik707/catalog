@@ -8,6 +8,7 @@ import AddToCartButton from "./AddToCartButton";
 interface ProductCardProps {
   product: Product;
   showPhotos?: boolean;
+  viewMode?: "list" | "grid";
 }
 
 function getPackaging(group: string, name: string): string {
@@ -84,11 +85,11 @@ const BADGE_STYLES: Record<string, string> = {
   акция: "bg-orange-500 text-white",
 };
 
-function PhotoPlaceholder() {
+function PhotoPlaceholder({ iconSize = "w-6 h-6" }: { iconSize?: string }) {
   return (
     <div className="w-full h-full flex items-center justify-center bg-white">
       <svg
-        className="w-6 h-6 text-gray-300"
+        className={`${iconSize} text-gray-300`}
         fill="none"
         viewBox="0 0 24 24"
         stroke="currentColor"
@@ -104,26 +105,117 @@ function PhotoPlaceholder() {
   );
 }
 
-export default function ProductCard({ product, showPhotos = true }: ProductCardProps) {
+export default function ProductCard({
+  product,
+  showPhotos = true,
+  viewMode = "list",
+}: ProductCardProps) {
   const [flipped, setFlipped] = useState(false);
   const inStock = product.stock > 0;
   const packaging = getPackaging(product.group, product.name);
   const badgeStyle = product.badge ? BADGE_STYLES[product.badge] : null;
 
+  const flipStyle = {
+    transformStyle: "preserve-3d" as const,
+    transition: "transform 0.4s ease",
+    transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
+  };
+
+  // ── РЕЖИМ СЕТКИ ──
+  // Фронт-сторона в нормальном потоке — определяет высоту контейнера.
+  // Оборот — absolute inset-0, подстраивается под высоту фронта.
+  // Это позволяет карточке сжиматься когда фото скрыто.
+  if (viewMode === "grid") {
+    return (
+      <div
+        style={{ perspective: "1000px" }}
+        className={`relative rounded-lg overflow-hidden border border-gray-100 shadow-sm${inStock ? "" : " opacity-60"}`}
+      >
+        <div style={flipStyle} className="relative">
+          {/* ── ЛИЦЕВАЯ СТОРОНА (нормальный поток, задаёт высоту) ── */}
+          <div
+            style={{ backfaceVisibility: "hidden" }}
+            className={`flex flex-col cursor-pointer${inStock ? " bg-white" : " bg-gray-50"}`}
+            onClick={() => setFlipped(true)}
+          >
+            {/* Фото — только если showPhotos */}
+            {showPhotos && (
+              <div className="relative bg-white h-32">
+                {product.imageUrl ? (
+                  <Image
+                    src={product.imageUrl}
+                    alt={product.name}
+                    fill
+                    className="object-contain p-1"
+                  />
+                ) : (
+                  <PhotoPlaceholder iconSize="w-10 h-10" />
+                )}
+                {badgeStyle && (
+                  <span
+                    className={`absolute top-1 left-1 text-[9px] font-medium px-1 py-0.5 rounded ${badgeStyle}`}
+                  >
+                    {product.badge}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Название + цена + кнопка */}
+            <div className="flex flex-col px-2 pt-1.5 pb-2 gap-1.5">
+              {!showPhotos && badgeStyle && (
+                <span className={`self-start text-[9px] font-medium px-1 py-0.5 rounded ${badgeStyle}`}>
+                  {product.badge}
+                </span>
+              )}
+              <p className="text-xs font-medium text-gray-900 leading-tight">
+                {product.name}
+              </p>
+              <div className="flex items-end justify-between gap-1">
+                <div>
+                  <p className="text-sm font-bold text-gray-900 leading-none whitespace-nowrap">
+                    {product.price.toFixed(2)} ₽
+                  </p>
+                  {packaging && (
+                    <p className="text-[10px] text-gray-400 mt-0.5">{packaging}</p>
+                  )}
+                </div>
+                <div onClick={(e) => e.stopPropagation()}>
+                  <AddToCartButton product={product} />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ── ОБОРОТНАЯ СТОРОНА (absolute, совпадает с высотой фронта) ── */}
+          <div
+            style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}
+            className="absolute inset-0 flex flex-col justify-between px-3 py-2 bg-amber-50 cursor-pointer"
+            onClick={() => setFlipped(false)}
+          >
+            <p className="text-xs font-semibold text-gray-700 truncate">
+              {product.name}
+            </p>
+            <p className="text-xs text-gray-600 leading-relaxed mt-1 flex-1 overflow-hidden">
+              {product.description || "Описание не добавлено"}
+            </p>
+            <p className="text-[10px] text-gray-400 mt-1">
+              Нажмите, чтобы вернуться
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── РЕЖИМ СПИСКА (текущее поведение) ──
   return (
     <div
       style={{ perspective: "1000px" }}
       className={`relative border-b border-gray-100${inStock ? "" : " opacity-60"}`}
     >
       {/* Вращающийся контейнер */}
-      <div
-        style={{
-          transformStyle: "preserve-3d",
-          transition: "transform 0.4s ease",
-          transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
-        }}
-        className="relative"
-      >
+      <div style={flipStyle} className="relative">
         {/* ── ЛИЦЕВАЯ СТОРОНА ── */}
         <div
           style={{ backfaceVisibility: "hidden" }}
