@@ -117,3 +117,74 @@ C:\catalog\
 3.4.4 → обновить ProductCard.tsx (показ фото)
 3.4.5 → flip-карточка с описанием
 3.4.6 → переключатель режимов "С фото / Без фото"
+
+# CLAUDE.md — Дополнение для Telegram-бота
+
+> Этот блок добавляется в конец существующего C:\catalog\CLAUDE.md
+
+---
+
+## Telegram-бот «Каталог-консультант»
+
+### Назначение
+Telegram-бот для B2B-клиентов (владельцы магазинов). Консультирует по товарам через ИИ, принимает заказы. Работает на тех же данных из Google Sheet, что и сайт.
+
+### Стек бота
+- **Framework:** grammY (TypeScript, webhook mode)
+- **ИИ:** Google Gemini Flash API (бесплатно, function calling)
+- **Корзина:** Vercel KV (Redis)
+- **Хостинг:** тот же Vercel, webhook через /api/bot
+- **Заказы:** Telegram Bot API → сообщение владельцу
+
+### Структура файлов бота
+```
+app/api/bot/route.ts          — Webhook endpoint
+bot/
+  index.ts                    — Инициализация grammY
+  handlers/
+    start.ts                  — /start, приветствие, меню
+    catalog.ts                — Навигация по категориям (inline-кнопки)
+    cart.ts                   — Просмотр и управление корзиной
+    order.ts                  — Оформление и отправка заказа
+  ai/
+    consultant.ts             — Gemini Flash: обработка свободного текста
+    tools.ts                  — Function calling: search, add_to_cart и т.д.
+    system-prompt.ts          — Системный промпт + динамические данные
+  services/
+    products.ts               — Товары из Google Sheet (кэш 15 мин)
+    cart-store.ts             — Корзина в Vercel KV (ключ: cart:{user_id})
+    notify.ts                 — Отправка заказа владельцу
+```
+
+### Переменные окружения (добавить в .env.local)
+```
+TELEGRAM_BOT_TOKEN=           # от @BotFather
+TELEGRAM_WEBHOOK_SECRET=      # случайная строка
+OWNER_CHAT_ID=                # Telegram ID Олега
+GEMINI_API_KEY=               # от ai.google.dev
+KV_REST_API_URL=              # от Vercel KV
+KV_REST_API_TOKEN=            # от Vercel KV
+```
+
+### Правила разработки бота
+- Бот работает в webhook-режиме (Vercel serverless), НЕ polling
+- Товары кэшировать на 15 минут, не запрашивать Google Sheets на каждое сообщение
+- Корзина хранится в Vercel KV, ключ `cart:{telegram_user_id}`
+- ИИ использует function calling для действий (search, add_to_cart, send_order)
+- При ошибке Gemini — показать fallback: «Извините, попробуйте позже или выберите из каталога»
+- Все секреты только в .env.local, НИКОГДА в коде
+- Формат корзины: `[{productName, price, quantity, unit}]`
+- Заказ отправлять как форматированное сообщение Олегу (имя клиента + товары + итого)
+
+### Команды бота
+- /start — приветствие + меню с кнопками
+- /cart — показать корзину
+- /order — отправить заказ
+- Свободный текст — обрабатывает ИИ
+
+### Зависимости бота
+```
+grammy
+@google/generative-ai
+@vercel/kv
+```
