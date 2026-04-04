@@ -1,13 +1,19 @@
 """
-make_manual_sheet.py — Создание Excel для ручной привязки фото и описаний к товарам
+make_manual_sheet.py — Создание / дополнение Excel для ручной привязки фото и описаний
+
+Режимы работы:
+  Файл НЕ существует  → создать с нуля (все товары из прайсов).
+  Файл существует     → ДОПОЛНИТЬ: добавить только новые товары, сохранив все
+                        существующие строки без изменений.
 
 Использование:
-    python make_manual_sheet.py
+    python make_manual_sheet.py                       # авто-режим
+    python make_manual_sheet.py --dry-run             # показать что будет добавлено, без записи
+    python make_manual_sheet.py --rebuild             # пересоздать файл с нуля
     python make_manual_sheet.py --price C:\\другая\\папка
 
 Результат: C:\\catalog\\photo_manual.xlsx
   Лист "Товары": A=Название, B=Группа, C=Файл фото, D=Описание, E=Статус
-  Сортировка: сначала товары без фото, потом с фото.
 """
 
 import os
@@ -16,6 +22,7 @@ import json
 import glob
 import logging
 import argparse
+from collections import defaultdict
 from pathlib import Path
 
 import openpyxl
@@ -38,7 +45,7 @@ DEFAULT_PRICE_DIR = r"C:\price"
 OUTPUT_PATH = PROJECT_ROOT / "photo_manual.xlsx"
 
 
-# ── Загрузка данных ───────────────────────────────────────────────────────────
+# ── Загрузка вспомогательных данных ───────────────────────────────────────────
 
 def load_env() -> None:
     for search_dir in [PROJECT_ROOT, SCRIPT_DIR]:
@@ -123,7 +130,8 @@ def parse_products(price_dir: Path, category_map: dict) -> list[dict]:
                 continue
 
             b_str = str(b).strip().lower() if b else ""
-            if b_str == "цена":
+            c_str = str(c).strip().lower() if c else ""
+            if b_str in ("цена",) or c_str in ("остаток",):
                 continue
 
             if a is not None and str(a).strip() and b is None and c is None:
@@ -154,10 +162,9 @@ def parse_products(price_dir: Path, category_map: dict) -> list[dict]:
 
 
 def load_photo_overrides() -> dict[str, str]:
-    """Загрузить photo_overrides.json → {excel_name: file_name}."""
     path = SCRIPT_DIR / "photo_overrides.json"
     if not path.exists():
-        log.warning("photo_overrides.json не найден — фото не будут предзаполнены")
+        log.warning("photo_overrides.json не найден")
         return {}
     with open(path, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -166,13 +173,11 @@ def load_photo_overrides() -> dict[str, str]:
 
 
 def load_file_to_description() -> dict[str, str]:
-    """Загрузить photo_map.json → {file_name: description}."""
     path = SCRIPT_DIR / "photo_map.json"
     if not path.exists():
         return {}
     with open(path, "r", encoding="utf-8") as f:
         photo_map = json.load(f)
-
     result: dict[str, str] = {}
     for entry in photo_map:
         fn = entry.get("file_name")
@@ -183,7 +188,6 @@ def load_file_to_description() -> dict[str, str]:
 
 
 def load_description_overrides() -> dict[str, str]:
-    """Загрузить description_overrides.json → {excel_name: description}."""
     path = SCRIPT_DIR / "description_overrides.json"
     if not path.exists():
         return {}
@@ -191,7 +195,25 @@ def load_description_overrides() -> dict[str, str]:
         return json.load(f)
 
 
-# ── Стили ─────────────────────────────────────────────────────────────────────
+# ── Чтение существующего файла ─────────────────────────────────────────────────
+
+def load_existing_names() -> set[str]:
+    """Вернуть множество названий товаров из существующего photo_manual.xlsx."""
+    if not OUTPUT_PATH.exists():
+        return set()
+    wb = openpyxl.load_workbook(OUTPUT_PATH, data_only=True, read_only=True)
+    ws = wb.active
+    names: set[str] = set()
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        name = row[0]
+        if name and str(name).strip():
+            names.add(str(name).strip())
+    wb.close()
+    log.info("Существующих товаров в файле: %d", len(names))
+    return names
+
+
+# ── Стили ──────────────────────────────────────────────────────────────────────
 
 def style_header(cell, bg_hex: str) -> None:
     cell.font = Font(bold=True, color="FFFFFF", size=10)
@@ -206,7 +228,7 @@ def style_data(cell, wrap: bool = False) -> None:
     cell.font = Font(size=10)
 
 
-# ── Построение листа ──────────────────────────────────────────────────────────
+# ── Режим: создать с нуля ──────────────────────────────────────────────────────
 
 def build_sheet(
     wb: openpyxl.Workbook,
@@ -218,7 +240,6 @@ def build_sheet(
     """Создать лист «Товары». Возвращает (с_фото, без_фото)."""
     ws = wb.create_sheet("Товары")
 
-    # Заголовки
     headers = ["Название товара", "Группа", "Файл фото", "Описание товара", "Статус"]
     colors = ["2E75B6", "2E75B6", "375623", "7030A0", "C55A11"]
     for col, (header, color) in enumerate(zip(headers, colors), 1):
@@ -226,7 +247,6 @@ def build_sheet(
         style_header(cell, color)
     ws.row_dimensions[1].height = 20
 
-    # Собрать строки с данными
     rows_without: list[dict] = []
     rows_with: list[dict] = []
 
@@ -248,12 +268,10 @@ def build_sheet(
         else:
             rows_without.append(row_data)
 
-    # Сортировка: без фото первыми (по имени), потом с фото (по имени)
     rows_without.sort(key=lambda r: r["name"].lower())
     rows_with.sort(key=lambda r: r["name"].lower())
     all_rows = rows_without + rows_with
 
-    # Запись данных
     for row_idx, r in enumerate(all_rows, 2):
         has_photo = bool(r["file_name"])
         bg = "EBF3FB" if row_idx % 2 == 0 else "FFFFFF"
@@ -264,26 +282,20 @@ def build_sheet(
         ws.cell(row=row_idx, column=2, value=r["group"])
         ws.cell(row=row_idx, column=3, value=r["file_name"])
         ws.cell(row=row_idx, column=4, value=r["description"])
-        # Колонка E: формула — если C заполнена, ✅, иначе ❌
         ws.cell(row=row_idx, column=5, value=f'=IF(C{row_idx}<>"","✅","❌")')
 
         for col in range(1, 6):
             cell = ws.cell(row=row_idx, column=col)
-            wrap = col == 4
-            style_data(cell, wrap=wrap)
+            style_data(cell, wrap=(col == 4))
             cell.fill = PatternFill("solid", fgColor=bg)
 
-    # Ширина колонок
     ws.column_dimensions["A"].width = 50
     ws.column_dimensions["B"].width = 20
     ws.column_dimensions["C"].width = 30
     ws.column_dimensions["D"].width = 60
     ws.column_dimensions["E"].width = 10
-
-    # Заморозить первую строку
     ws.freeze_panes = "A2"
 
-    # Автофильтр
     total = len(all_rows)
     ws.auto_filter.ref = f"A1:E{total + 1}"
 
@@ -291,18 +303,70 @@ def build_sheet(
     return len(rows_with), len(rows_without)
 
 
-# ── main ──────────────────────────────────────────────────────────────────────
+# ── Режим: дополнить существующий файл ────────────────────────────────────────
+
+def append_new_products(new_products: list[dict]) -> None:
+    """Дописать новые товары в конец существующего photo_manual.xlsx."""
+    wb = openpyxl.load_workbook(OUTPUT_PATH)
+    ws = wb.active
+
+    start_row = ws.max_row + 1
+
+    # Сгруппировать по категории, внутри — алфавит
+    by_group: dict[str, list[str]] = defaultdict(list)
+    for p in new_products:
+        by_group[p["group"]].append(p["name"])
+    for g in by_group:
+        by_group[g].sort(key=str.lower)
+
+    # Записывать группами в алфавитном порядке групп
+    row_idx = start_row
+    for group in sorted(by_group.keys()):
+        for name in by_group[group]:
+            bg = "EBF3FB" if row_idx % 2 == 0 else "FFFFFF"
+
+            ws.cell(row=row_idx, column=1, value=name)
+            ws.cell(row=row_idx, column=2, value=group)
+            ws.cell(row=row_idx, column=3, value="")   # файл фото — заполнит вручную
+            ws.cell(row=row_idx, column=4, value="")   # описание — заполнит вручную
+            ws.cell(row=row_idx, column=5, value=f'=IF(C{row_idx}<>"","✅","❌")')
+
+            for col in range(1, 6):
+                cell = ws.cell(row=row_idx, column=col)
+                style_data(cell, wrap=(col == 4))
+                cell.fill = PatternFill("solid", fgColor=bg)
+
+            row_idx += 1
+
+    # Расширить автофильтр
+    ws.auto_filter.ref = f"A1:E{row_idx - 1}"
+
+    wb.save(OUTPUT_PATH)
+    log.info("Файл обновлён: %s", OUTPUT_PATH)
+
+
+# ── main ───────────────────────────────────────────────────────────────────────
 
 def main() -> None:
     load_env()
 
     parser = argparse.ArgumentParser(
-        description="Создание Excel для ручной привязки фото и описаний"
+        description="Создание / дополнение Excel для ручной привязки фото и описаний"
     )
     parser.add_argument(
         "--price",
         default=os.environ.get("EXCEL_DIR", DEFAULT_PRICE_DIR),
         help=f"Папка с .xlsx прайсами (по умолчанию: {DEFAULT_PRICE_DIR})",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Показать что будет добавлено, без изменения файла",
+    )
+    parser.add_argument(
+        "--rebuild",
+        action="store_true",
+        help="Пересоздать файл с нуля (игнорировать существующий)",
     )
     args = parser.parse_args()
 
@@ -312,25 +376,77 @@ def main() -> None:
         sys.exit(1)
 
     category_map = load_category_map()
-    products = parse_products(price_dir, category_map)
-    overrides = load_photo_overrides()
-    file_to_desc = load_file_to_description()
-    desc_overrides = load_description_overrides()
+    all_products = parse_products(price_dir, category_map)
 
-    wb = openpyxl.Workbook()
-    wb.remove(wb.active)
+    file_exists = OUTPUT_PATH.exists() and not args.rebuild
 
-    with_photo, without_photo = build_sheet(wb, products, overrides, file_to_desc, desc_overrides)
+    # ── Режим ДОПОЛНЕНИЯ ──────────────────────────────────────────────────────
+    if file_exists:
+        existing_names = load_existing_names()
+        new_products = [p for p in all_products if p["name"] not in existing_names]
 
-    wb.save(OUTPUT_PATH)
-    log.info("Файл сохранён: %s", OUTPUT_PATH)
+        if not new_products:
+            print("\nНовых товаров не найдено — файл актуален.")
+            return
 
-    total = with_photo + without_photo
-    print(f"\nГотово!")
-    print(f"  Товаров всего:  {total}")
-    print(f"  С фото:         {with_photo}")
-    print(f"  Без фото:       {without_photo}")
-    print(f"  Файл:           {OUTPUT_PATH}")
+        # Сгруппировать для отчёта
+        by_group: dict[str, list[str]] = defaultdict(list)
+        for p in new_products:
+            by_group[p["group"]].append(p["name"])
+        for g in by_group:
+            by_group[g].sort(key=str.lower)
+
+        print(f"\nСуществующих строк сохранено: {len(existing_names)}")
+        print(f"Новых товаров для добавления:  {len(new_products)}")
+        print()
+        for group in sorted(by_group.keys()):
+            items = by_group[group]
+            print(f"  [{group}] ({len(items)}):")
+            for name in items:
+                print(f"    + {name}")
+
+        if args.dry_run:
+            print("\n[dry-run] Файл НЕ изменён.")
+            return
+
+        append_new_products(new_products)
+
+        print(f"\nГотово!")
+        print(f"  Сохранено старых строк: {len(existing_names)}")
+        print(f"  Добавлено новых:        {len(new_products)}")
+        print(f"  Файл:                   {OUTPUT_PATH}")
+
+    # ── Режим СОЗДАНИЯ С НУЛЯ ─────────────────────────────────────────────────
+    else:
+        overrides = load_photo_overrides()
+        file_to_desc = load_file_to_description()
+        desc_overrides = load_description_overrides()
+
+        if args.dry_run:
+            by_group: dict[str, list[str]] = defaultdict(list)
+            for p in all_products:
+                by_group[p["group"]].append(p["name"])
+            print(f"\nТоваров всего: {len(all_products)}")
+            for group in sorted(by_group.keys()):
+                print(f"  [{group}] ({len(by_group[group])})")
+            print("\n[dry-run] Файл НЕ создан.")
+            return
+
+        wb = openpyxl.Workbook()
+        wb.remove(wb.active)
+        with_photo, without_photo = build_sheet(
+            wb, all_products, overrides, file_to_desc, desc_overrides
+        )
+        wb.save(OUTPUT_PATH)
+        log.info("Файл создан: %s", OUTPUT_PATH)
+
+        total = with_photo + without_photo
+        print(f"\nГотово!")
+        print(f"  Товаров всего:  {total}")
+        print(f"  С фото:         {with_photo}")
+        print(f"  Без фото:       {without_photo}")
+        print(f"  Файл:           {OUTPUT_PATH}")
+
     print()
     print("Инструкция:")
     print("  1. Откройте photo_manual.xlsx")
