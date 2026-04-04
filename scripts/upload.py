@@ -240,10 +240,33 @@ def apply_group_mapping(products: list[dict], category_map: dict) -> list[dict]:
     return products
 
 
+# Маппинг папок Cloudinary → логические имена в photo_overrides.json
+CLOUDINARY_FOLDER_ALIAS: dict[str, str] = {"catalog": "akkond"}
+
+
+def _build_url_index(photo_urls: dict[str, str]) -> dict[str, str]:
+    """Строит индекс {logical_folder/filename → url} из photo_urls.json.
+
+    Для каждого файла определяет папку Cloudinary по URL и применяет CLOUDINARY_FOLDER_ALIAS.
+    Также добавляет записи без папки для обратной совместимости.
+    """
+    import re as _re
+    index: dict[str, str] = {}
+    for filename, url in photo_urls.items():
+        m = _re.search(r"/upload/v\d+/([^/]+)/", url)
+        cloudinary_folder = m.group(1) if m else None
+        logical_folder = CLOUDINARY_FOLDER_ALIAS.get(cloudinary_folder, cloudinary_folder)
+        if logical_folder:
+            index[f"{logical_folder}/{filename}"] = url
+        index[filename] = url  # обратная совместимость: ключ без папки
+    return index
+
+
 def load_photo_data() -> dict[str, dict[str, str]]:
     """Загрузить маппинг название_товара → {url, description} из photo_map.json + photo_urls.json.
 
     Приоритет: photo_overrides.json (ручные привязки) → автоматический маппинг.
+    photo_overrides.json поддерживает формат "folder/filename" и просто "filename".
     При отсутствии файлов возвращает пустой словарь — скрипт работает без ошибок.
     """
     photo_map_path = SCRIPT_DIR / "photo_map.json"
@@ -262,15 +285,18 @@ def load_photo_data() -> dict[str, dict[str, str]]:
     with open(photo_urls_path, "r", encoding="utf-8") as f:
         photo_urls: dict[str, str] = json.load(f)
 
+    # Индекс: "folder/filename" и "filename" → url
+    url_index = _build_url_index(photo_urls)
+
     # Автоматический маппинг: original_name (lower) → {url, description}
     name_to_data: dict[str, dict[str, str]] = {}
     for entry in photo_map:
         original_name = (entry.get("original_name") or "").strip()
         file_name = entry.get("file_name")
         description = (entry.get("description") or "").strip()
-        if original_name and file_name and file_name in photo_urls:
+        if original_name and file_name and file_name in url_index:
             name_to_data[original_name.lower()] = {
-                "url": photo_urls[file_name],
+                "url": url_index[file_name],
                 "description": description,
             }
 
@@ -278,11 +304,11 @@ def load_photo_data() -> dict[str, dict[str, str]]:
     if overrides_path.exists():
         with open(overrides_path, "r", encoding="utf-8") as f:
             overrides: dict[str, str] = json.load(f)
-        for product_name, file_name in overrides.items():
-            if file_name in photo_urls:
+        for product_name, file_key in overrides.items():
+            if file_key in url_index:
                 existing = name_to_data.get(product_name.lower(), {})
                 name_to_data[product_name.lower()] = {
-                    "url": photo_urls[file_name],
+                    "url": url_index[file_key],
                     "description": existing.get("description", ""),
                 }
         log.info("Загружено ручных привязок фото: %d", len(overrides))
