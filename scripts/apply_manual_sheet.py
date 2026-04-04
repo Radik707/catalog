@@ -78,14 +78,27 @@ def main() -> None:
 
     for row in ws.iter_rows(min_row=2, values_only=True):
         name = str(row[0]).strip() if row[0] else ""
-        file_name = str(row[2]).strip() if len(row) > 2 and row[2] else ""
+        raw_file = str(row[2]).strip() if len(row) > 2 and row[2] else ""
         description = str(row[3]).strip() if len(row) > 3 and row[3] else ""
 
         if not name:
             skipped += 1
             continue
 
-        if file_name:
+        if raw_file:
+            # Извлечь только имя файла из file:///C:/path/to/447.webp или просто 447.webp
+            file_name = Path(raw_file.replace("file:///", "").replace("file://", "")).name
+            if not file_name:
+                log.warning("Не удалось извлечь имя файла из: %s", raw_file)
+                skipped += 1
+                continue
+            # Исправить двойное расширение: 869.jpgjpg → 869.jpg
+            for ext in (".jpgjpg", ".jpegjpeg", ".pngpng", ".webpwebp"):
+                if file_name.lower().endswith(ext):
+                    trim = len(ext) // 2  # 7//2=3 для .jpgjpg
+                    file_name = file_name[: len(file_name) - trim]
+                    log.warning("Исправлено двойное расширение: %s → %s", raw_file, file_name)
+                    break
             if name in new_photos:
                 log.warning("Дубль товара «%s» — оставляю первое вхождение", name)
             else:
