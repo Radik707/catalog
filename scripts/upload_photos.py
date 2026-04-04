@@ -6,9 +6,17 @@ upload_photos.py — Загрузка фото товаров в Cloudinary
 сохраняет photo_urls.json: {file_name → secure_url}.
 
 Использование:
-    python upload_photos.py              # загрузить все новые фото
-    python upload_photos.py --force      # перезагрузить уже загруженные
-    python upload_photos.py --dry-run    # показать что будет загружено
+    python upload_photos.py                                          # загрузить все новые фото из photos/
+    python upload_photos.py --force                                  # перезагрузить уже загруженные
+    python upload_photos.py --dry-run                                # показать что будет загружено
+    python upload_photos.py --folder presenter --source /path/to/   # загрузить из произвольной папки
+
+Аргументы:
+    --folder FOLDER   Папка в Cloudinary (по умолчанию: catalog)
+    --source PATH     Папка с фото на диске (по умолчанию: photos/ рядом с проектом)
+                      При указании --source рекурсивно обходятся все подпапки.
+    --force           Перезагрузить уже загруженные фото
+    --dry-run         Показать список файлов без загрузки
 
 Настройка (.env в корне проекта):
     CLOUDINARY_CLOUD_NAME=mycloud
@@ -41,8 +49,8 @@ PHOTO_MAP_PATH = SCRIPT_DIR / "photo_map.json"
 PHOTO_URLS_PATH = SCRIPT_DIR / "photo_urls.json"
 PHOTO_OVERRIDES_PATH = SCRIPT_DIR / "photo_overrides.json"
 
-# Папка в Cloudinary для всех фото каталога
-CLOUDINARY_FOLDER = "catalog"
+# Папка в Cloudinary по умолчанию
+DEFAULT_CLOUDINARY_FOLDER = "catalog"
 
 
 # ---------------------------------------------------------------------------
@@ -91,14 +99,14 @@ def save_photo_urls(urls: dict[str, str]) -> None:
         json.dump(urls, f, ensure_ascii=False, indent=2)
 
 
-def get_public_id(file_name: str) -> str:
+def get_public_id(file_name: str, folder: str) -> str:
     """Сформировать public_id для Cloudinary из имени файла.
 
     «faradella-glazirovannyj.jpg» → «catalog/faradella-glazirovannyj»
     Расширение не включается — Cloudinary хранит его отдельно.
     """
     stem = Path(file_name).stem
-    return f"{CLOUDINARY_FOLDER}/{stem}"
+    return f"{folder}/{stem}"
 
 
 # ---------------------------------------------------------------------------
@@ -121,7 +129,29 @@ def main() -> None:
         action="store_true",
         help="Показать список файлов без загрузки",
     )
+    parser.add_argument(
+        "--folder",
+        default=None,
+        help=f"Папка в Cloudinary (по умолчанию: {DEFAULT_CLOUDINARY_FOLDER})",
+    )
+    parser.add_argument(
+        "--source",
+        default=None,
+        help="Путь к папке с фото на диске (рекурсивно). По умолчанию: photos/ рядом с проектом",
+    )
     args = parser.parse_args()
+
+    # Определяем папку Cloudinary и источник фото
+    cloudinary_folder = args.folder if args.folder else DEFAULT_CLOUDINARY_FOLDER
+    source_dir = Path(args.source) if args.source else PHOTOS_DIR
+
+    if args.folder:
+        log.info("Папка Cloudinary: %s", cloudinary_folder)
+    if args.source:
+        log.info("Источник фото: %s", source_dir)
+        if not source_dir.exists():
+            log.error("Папка не найдена: %s", source_dir)
+            sys.exit(1)
 
     # --- Проверить переменные Cloudinary ---
     cloud_name = os.environ.get("CLOUDINARY_CLOUD_NAME", "")
@@ -153,46 +183,57 @@ def main() -> None:
     )
 
     # --- Загрузить данные ---
-    photo_map = load_photo_map()
     photo_urls = load_photo_urls()
 
     if args.force:
         log.info("--force: существующие записи будут перезаписаны")
 
-    # --- Источник 1: photo_map.json (автоматические из PDF) ---
-    # file_name → список товаров (несколько товаров могут делить одно фото)
-    files_to_upload: dict[str, list[str]] = {}
-    for entry in photo_map:
-        fn = entry.get("file_name")
-        if not fn:
-            continue
-        names = files_to_upload.setdefault(fn, [])
-        names.append(entry.get("original_name", ""))
+    IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 
-    # --- Источник 2: photo_overrides.json (ручные привязки) ---
-    if PHOTO_OVERRIDES_PATH.exists():
-        with open(PHOTO_OVERRIDES_PATH, "r", encoding="utf-8") as f:
-            overrides: dict[str, str] = json.load(f)
-        for product_name, fn in overrides.items():
-            if fn and fn not in files_to_upload:
-                files_to_upload[fn] = [product_name]
-            elif fn:
-                files_to_upload[fn].append(product_name)
-        log.info("Добавлено из photo_overrides.json: %d уникальных файлов", len(overrides))
+    if args.source:
+        # --- Режим --source: рекурсивно обходим указанную папку ---
+        # file_name (относительно source_dir) → абсолютный путь
+        files_to_upload: dict[str, Path] = {}
+        for photo_path in sorted(source_dir.rglob("*")):
+            if photo_path.is_file() and photo_path.suffix.lower() in IMAGE_EXTS:
+                files_to_upload[photo_path.name] = photo_path
+        log.info("Найдено файлов в %s: %d", source_dir, len(files_to_upload))
+    else:
+        # --- Стандартный режим: photo_map.json + photo_overrides.json + photos/ ---
+        photo_map = load_photo_map()
+        map_file_names: dict[str, list[str]] = {}
+        for entry in photo_map:
+            fn = entry.get("file_name")
+            if not fn:
+                continue
+            map_file_names.setdefault(fn, []).append(entry.get("original_name", ""))
 
-    # --- Источник 3: файлы в папке photos/, которых нет в photo_urls.json ---
-    if PHOTOS_DIR.exists():
-        for photo_path in sorted(PHOTOS_DIR.iterdir()):
-            if photo_path.is_file() and photo_path.suffix.lower() in {
-                ".jpg", ".jpeg", ".png", ".webp", ".gif"
-            }:
-                fn = photo_path.name
-                if fn not in files_to_upload:
-                    files_to_upload[fn] = []
-        log.info("Всего файлов в папке photos/: %d", sum(
-            1 for p in PHOTOS_DIR.iterdir()
-            if p.is_file() and p.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp", ".gif"}
-        ))
+        if PHOTO_OVERRIDES_PATH.exists():
+            with open(PHOTO_OVERRIDES_PATH, "r", encoding="utf-8") as f:
+                overrides: dict[str, str] = json.load(f)
+            for product_name, fn in overrides.items():
+                if fn and fn not in map_file_names:
+                    map_file_names[fn] = [product_name]
+                elif fn:
+                    map_file_names[fn].append(product_name)
+            log.info("Добавлено из photo_overrides.json: %d уникальных файлов", len(overrides))
+
+        files_to_upload: dict[str, Path] = {}
+        for fn in map_file_names:
+            p = PHOTOS_DIR / fn
+            if p.exists():
+                files_to_upload[fn] = p
+
+        if PHOTOS_DIR.exists():
+            for photo_path in sorted(PHOTOS_DIR.iterdir()):
+                if photo_path.is_file() and photo_path.suffix.lower() in IMAGE_EXTS:
+                    fn = photo_path.name
+                    if fn not in files_to_upload:
+                        files_to_upload[fn] = photo_path
+            log.info("Всего файлов в папке photos/: %d", sum(
+                1 for p in PHOTOS_DIR.iterdir()
+                if p.is_file() and p.suffix.lower() in IMAGE_EXTS
+            ))
 
     log.info("Уникальных файлов к проверке: %d", len(files_to_upload))
     log.info("Уже загружено в Cloudinary: %d", len(photo_urls))
@@ -200,35 +241,25 @@ def main() -> None:
     # --- Определить что нужно загружать ---
     to_upload = []
     skipped = 0
-    missing_files = 0
 
-    for file_name, product_names in sorted(files_to_upload.items()):
-        photo_path = PHOTOS_DIR / file_name
-
-        if not photo_path.exists():
-            log.warning("Файл не найден: %s", photo_path)
-            missing_files += 1
-            continue
-
+    for file_name, photo_path in sorted(files_to_upload.items()):
         if file_name in photo_urls and not args.force:
             skipped += 1
             continue
 
-        to_upload.append((file_name, photo_path, product_names))
+        to_upload.append((file_name, photo_path))
 
     log.info(
-        "К загрузке: %d | Пропущено (уже есть): %d | Файлы не найдены: %d",
+        "К загрузке: %d | Пропущено (уже есть): %d",
         len(to_upload),
         skipped,
-        missing_files,
     )
 
     if args.dry_run:
         print("\n--- Файлы к загрузке (dry-run) ---")
-        for file_name, photo_path, names in to_upload:
+        for file_name, photo_path in to_upload:
             size_kb = photo_path.stat().st_size // 1024
-            print(f"  {file_name} ({size_kb} KB) → товары: {', '.join(names[:2])}"
-                  + (" ..." if len(names) > 2 else ""))
+            print(f"  {file_name} ({size_kb} KB)")
         print(f"\nВсего: {len(to_upload)} файлов")
         return
 
@@ -240,8 +271,8 @@ def main() -> None:
     uploaded = 0
     errors = 0
 
-    for i, (file_name, photo_path, product_names) in enumerate(to_upload, 1):
-        public_id = get_public_id(file_name)
+    for i, (file_name, photo_path) in enumerate(to_upload, 1):
+        public_id = get_public_id(file_name, cloudinary_folder)
         log.info(
             "[%d/%d] Загружаю: %s → %s",
             i, len(to_upload), file_name, public_id,
