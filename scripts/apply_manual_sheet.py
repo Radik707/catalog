@@ -109,10 +109,16 @@ def resolve_photo_key(raw_file: str, url_index: dict[str, str]) -> str:
     if parent in KNOWN_LOGICAL_FOLDERS:
         return f"{parent}/{filename}"
 
-    # 3. Искать в url_index — найти ключ с папкой
-    for key in url_index:
-        if "/" in key and key.split("/", 1)[1] == filename:
-            return key  # "akkond/001.png" или "presenter/350.webp"
+    # 3. Искать в url_index — найти ключ с папкой.
+    # Файлы из корня photos/ (не из именованной подпапки) — presenter-товары,
+    # поэтому предпочитаем presenter/ перед akkond/.
+    matches = [key for key in url_index if "/" in key and key.split("/", 1)[1] == filename]
+    for preferred in ("presenter", "akkond"):
+        for key in matches:
+            if key.split("/")[0] == preferred:
+                return key
+    if matches:
+        return matches[0]
 
     # 4. Не найдено в Cloudinary
     return filename
