@@ -199,31 +199,48 @@ export default function ProductCard({
           </div>
 
           {/* ── ОБОРОТНАЯ СТОРОНА (absolute, совпадает с высотой фронта) ──
-              Здесь дублируются цена, остаток и кнопка корзины. */}
+              Полное название → «Осталось: …» → описание → цена и корзина. */}
           <div
             style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}
-            className="absolute inset-0 flex flex-col px-3 py-2 bg-amber-50 cursor-pointer"
+            className="absolute inset-0 flex flex-col px-3 py-2 bg-amber-50 cursor-pointer overflow-hidden"
             onClick={() => setFlipped(false)}
           >
-            <p className={`${nameCls} font-semibold text-gray-700 ${nameLines}`}>
+            {/* Название без сокращений — места на обороте достаточно */}
+            <p className={`${nameCls} font-semibold text-gray-800 leading-snug`}>
               {product.name}
             </p>
-            <p className="text-xs text-gray-600 leading-snug mt-1 flex-1 overflow-hidden">
-              {product.description || "Описание не добавлено"}
+            {/* Остаток — сразу после названия, полным текстом */}
+            <p className="text-xs font-medium mt-1">
+              {inStock ? (
+                <span className="text-emerald-700">Осталось: {product.stock} шт</span>
+              ) : (
+                <span className="text-gray-400">Нет в наличии</span>
+              )}
             </p>
-            {/* Цена + остаток + корзина */}
-            <div className="flex items-end justify-between gap-1 mt-1">
+            {/* Описание — только если заполнено */}
+            {product.description && (
+              <p className="text-xs text-gray-600 leading-snug mt-1 overflow-hidden">
+                {product.description}
+              </p>
+            )}
+            <div className="flex-1" />
+            {/* Цена + корзина (на обороте цена видна всегда) */}
+            <div className="flex items-end justify-between gap-1">
               <div className="min-w-0">
                 <p className={`${priceCls} font-bold text-gray-900 leading-none whitespace-nowrap`}>
                   {product.price.toFixed(2)} ₽
                 </p>
-                <p className="text-[10px] text-gray-400 mt-0.5 truncate">
-                  {inStock ? `${product.stock} шт` : "Нет в наличии"}
-                  {packaging ? ` · ${packaging}` : ""}
-                </p>
+                {packaging && (
+                  <p className="text-[10px] text-gray-400 mt-0.5 truncate">{packaging}</p>
+                )}
               </div>
               <div onClick={(e) => e.stopPropagation()}>
-                <AddToCartButton product={product} compact={compactCart} />
+                <div className="sm:hidden">
+                  <AddToCartButton product={product} compact />
+                </div>
+                <div className="hidden sm:block">
+                  <AddToCartButton product={product} compact={compactCart} />
+                </div>
               </div>
             </div>
           </div>
@@ -321,22 +338,34 @@ export default function ProductCard({
           className="absolute inset-0 flex flex-col justify-between px-4 py-3 bg-amber-50 cursor-pointer"
           onClick={() => setFlipped(false)}
         >
-          <p className="text-xs font-semibold text-gray-700 truncate">
+          {/* Название без сокращений */}
+          <p className="text-sm font-semibold text-gray-800 leading-snug">
             {product.name}
           </p>
-          <p className="text-xs text-gray-600 leading-relaxed mt-1 flex-1 overflow-hidden">
-            {product.description || "Описание не добавлено"}
+          {/* Остаток — сразу после названия, полным текстом */}
+          <p className="text-xs font-medium mt-1">
+            {inStock ? (
+              <span className="text-emerald-700">Осталось: {product.stock} шт</span>
+            ) : (
+              <span className="text-gray-400">Нет в наличии</span>
+            )}
           </p>
-          {/* Цена + остаток + корзина (дублируется на обороте) */}
-          <div className="flex items-end justify-between gap-2 mt-1">
+          {/* Описание — только если заполнено */}
+          {product.description && (
+            <p className="text-xs text-gray-600 leading-relaxed mt-1 overflow-hidden">
+              {product.description}
+            </p>
+          )}
+          <div className="flex-1" />
+          {/* Цена + корзина */}
+          <div className="flex items-end justify-between gap-2">
             <div className="min-w-0">
               <p className="text-sm font-bold text-gray-900 leading-none whitespace-nowrap">
                 {product.price.toFixed(2)} ₽
               </p>
-              <p className="text-[10px] text-gray-400 mt-0.5 truncate">
-                {inStock ? `${product.stock} шт` : "Нет в наличии"}
-                {packaging ? ` · ${packaging}` : ""}
-              </p>
+              {packaging && (
+                <p className="text-[10px] text-gray-400 mt-0.5 truncate">{packaging}</p>
+              )}
             </div>
             <div onClick={(e) => e.stopPropagation()}>
               <AddToCartButton product={product} />

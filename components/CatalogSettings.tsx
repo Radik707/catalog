@@ -82,7 +82,8 @@ export default function CatalogSettingsProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  // Значения по умолчанию при первом открытии: презентация, сетка 3×4, с ценами.
+  const [viewMode, setViewMode] = useState<ViewMode>("presentation");
   const [gridPreset, setGridPreset] = useState<GridPreset>("3x4");
   const [showPhotos, setShowPhotos] = useState(true);
   const [showPrices, setShowPrices] = useState(true);
