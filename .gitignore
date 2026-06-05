@@ -27,8 +27,8 @@ pdf/
 __pycache__/
 *.pyc
 
-# bot: входящие файлы (не хранить в git)
-bot/price/
+# загрузчик: входящие файлы (не хранить в git)
+uploader/price/
 
 # debug
 npm-debug.log*
