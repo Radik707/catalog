@@ -1,68 +1,18 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { Product } from "@/lib/types";
-import ProductCard, { PresentationSizes } from "./ProductCard";
+import ProductCard from "./ProductCard";
 import CategoryFilter from "./CategoryFilter";
 import SearchBar from "./SearchBar";
 import ScrollToTop from "./ScrollToTop";
 import Lightbox from "./Lightbox";
+import { useCatalogSettings, PRESENTATION_PRESETS } from "./CatalogSettings";
 
 interface CatalogViewProps {
   products: Product[];
   initialCategory?: string;
 }
-
-type ViewMode = "list" | "grid" | "presentation";
-type GridPreset = "2x3" | "3x4" | "4x6";
-
-// Пресеты плотности сетки для режима презентации.
-// cols — колонки (адаптивно), sizes — размеры фото/текста (масштабируются
-// вместе: чем плотнее сетка, тем мельче фото, шрифт и цена).
-const PRESENTATION_PRESETS: Record<
-  GridPreset,
-  { label: string; cols: string; sizes: PresentationSizes }
-> = {
-  "2x3": {
-    label: "2×3",
-    cols: "grid-cols-2",
-    sizes: {
-      photoH: "h-56 sm:h-72",
-      bodyPad: "px-3 pt-2 pb-3 gap-1",
-      nameCls: "text-sm sm:text-base",
-      nameLines: "line-clamp-2",
-      priceCls: "text-base sm:text-lg",
-      pkgCls: "text-xs",
-      compactCart: false,
-    },
-  },
-  "3x4": {
-    label: "3×4",
-    cols: "grid-cols-3",
-    sizes: {
-      photoH: "h-36 sm:h-44",
-      bodyPad: "px-2 pt-1.5 pb-2 gap-0.5",
-      nameCls: "text-xs sm:text-sm",
-      nameLines: "line-clamp-2",
-      priceCls: "text-sm sm:text-base",
-      pkgCls: "text-[10px]",
-      compactCart: true,
-    },
-  },
-  "4x6": {
-    label: "4×6",
-    cols: "grid-cols-4",
-    sizes: {
-      photoH: "h-24 sm:h-32",
-      bodyPad: "px-1.5 pt-1 pb-1.5 gap-0.5",
-      nameCls: "text-[10px] sm:text-xs",
-      nameLines: "line-clamp-2",
-      priceCls: "text-[11px] sm:text-sm",
-      pkgCls: "text-[9px]",
-      compactCart: true,
-    },
-  },
-};
 
 // Порядок групп для отображения
 const GROUP_ORDER = [
@@ -81,34 +31,13 @@ const GROUP_ORDER = [
 ];
 
 export default function CatalogView({ products, initialCategory = "" }: CatalogViewProps) {
+  // Настройки отображения берём из общего контекста (управляются шестерёнкой в шапке).
+  const { viewMode, gridPreset, showPhotos, showPrices } = useCatalogSettings();
+
   const [activeGroup, setActiveGroup] = useState(initialCategory);
   const [search, setSearch] = useState("");
-  const [showPhotos, setShowPhotos] = useState(true);
-  const [viewMode, setViewMode] = useState<ViewMode>("grid");
-  const [gridPreset, setGridPreset] = useState<GridPreset>("3x4");
   // Индекс открытого фото в просмотрщике-галерее (null — закрыт).
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
-
-  useEffect(() => {
-    const savedView = localStorage.getItem("viewMode");
-    if (savedView === "list" || savedView === "grid" || savedView === "presentation") {
-      setViewMode(savedView);
-    }
-    const savedPreset = localStorage.getItem("gridPreset");
-    if (savedPreset === "2x3" || savedPreset === "3x4" || savedPreset === "4x6") {
-      setGridPreset(savedPreset);
-    }
-  }, []);
-
-  const handleViewMode = (mode: ViewMode) => {
-    setViewMode(mode);
-    localStorage.setItem("viewMode", mode);
-  };
-
-  const handleGridPreset = (preset: GridPreset) => {
-    setGridPreset(preset);
-    localStorage.setItem("gridPreset", preset);
-  };
 
   // Собираем уникальные группы из данных, сортируем по заданному порядку
   const groups = useMemo(() => {
@@ -171,71 +100,6 @@ export default function CatalogView({ products, initialCategory = "" }: CatalogV
       {/* Поиск */}
       <SearchBar value={search} onChange={setSearch} count={filtered.length} />
 
-      {/* Переключатели режима отображения */}
-      <div className="flex flex-wrap justify-end items-center gap-2 px-4 py-1.5 bg-white border-b border-gray-100">
-        {/* Выбор плотности сетки — только в режиме презентации */}
-        {viewMode === "presentation" && (
-          <div className="flex rounded-lg overflow-hidden border border-gray-200 text-xs mr-auto">
-            {(Object.keys(PRESENTATION_PRESETS) as GridPreset[]).map((key) => (
-              <button
-                key={key}
-                onClick={() => handleGridPreset(key)}
-                className={`px-3 py-1 transition-colors ${
-                  gridPreset === key ? "bg-blue-500 text-white" : "bg-white text-gray-500"
-                }`}
-              >
-                {PRESENTATION_PRESETS[key].label}
-              </button>
-            ))}
-          </div>
-        )}
-
-        <div className="flex rounded-lg overflow-hidden border border-gray-200 text-xs">
-          <button
-            onClick={() => setShowPhotos(true)}
-            className={`px-3 py-1 transition-colors ${
-              showPhotos ? "bg-blue-500 text-white" : "bg-white text-gray-500"
-            }`}
-          >
-            С фото
-          </button>
-          <button
-            onClick={() => setShowPhotos(false)}
-            className={`px-3 py-1 transition-colors ${
-              !showPhotos ? "bg-blue-500 text-white" : "bg-white text-gray-500"
-            }`}
-          >
-            Без фото
-          </button>
-        </div>
-        <div className="flex rounded-lg overflow-hidden border border-gray-200 text-xs">
-          <button
-            onClick={() => handleViewMode("list")}
-            className={`px-3 py-1 transition-colors ${
-              viewMode === "list" ? "bg-blue-500 text-white" : "bg-white text-gray-500"
-            }`}
-          >
-            ☰ Список
-          </button>
-          <button
-            onClick={() => handleViewMode("grid")}
-            className={`px-3 py-1 transition-colors ${
-              viewMode === "grid" ? "bg-blue-500 text-white" : "bg-white text-gray-500"
-            }`}
-          >
-            ⊞ Сетка
-          </button>
-          <button
-            onClick={() => handleViewMode("presentation")}
-            className={`px-3 py-1 transition-colors ${
-              viewMode === "presentation" ? "bg-blue-500 text-white" : "bg-white text-gray-500"
-            }`}
-          >
-            ◳ Презентация
-          </button>
-        </div>
-      </div>
-
       {/* Список / Сетка / Презентация товаров */}
       <div className={containerClass}>
         {filtered.length > 0 ? (
@@ -244,6 +108,7 @@ export default function CatalogView({ products, initialCategory = "" }: CatalogV
               key={product.id}
               product={product}
               showPhotos={showPhotos}
+              showPrices={showPrices}
               viewMode={viewMode}
               onPhotoOpen={() => openLightbox(product)}
               presentationSizes={viewMode === "presentation" ? preset.sizes : undefined}

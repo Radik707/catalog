@@ -32,6 +32,9 @@ const DEFAULT_PRESENTATION_SIZES: PresentationSizes = {
 interface ProductCardProps {
   product: Product;
   showPhotos?: boolean;
+  // Показывать ли цену и фасовку на лицевой стороне карточки.
+  // При false — режим «только картинки» (на обороте цена остаётся).
+  showPrices?: boolean;
   viewMode?: "list" | "grid" | "presentation";
   // Открыть полноэкранный просмотрщик фото на этом товаре.
   // Вызывается только если у товара есть фото.
@@ -69,6 +72,7 @@ function PhotoPlaceholder({ iconSize = "w-6 h-6" }: { iconSize?: string }) {
 export default function ProductCard({
   product,
   showPhotos = true,
+  showPrices = true,
   viewMode = "list",
   onPhotoOpen,
   presentationSizes,
@@ -161,14 +165,18 @@ export default function ProductCard({
                 {product.name}
               </p>
               <div className="flex items-end justify-between gap-1">
-                <div className="min-w-0">
-                  <p className={`${priceCls} font-bold text-gray-900 leading-none whitespace-nowrap`}>
-                    {product.price.toFixed(2)} ₽
-                  </p>
-                  {packaging && (
-                    <p className={`${pkgCls} text-gray-400 mt-0.5 truncate`}>{packaging}</p>
-                  )}
-                </div>
+                {showPrices ? (
+                  <div className="min-w-0">
+                    <p className={`${priceCls} font-bold text-gray-900 leading-none whitespace-nowrap`}>
+                      {product.price.toFixed(2)} ₽
+                    </p>
+                    {packaging && (
+                      <p className={`${pkgCls} text-gray-400 mt-0.5 truncate`}>{packaging}</p>
+                    )}
+                  </div>
+                ) : (
+                  <span />
+                )}
                 <div onClick={(e) => e.stopPropagation()}>
                   <AddToCartButton product={product} compact={compactCart} />
                 </div>
@@ -276,14 +284,16 @@ export default function ProductCard({
 
           {/* Цена + кнопка — НЕ триггерят флип */}
           <div className="flex items-center gap-3 flex-shrink-0">
-            <div className="text-right">
-              <span className="text-sm font-bold text-gray-900 whitespace-nowrap">
-                {product.price.toFixed(2)} ₽
-              </span>
-              {packaging && (
-                <p className="text-xs text-gray-400">{packaging}</p>
-              )}
-            </div>
+            {showPrices && (
+              <div className="text-right">
+                <span className="text-sm font-bold text-gray-900 whitespace-nowrap">
+                  {product.price.toFixed(2)} ₽
+                </span>
+                {packaging && (
+                  <p className="text-xs text-gray-400">{packaging}</p>
+                )}
+              </div>
+            )}
             <AddToCartButton product={product} />
           </div>
         </div>
