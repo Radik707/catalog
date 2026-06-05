@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { Product } from "@/lib/types";
-import ProductCard from "./ProductCard";
+import ProductCard, { PresentationSizes } from "./ProductCard";
 import CategoryFilter from "./CategoryFilter";
 import SearchBar from "./SearchBar";
 import ScrollToTop from "./ScrollToTop";
@@ -17,14 +17,45 @@ type ViewMode = "list" | "grid" | "presentation";
 type GridPreset = "2x3" | "3x4" | "4x6";
 
 // Пресеты плотности сетки для режима презентации.
-// cols — колонки (адаптивно), photoH — высота фото (чем меньше, тем плотнее).
+// cols — колонки (адаптивно), sizes — размеры фото/текста (масштабируются
+// вместе: чем плотнее сетка, тем мельче фото, шрифт и цена).
 const PRESENTATION_PRESETS: Record<
   GridPreset,
-  { label: string; cols: string; photoH: string }
+  { label: string; cols: string; sizes: PresentationSizes }
 > = {
-  "2x3": { label: "2×3", cols: "grid-cols-2", photoH: "h-64 sm:h-80" },
-  "3x4": { label: "3×4", cols: "grid-cols-2 sm:grid-cols-3", photoH: "h-48 sm:h-56" },
-  "4x6": { label: "4×6", cols: "grid-cols-3 sm:grid-cols-4", photoH: "h-32 sm:h-36" },
+  "2x3": {
+    label: "2×3",
+    cols: "grid-cols-2",
+    sizes: {
+      photoH: "h-64 sm:h-80",
+      bodyPad: "px-3 pt-2 pb-3 gap-1.5",
+      nameCls: "text-base sm:text-lg",
+      priceCls: "text-xl sm:text-2xl",
+      pkgCls: "text-sm",
+    },
+  },
+  "3x4": {
+    label: "3×4",
+    cols: "grid-cols-2 sm:grid-cols-3",
+    sizes: {
+      photoH: "h-44 sm:h-52",
+      bodyPad: "px-2.5 pt-1.5 pb-2.5 gap-1",
+      nameCls: "text-sm sm:text-base",
+      priceCls: "text-lg sm:text-xl",
+      pkgCls: "text-xs",
+    },
+  },
+  "4x6": {
+    label: "4×6",
+    cols: "grid-cols-3 sm:grid-cols-4",
+    sizes: {
+      photoH: "h-28 sm:h-32",
+      bodyPad: "px-2 pt-1 pb-2 gap-0.5",
+      nameCls: "text-[11px] sm:text-xs",
+      priceCls: "text-sm sm:text-base",
+      pkgCls: "text-[10px]",
+    },
+  },
 };
 
 // Порядок групп для отображения
@@ -209,7 +240,7 @@ export default function CatalogView({ products, initialCategory = "" }: CatalogV
               showPhotos={showPhotos}
               viewMode={viewMode}
               onPhotoOpen={() => openLightbox(product)}
-              presentationPhotoH={viewMode === "presentation" ? preset.photoH : undefined}
+              presentationSizes={viewMode === "presentation" ? preset.sizes : undefined}
             />
           ))
         ) : (

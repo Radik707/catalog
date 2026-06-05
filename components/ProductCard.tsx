@@ -6,6 +6,25 @@ import { Product } from "@/lib/types";
 import { getPackaging } from "@/lib/packaging";
 import AddToCartButton from "./AddToCartButton";
 
+// Набор размеров для режима презентации — меняется вместе с плотностью сетки,
+// чтобы шрифт и цена уменьшались вслед за фото (пропорциональная карточка).
+export interface PresentationSizes {
+  photoH: string; // высота фото
+  bodyPad: string; // отступы блока текста
+  nameCls: string; // размер названия
+  priceCls: string; // размер цены
+  pkgCls: string; // размер фасовки
+}
+
+// Размеры по умолчанию (на случай, если пресет не передан).
+const DEFAULT_PRESENTATION_SIZES: PresentationSizes = {
+  photoH: "h-56 sm:h-72",
+  bodyPad: "px-3 pt-2.5 pb-3 gap-2",
+  nameCls: "text-sm sm:text-base",
+  priceCls: "text-lg sm:text-xl",
+  pkgCls: "text-xs",
+};
+
 interface ProductCardProps {
   product: Product;
   showPhotos?: boolean;
@@ -13,8 +32,8 @@ interface ProductCardProps {
   // Открыть полноэкранный просмотрщик фото на этом товаре.
   // Вызывается только если у товара есть фото.
   onPhotoOpen?: () => void;
-  // Высота фото в режиме презентации (задаётся выбором плотности сетки).
-  presentationPhotoH?: string;
+  // Размеры элементов в режиме презентации (зависят от выбранной плотности сетки).
+  presentationSizes?: PresentationSizes;
 }
 
 const BADGE_STYLES: Record<string, string> = {
@@ -48,7 +67,7 @@ export default function ProductCard({
   showPhotos = true,
   viewMode = "list",
   onPhotoOpen,
-  presentationPhotoH,
+  presentationSizes,
 }: ProductCardProps) {
   const [flipped, setFlipped] = useState(false);
   const inStock = product.stock > 0;
@@ -67,15 +86,14 @@ export default function ProductCard({
   // Оборот — absolute inset-0, подстраивается под высоту фронта.
   if (viewMode === "grid" || viewMode === "presentation") {
     const isPresentation = viewMode === "presentation";
+    const sizes = presentationSizes ?? DEFAULT_PRESENTATION_SIZES;
 
-    // Размеры элементов под режим
-    const photoH = isPresentation
-      ? presentationPhotoH ?? "h-56 sm:h-72"
-      : "h-32";
-    const bodyPad = isPresentation ? "px-3 pt-2.5 pb-3 gap-2" : "px-2 pt-1.5 pb-2 gap-1.5";
-    const nameCls = isPresentation ? "text-sm sm:text-base" : "text-xs";
-    const priceCls = isPresentation ? "text-lg sm:text-xl" : "text-sm";
-    const pkgCls = isPresentation ? "text-xs" : "text-[10px]";
+    // Размеры элементов под режим. В презентации берём из пресета плотности.
+    const photoH = isPresentation ? sizes.photoH : "h-32";
+    const bodyPad = isPresentation ? sizes.bodyPad : "px-2 pt-1.5 pb-2 gap-1.5";
+    const nameCls = isPresentation ? sizes.nameCls : "text-xs";
+    const priceCls = isPresentation ? sizes.priceCls : "text-sm";
+    const pkgCls = isPresentation ? sizes.pkgCls : "text-[10px]";
     const badgeCls = isPresentation ? "text-xs px-1.5 py-0.5" : "text-[9px] px-1 py-0.5";
     const badgePos = isPresentation ? "top-2 left-2" : "top-1 left-1";
     const placeholderIcon = isPresentation ? "w-16 h-16" : "w-10 h-10";
