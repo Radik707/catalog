@@ -1,15 +1,19 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { Product } from "@/lib/types";
+import { getPackaging } from "@/lib/packaging";
 
-// Просмотрщик фото на весь экран (lightbox).
-// Открывается по тапу на фото товара, показывает чёткую версию по центру
-// на тёмном фоне с подписью снизу (название + цена + фасовка).
+// Просмотрщик-галерея фото на весь экран (lightbox).
+// Показывает фото товара по центру на тёмном фоне с подписью снизу
+// (название + цена + фасовка) и позволяет листать товары:
+//   свайп вправо / стрелка ← / кнопка слева  → предыдущий товар
+//   свайп влево  / стрелка → / кнопка справа → следующий товар
+// Закрытие: крестик, клик по чёрному фону, свайп вверх/вниз, Esc.
 interface LightboxProps {
-  imageUrl: string; // оригинальный URL Cloudinary
-  name: string;
-  price: number;
-  packaging?: string;
+  products: Product[]; // только товары с фото, в порядке отображения
+  index: number; // индекс текущего товара
+  onIndexChange: (newIndex: number) => void;
   onClose: () => void;
 }
 
@@ -21,31 +25,56 @@ function getHiResUrl(url: string): string {
 }
 
 export default function Lightbox({
-  imageUrl,
-  name,
-  price,
-  packaging,
+  products,
+  index,
+  onIndexChange,
   onClose,
 }: LightboxProps) {
-  // Координата начала касания — для определения взмаха (свайпа).
-  const touchStartY = useRef<number | null>(null);
+  const product = products[index];
+
+  const hasPrev = index > 0;
+  const hasNext = index < products.length - 1;
+
+  const goPrev = () => {
+    if (hasPrev) onIndexChange(index - 1);
+  };
+  const goNext = () => {
+    if (hasNext) onIndexChange(index + 1);
+  };
+
+  // Координаты начала касания — для определения направления взмаха.
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
 
   const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartY.current = e.touches[0].clientY;
+    touchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartY.current === null) return;
-    const deltaY = e.changedTouches[0].clientY - touchStartY.current;
-    // Взмах вверх или вниз больше порога (80px) — закрываем просмотрщик.
-    if (Math.abs(deltaY) > 80) onClose();
-    touchStartY.current = null;
+    if (!touchStart.current) return;
+    const dx = e.changedTouches[0].clientX - touchStart.current.x;
+    const dy = e.changedTouches[0].clientY - touchStart.current.y;
+    touchStart.current = null;
+
+    // Горизонтальный взмах преобладает → листаем товары.
+    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 50) {
+      if (dx > 0) goPrev(); // свайп вправо → предыдущий
+      else goNext(); // свайп влево → следующий
+      return;
+    }
+    // Вертикальный взмах больше порога → закрываем.
+    if (Math.abs(dy) > 80) onClose();
   };
 
-  // Закрытие по Esc + блокировка прокрутки фона на время показа.
+  // Клавиатура: ← предыдущий, → следующий, Esc закрыть.
+  // Блокировка прокрутки фона на время показа.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
+      else if (e.key === "ArrowLeft") {
+        if (index > 0) onIndexChange(index - 1);
+      } else if (e.key === "ArrowRight") {
+        if (index < products.length - 1) onIndexChange(index + 1);
+      }
     };
     document.addEventListener("keydown", onKey);
 
@@ -56,7 +85,11 @@ export default function Lightbox({
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = prevOverflow;
     };
-  }, [onClose]);
+  }, [index, products.length, onIndexChange, onClose]);
+
+  if (!product) return null;
+
+  const packaging = getPackaging(product.group, product.name);
 
   return (
     // Клик по тёмному фону закрывает просмотрщик.
@@ -67,7 +100,7 @@ export default function Lightbox({
       onTouchEnd={handleTouchEnd}
       role="dialog"
       aria-modal="true"
-      aria-label={name}
+      aria-label={product.name}
     >
       {/* Кнопка закрытия */}
       <button
@@ -78,13 +111,41 @@ export default function Lightbox({
         ✕
       </button>
 
+      {/* Стрелка «предыдущий» */}
+      {hasPrev && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            goPrev();
+          }}
+          className="absolute left-2 top-1/2 z-10 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-3xl leading-none text-white hover:bg-white/20 focus:outline-none"
+          aria-label="Предыдущее фото"
+        >
+          ‹
+        </button>
+      )}
+
+      {/* Стрелка «следующий» */}
+      {hasNext && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            goNext();
+          }}
+          className="absolute right-2 top-1/2 z-10 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-3xl leading-none text-white hover:bg-white/20 focus:outline-none"
+          aria-label="Следующее фото"
+        >
+          ›
+        </button>
+      )}
+
       {/* Область фото. Чёрные поля вокруг — это пустое место контейнера,
           клик по ним закрывает окно. Клик по самому фото — не закрывает. */}
       <div className="flex flex-1 items-center justify-center overflow-hidden p-4">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={getHiResUrl(imageUrl)}
-          alt={name}
+          src={getHiResUrl(product.imageUrl as string)}
+          alt={product.name}
           className="max-h-full max-w-full object-contain"
           onClick={(e) => e.stopPropagation()}
         />
@@ -95,9 +156,9 @@ export default function Lightbox({
         className="px-5 pb-6 pt-2 text-center text-white"
         onClick={(e) => e.stopPropagation()}
       >
-        <p className="text-base font-medium leading-snug">{name}</p>
+        <p className="text-base font-medium leading-snug">{product.name}</p>
         <p className="mt-1 text-lg font-bold">
-          {price.toFixed(2)} ₽
+          {product.price.toFixed(2)} ₽
           {packaging && (
             <span className="ml-2 text-sm font-normal text-white/70">
               {packaging}

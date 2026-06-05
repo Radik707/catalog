@@ -3,81 +3,18 @@
 import { useState } from "react";
 import Image from "next/image";
 import { Product } from "@/lib/types";
+import { getPackaging } from "@/lib/packaging";
 import AddToCartButton from "./AddToCartButton";
-import Lightbox from "./Lightbox";
 
 interface ProductCardProps {
   product: Product;
   showPhotos?: boolean;
-  viewMode?: "list" | "grid";
-}
-
-function getPackaging(group: string, name: string): string {
-  const n = name.toLowerCase();
-
-  // Приоритет 1: точные совпадения по конкретным товарам
-  if (n.includes("конфеты фараделла с печеньем трио")) return "за упаковку";
-  if (n.includes("шоко-кроко")) return "за упаковку";
-  if (n.includes("сэнсой хлопья нори")) return "за коробку";
-  if (n.includes("акконд крекер с солью 190г/20")) return "за шт";
-  if (n.includes("акконд крекер с солью 255г/12")) return "за шт";
-  if (n.includes("акконд крекер вес.") && !n.includes("аккондовский с солью со вкусом сметаны и лука")) return "за коробку";
-  if (n.includes("акконд печ. вес.")) return "за коробку";
-  if (n.includes("вафли вес.")) return "за коробку";
-  if (n.startsWith("батончик")) return "за шт";
-  if (n.startsWith("драже") && !n.includes("38г/12шт")) return "за шт";
-  if (n.includes("нутелла")) return "за шт";
-  if (n.includes("холс")) return "за блок";
-  if (n.includes("ментос")) return "за блок";
-  if (n.includes("орбит")) return "за блок";
-
-  // Приоритет 2: ШТ большими буквами → за шт
-  if (name.includes("ШТ")) return "за шт";
-
-  // Приоритет 3: комбинированные правила
-  if (name.includes("ТРИО") && n.includes("вес. конфеты")) return "за упаковку";
-
-  // Приоритет 4: глобальные правила по ключевым словам
-  if (n.includes("печ. фас. трио")) return "за блок";
-  if (name.includes("УПК")) return "за упаковку";
-  if (n.includes("фас кг")) return "за кг";
-  if (n.includes("фас.")) return "за шт";
-
-  // Приоритет 5: правила по категории
-  switch (group) {
-    case "Батончики и шоколад":
-      return n.includes("шоколад") ? "за шт" : "за блок";
-    case "Конфеты и печенье":
-      if (n.includes("вес.")) return "за кг";
-      if (n.includes("печ.") || n.includes("крекер")) return "за ящик";
-      return "";
-    case "Лапша и каши":
-      return "за шт";
-    case "Чай и кофе":
-      return "за пачку";
-    case "Снэки":
-      return "за шт";
-    case "Крупы и бакалея":
-      return "за пачку";
-    case "Детское":
-      return "за упаковку";
-    case "Напитки":
-      if (n.includes("добрый сок")) return "за шт";
-      if (n.includes("добрый")) return "за пак";
-      if (n.includes("лотте")) return "за шт";
-      return "за блок";
-    case "Энергетики":
-      return "за пак";
-    case "Соусы и специи":
-    case "Соусы и приправы":
-    case "Коробочные конфеты":
-    case "Прикассовое":
-    case "Стоевъ и Сэнсой":
-    case "Консервация":
-      return "за шт";
-    default:
-      return "";
-  }
+  viewMode?: "list" | "grid" | "presentation";
+  // Открыть полноэкранный просмотрщик фото на этом товаре.
+  // Вызывается только если у товара есть фото.
+  onPhotoOpen?: () => void;
+  // Высота фото в режиме презентации (задаётся выбором плотности сетки).
+  presentationPhotoH?: string;
 }
 
 const BADGE_STYLES: Record<string, string> = {
@@ -110,9 +47,10 @@ export default function ProductCard({
   product,
   showPhotos = true,
   viewMode = "list",
+  onPhotoOpen,
+  presentationPhotoH,
 }: ProductCardProps) {
   const [flipped, setFlipped] = useState(false);
-  const [lightboxOpen, setLightboxOpen] = useState(false);
   const inStock = product.stock > 0;
   const packaging = getPackaging(product.group, product.name);
   const badgeStyle = product.badge ? BADGE_STYLES[product.badge] : null;
@@ -123,13 +61,26 @@ export default function ProductCard({
     transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
   };
 
-  // ── РЕЖИМ СЕТКИ ──
+  // ── РЕЖИМ СЕТКИ и ПРЕЗЕНТАЦИИ ──
+  // Одна разметка, размеры зависят от isPresentation (крупнее в презентации).
   // Фронт-сторона в нормальном потоке — определяет высоту контейнера.
   // Оборот — absolute inset-0, подстраивается под высоту фронта.
-  // Это позволяет карточке сжиматься когда фото скрыто.
-  if (viewMode === "grid") {
+  if (viewMode === "grid" || viewMode === "presentation") {
+    const isPresentation = viewMode === "presentation";
+
+    // Размеры элементов под режим
+    const photoH = isPresentation
+      ? presentationPhotoH ?? "h-56 sm:h-72"
+      : "h-32";
+    const bodyPad = isPresentation ? "px-3 pt-2.5 pb-3 gap-2" : "px-2 pt-1.5 pb-2 gap-1.5";
+    const nameCls = isPresentation ? "text-sm sm:text-base" : "text-xs";
+    const priceCls = isPresentation ? "text-lg sm:text-xl" : "text-sm";
+    const pkgCls = isPresentation ? "text-xs" : "text-[10px]";
+    const badgeCls = isPresentation ? "text-xs px-1.5 py-0.5" : "text-[9px] px-1 py-0.5";
+    const badgePos = isPresentation ? "top-2 left-2" : "top-1 left-1";
+    const placeholderIcon = isPresentation ? "w-16 h-16" : "w-10 h-10";
+
     return (
-      <>
       <div
         style={{ perspective: "1000px" }}
         className={`relative rounded-lg overflow-hidden border border-gray-100 shadow-sm${inStock ? "" : " opacity-60"}`}
@@ -145,12 +96,12 @@ export default function ProductCard({
                 просмотрщик; если фото нет — клик уходит наверх и переворачивает карточку. */}
             {showPhotos && (
               <div
-                className="relative bg-white h-32"
+                className={`relative bg-white ${photoH}`}
                 onClick={
                   product.imageUrl
                     ? (e) => {
                         e.stopPropagation();
-                        setLightboxOpen(true);
+                        onPhotoOpen?.();
                       }
                     : undefined
                 }
@@ -163,11 +114,11 @@ export default function ProductCard({
                     className="object-contain p-1"
                   />
                 ) : (
-                  <PhotoPlaceholder iconSize="w-10 h-10" />
+                  <PhotoPlaceholder iconSize={placeholderIcon} />
                 )}
                 {badgeStyle && (
                   <span
-                    className={`absolute top-1 left-1 text-[9px] font-medium px-1 py-0.5 rounded ${badgeStyle}`}
+                    className={`absolute ${badgePos} font-medium rounded ${badgeCls} ${badgeStyle}`}
                   >
                     {product.badge}
                   </span>
@@ -176,22 +127,22 @@ export default function ProductCard({
             )}
 
             {/* Название + цена + кнопка */}
-            <div className="flex flex-col px-2 pt-1.5 pb-2 gap-1.5">
+            <div className={`flex flex-col ${bodyPad}`}>
               {!showPhotos && badgeStyle && (
-                <span className={`self-start text-[9px] font-medium px-1 py-0.5 rounded ${badgeStyle}`}>
+                <span className={`self-start font-medium rounded ${badgeCls} ${badgeStyle}`}>
                   {product.badge}
                 </span>
               )}
-              <p className="text-xs font-medium text-gray-900 leading-tight">
+              <p className={`${nameCls} font-medium text-gray-900 leading-tight`}>
                 {product.name}
               </p>
               <div className="flex items-end justify-between gap-1">
                 <div>
-                  <p className="text-sm font-bold text-gray-900 leading-none whitespace-nowrap">
+                  <p className={`${priceCls} font-bold text-gray-900 leading-none whitespace-nowrap`}>
                     {product.price.toFixed(2)} ₽
                   </p>
                   {packaging && (
-                    <p className="text-[10px] text-gray-400 mt-0.5">{packaging}</p>
+                    <p className={`${pkgCls} text-gray-400 mt-0.5`}>{packaging}</p>
                   )}
                 </div>
                 <div onClick={(e) => e.stopPropagation()}>
@@ -207,10 +158,10 @@ export default function ProductCard({
             className="absolute inset-0 flex flex-col justify-between px-3 py-2 bg-amber-50 cursor-pointer"
             onClick={() => setFlipped(false)}
           >
-            <p className="text-xs font-semibold text-gray-700 truncate">
+            <p className={`${nameCls} font-semibold text-gray-700 truncate`}>
               {product.name}
             </p>
-            <p className="text-xs text-gray-600 leading-relaxed mt-1 flex-1 overflow-hidden">
+            <p className={`${isPresentation ? "text-sm" : "text-xs"} text-gray-600 leading-relaxed mt-1 flex-1 overflow-hidden`}>
               {product.description || "Описание не добавлено"}
             </p>
             <p className="text-[10px] text-gray-400 mt-1">
@@ -219,24 +170,11 @@ export default function ProductCard({
           </div>
         </div>
       </div>
-
-      {/* Полноэкранный просмотрщик фото */}
-      {lightboxOpen && product.imageUrl && (
-        <Lightbox
-          imageUrl={product.imageUrl}
-          name={product.name}
-          price={product.price}
-          packaging={packaging}
-          onClose={() => setLightboxOpen(false)}
-        />
-      )}
-      </>
     );
   }
 
-  // ── РЕЖИМ СПИСКА (текущее поведение) ──
+  // ── РЕЖИМ СПИСКА ──
   return (
-    <>
     <div
       style={{ perspective: "1000px" }}
       className={`relative border-b border-gray-100${inStock ? "" : " opacity-60"}`}
@@ -259,7 +197,7 @@ export default function ProductCard({
           {showPhotos && (
             <button
               onClick={() => {
-                if (product.imageUrl) setLightboxOpen(true);
+                if (product.imageUrl) onPhotoOpen?.();
                 else setFlipped(true);
               }}
               className="flex-shrink-0 w-14 h-14 rounded overflow-hidden border border-gray-100 bg-white focus:outline-none"
@@ -334,17 +272,5 @@ export default function ProductCard({
         </div>
       </div>
     </div>
-
-      {/* Полноэкранный просмотрщик фото */}
-      {lightboxOpen && product.imageUrl && (
-        <Lightbox
-          imageUrl={product.imageUrl}
-          name={product.name}
-          price={product.price}
-          packaging={packaging}
-          onClose={() => setLightboxOpen(false)}
-        />
-      )}
-    </>
   );
 }

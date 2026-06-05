@@ -6,11 +6,26 @@ import ProductCard from "./ProductCard";
 import CategoryFilter from "./CategoryFilter";
 import SearchBar from "./SearchBar";
 import ScrollToTop from "./ScrollToTop";
+import Lightbox from "./Lightbox";
 
 interface CatalogViewProps {
   products: Product[];
   initialCategory?: string;
 }
+
+type ViewMode = "list" | "grid" | "presentation";
+type GridPreset = "2x3" | "3x4" | "3x5";
+
+// Пресеты плотности сетки для режима презентации.
+// cols — колонки (адаптивно), photoH — высота фото (чем меньше, тем плотнее).
+const PRESENTATION_PRESETS: Record<
+  GridPreset,
+  { label: string; cols: string; photoH: string }
+> = {
+  "2x3": { label: "2×3", cols: "grid-cols-2", photoH: "h-64 sm:h-80" },
+  "3x4": { label: "3×4", cols: "grid-cols-2 sm:grid-cols-3", photoH: "h-48 sm:h-56" },
+  "3x5": { label: "3×5", cols: "grid-cols-2 sm:grid-cols-3", photoH: "h-40 sm:h-44" },
+};
 
 // Порядок групп для отображения
 const GROUP_ORDER = [
@@ -32,16 +47,30 @@ export default function CatalogView({ products, initialCategory = "" }: CatalogV
   const [activeGroup, setActiveGroup] = useState(initialCategory);
   const [search, setSearch] = useState("");
   const [showPhotos, setShowPhotos] = useState(true);
-  const [viewMode, setViewMode] = useState<"list" | "grid">("grid");
+  const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  const [gridPreset, setGridPreset] = useState<GridPreset>("3x4");
+  // Индекс открытого фото в просмотрщике-галерее (null — закрыт).
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   useEffect(() => {
-    const saved = localStorage.getItem("viewMode");
-    if (saved === "list" || saved === "grid") setViewMode(saved);
+    const savedView = localStorage.getItem("viewMode");
+    if (savedView === "list" || savedView === "grid" || savedView === "presentation") {
+      setViewMode(savedView);
+    }
+    const savedPreset = localStorage.getItem("gridPreset");
+    if (savedPreset === "2x3" || savedPreset === "3x4" || savedPreset === "3x5") {
+      setGridPreset(savedPreset);
+    }
   }, []);
 
-  const handleViewMode = (mode: "list" | "grid") => {
+  const handleViewMode = (mode: ViewMode) => {
     setViewMode(mode);
     localStorage.setItem("viewMode", mode);
+  };
+
+  const handleGridPreset = (preset: GridPreset) => {
+    setGridPreset(preset);
+    localStorage.setItem("gridPreset", preset);
   };
 
   // Собираем уникальные группы из данных, сортируем по заданному порядку
@@ -70,9 +99,31 @@ export default function CatalogView({ products, initialCategory = "" }: CatalogV
     return result;
   }, [products, activeGroup, search]);
 
+  // Товары с фото в текущем порядке — по ним листает просмотрщик-галерея.
+  const photoProducts = useMemo(
+    () => filtered.filter((p) => p.imageUrl),
+    [filtered]
+  );
+
+  // Открыть просмотрщик на конкретном товаре.
+  const openLightbox = (product: Product) => {
+    const idx = photoProducts.findIndex((p) => p.id === product.id);
+    if (idx !== -1) setLightboxIndex(idx);
+  };
+
+  const preset = PRESENTATION_PRESETS[gridPreset];
+
+  // Класс контейнера товаров под выбранный режим
+  const containerClass =
+    viewMode === "list"
+      ? "flex-1"
+      : viewMode === "presentation"
+      ? `flex-1 grid ${preset.cols} gap-4 p-4`
+      : "flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 p-3";
+
   return (
     <div className="min-h-screen flex flex-col">
-      <ScrollToTop viewMode={viewMode} />
+      <ScrollToTop viewMode={viewMode === "list" ? "list" : "grid"} />
       {/* Фильтр по группам */}
       <CategoryFilter
         groups={groups}
@@ -84,7 +135,24 @@ export default function CatalogView({ products, initialCategory = "" }: CatalogV
       <SearchBar value={search} onChange={setSearch} count={filtered.length} />
 
       {/* Переключатели режима отображения */}
-      <div className="flex justify-end items-center gap-2 px-4 py-1.5 bg-white border-b border-gray-100">
+      <div className="flex flex-wrap justify-end items-center gap-2 px-4 py-1.5 bg-white border-b border-gray-100">
+        {/* Выбор плотности сетки — только в режиме презентации */}
+        {viewMode === "presentation" && (
+          <div className="flex rounded-lg overflow-hidden border border-gray-200 text-xs mr-auto">
+            {(Object.keys(PRESENTATION_PRESETS) as GridPreset[]).map((key) => (
+              <button
+                key={key}
+                onClick={() => handleGridPreset(key)}
+                className={`px-3 py-1 transition-colors ${
+                  gridPreset === key ? "bg-blue-500 text-white" : "bg-white text-gray-500"
+                }`}
+              >
+                {PRESENTATION_PRESETS[key].label}
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="flex rounded-lg overflow-hidden border border-gray-200 text-xs">
           <button
             onClick={() => setShowPhotos(true)}
@@ -120,20 +188,29 @@ export default function CatalogView({ products, initialCategory = "" }: CatalogV
           >
             ⊞ Сетка
           </button>
+          <button
+            onClick={() => handleViewMode("presentation")}
+            className={`px-3 py-1 transition-colors ${
+              viewMode === "presentation" ? "bg-blue-500 text-white" : "bg-white text-gray-500"
+            }`}
+          >
+            ◳ Презентация
+          </button>
         </div>
       </div>
 
-      {/* Список / Сетка товаров */}
-      <div
-        className={
-          viewMode === "grid"
-            ? "flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 p-3"
-            : "flex-1"
-        }
-      >
+      {/* Список / Сетка / Презентация товаров */}
+      <div className={containerClass}>
         {filtered.length > 0 ? (
           filtered.map((product) => (
-            <ProductCard key={product.id} product={product} showPhotos={showPhotos} viewMode={viewMode} />
+            <ProductCard
+              key={product.id}
+              product={product}
+              showPhotos={showPhotos}
+              viewMode={viewMode}
+              onPhotoOpen={() => openLightbox(product)}
+              presentationPhotoH={viewMode === "presentation" ? preset.photoH : undefined}
+            />
           ))
         ) : (
           <div className="px-4 py-12 text-center text-gray-400">
@@ -142,6 +219,16 @@ export default function CatalogView({ products, initialCategory = "" }: CatalogV
           </div>
         )}
       </div>
+
+      {/* Полноэкранный просмотрщик-галерея фото */}
+      {lightboxIndex !== null && photoProducts.length > 0 && (
+        <Lightbox
+          products={photoProducts}
+          index={lightboxIndex}
+          onIndexChange={setLightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
+      )}
     </div>
   );
 }
