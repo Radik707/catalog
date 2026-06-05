@@ -84,8 +84,8 @@ export default function CatalogView({ products, initialCategory = "" }: CatalogV
     viewMode === "list"
       ? "flex-1"
       : viewMode === "presentation"
-      ? `flex-1 grid ${preset.cols} gap-4 p-4`
-      : "flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 p-3";
+      ? `flex-1 grid ${preset.cols} gap-1.5 p-1.5`
+      : "flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 p-2";
 
   return (
     <div className="min-h-screen flex flex-col">

@@ -161,7 +161,13 @@ export default function ProductCard({
                   {product.badge}
                 </span>
               )}
-              <p className={`${nameCls} font-medium text-gray-900 leading-tight ${nameLines}`}>
+              {/* Название: на телефоне (с фото) скрыто и переезжает на оборот;
+                  на планшете показывается. Без фото — показывается всегда. */}
+              <p
+                className={`${nameCls} font-medium text-gray-900 leading-tight ${nameLines} ${
+                  showPhotos ? "hidden sm:block" : ""
+                }`}
+              >
                 {product.name}
               </p>
               <div className="flex items-end justify-between gap-1">
@@ -171,14 +177,22 @@ export default function ProductCard({
                       {product.price.toFixed(2)} ₽
                     </p>
                     {packaging && (
-                      <p className={`${pkgCls} text-gray-400 mt-0.5 truncate`}>{packaging}</p>
+                      <p className={`${pkgCls} text-gray-400 mt-0.5 truncate hidden sm:block`}>
+                        {packaging}
+                      </p>
                     )}
                   </div>
                 ) : (
                   <span />
                 )}
                 <div onClick={(e) => e.stopPropagation()}>
-                  <AddToCartButton product={product} compact={compactCart} />
+                  {/* На телефоне — компактная «+», на планшете — по пресету */}
+                  <div className="sm:hidden">
+                    <AddToCartButton product={product} compact />
+                  </div>
+                  <div className="hidden sm:block">
+                    <AddToCartButton product={product} compact={compactCart} />
+                  </div>
                 </div>
               </div>
             </div>
