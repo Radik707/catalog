@@ -23,6 +23,13 @@ photos/
 pdf/
 ~$*.xlsx
 
+# python
+__pycache__/
+*.pyc
+
+# bot: входящие файлы (не хранить в git)
+bot/price/
+
 # debug
 npm-debug.log*
 
