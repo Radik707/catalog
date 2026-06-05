@@ -5,9 +5,12 @@ import { Product } from '@/lib/types';
 
 interface AddToCartButtonProps {
   product: Product;
+  // Компактный вид: вместо текста «В корзину» — квадратная кнопка с «+».
+  // Нужен для плотных сеток, где текстовая кнопка не помещается.
+  compact?: boolean;
 }
 
-export default function AddToCartButton({ product }: AddToCartButtonProps) {
+export default function AddToCartButton({ product, compact = false }: AddToCartButtonProps) {
   const { isInCart, getQuantity, addToCart, updateQuantity } = useCartContext();
   const inStock = product.stock > 0;
   const inCart = isInCart(product.id);
@@ -41,6 +44,19 @@ export default function AddToCartButton({ product }: AddToCartButtonProps) {
           +
         </button>
       </div>
+    );
+  }
+
+  // Компактная кнопка-иконка для плотных сеток
+  if (compact) {
+    return (
+      <button
+        onClick={() => addToCart(product)}
+        aria-label="В корзину"
+        className="w-8 h-8 flex-shrink-0 rounded-lg text-lg font-bold leading-none bg-blue-600 text-white flex items-center justify-center active:bg-blue-700"
+      >
+        +
+      </button>
     );
   }
 

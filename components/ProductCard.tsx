@@ -12,8 +12,10 @@ export interface PresentationSizes {
   photoH: string; // высота фото
   bodyPad: string; // отступы блока текста
   nameCls: string; // размер названия
+  nameLines: string; // ограничение строк названия (line-clamp)
   priceCls: string; // размер цены
   pkgCls: string; // размер фасовки
+  compactCart: boolean; // компактная кнопка корзины (иконка «+»)
 }
 
 // Размеры по умолчанию (на случай, если пресет не передан).
@@ -21,8 +23,10 @@ const DEFAULT_PRESENTATION_SIZES: PresentationSizes = {
   photoH: "h-56 sm:h-72",
   bodyPad: "px-3 pt-2.5 pb-3 gap-2",
   nameCls: "text-sm sm:text-base",
-  priceCls: "text-lg sm:text-xl",
+  nameLines: "line-clamp-2",
+  priceCls: "text-base sm:text-lg",
   pkgCls: "text-xs",
+  compactCart: false,
 };
 
 interface ProductCardProps {
@@ -94,6 +98,8 @@ export default function ProductCard({
     const nameCls = isPresentation ? sizes.nameCls : "text-xs";
     const priceCls = isPresentation ? sizes.priceCls : "text-sm";
     const pkgCls = isPresentation ? sizes.pkgCls : "text-[10px]";
+    const nameLines = isPresentation ? sizes.nameLines : "line-clamp-2";
+    const compactCart = isPresentation ? sizes.compactCart : false;
     const badgeCls = isPresentation ? "text-xs px-1.5 py-0.5" : "text-[9px] px-1 py-0.5";
     const badgePos = isPresentation ? "top-2 left-2" : "top-1 left-1";
     const placeholderIcon = isPresentation ? "w-16 h-16" : "w-10 h-10";
@@ -151,40 +157,53 @@ export default function ProductCard({
                   {product.badge}
                 </span>
               )}
-              <p className={`${nameCls} font-medium text-gray-900 leading-tight`}>
+              <p className={`${nameCls} font-medium text-gray-900 leading-tight ${nameLines}`}>
                 {product.name}
               </p>
               <div className="flex items-end justify-between gap-1">
-                <div>
+                <div className="min-w-0">
                   <p className={`${priceCls} font-bold text-gray-900 leading-none whitespace-nowrap`}>
                     {product.price.toFixed(2)} ₽
                   </p>
                   {packaging && (
-                    <p className={`${pkgCls} text-gray-400 mt-0.5`}>{packaging}</p>
+                    <p className={`${pkgCls} text-gray-400 mt-0.5 truncate`}>{packaging}</p>
                   )}
                 </div>
                 <div onClick={(e) => e.stopPropagation()}>
-                  <AddToCartButton product={product} />
+                  <AddToCartButton product={product} compact={compactCart} />
                 </div>
               </div>
             </div>
           </div>
 
-          {/* ── ОБОРОТНАЯ СТОРОНА (absolute, совпадает с высотой фронта) ── */}
+          {/* ── ОБОРОТНАЯ СТОРОНА (absolute, совпадает с высотой фронта) ──
+              Здесь дублируются цена, остаток и кнопка корзины. */}
           <div
             style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}
-            className="absolute inset-0 flex flex-col justify-between px-3 py-2 bg-amber-50 cursor-pointer"
+            className="absolute inset-0 flex flex-col px-3 py-2 bg-amber-50 cursor-pointer"
             onClick={() => setFlipped(false)}
           >
-            <p className={`${nameCls} font-semibold text-gray-700 truncate`}>
+            <p className={`${nameCls} font-semibold text-gray-700 ${nameLines}`}>
               {product.name}
             </p>
-            <p className={`${isPresentation ? "text-sm" : "text-xs"} text-gray-600 leading-relaxed mt-1 flex-1 overflow-hidden`}>
+            <p className="text-xs text-gray-600 leading-snug mt-1 flex-1 overflow-hidden">
               {product.description || "Описание не добавлено"}
             </p>
-            <p className="text-[10px] text-gray-400 mt-1">
-              Нажмите, чтобы вернуться
-            </p>
+            {/* Цена + остаток + корзина */}
+            <div className="flex items-end justify-between gap-1 mt-1">
+              <div className="min-w-0">
+                <p className={`${priceCls} font-bold text-gray-900 leading-none whitespace-nowrap`}>
+                  {product.price.toFixed(2)} ₽
+                </p>
+                <p className="text-[10px] text-gray-400 mt-0.5 truncate">
+                  {inStock ? `${product.stock} шт` : "Нет в наличии"}
+                  {packaging ? ` · ${packaging}` : ""}
+                </p>
+              </div>
+              <div onClick={(e) => e.stopPropagation()}>
+                <AddToCartButton product={product} compact={compactCart} />
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -284,9 +303,21 @@ export default function ProductCard({
           <p className="text-xs text-gray-600 leading-relaxed mt-1 flex-1 overflow-hidden">
             {product.description || "Описание не добавлено"}
           </p>
-          <p className="text-[10px] text-gray-400 mt-1">
-            Нажмите, чтобы вернуться
-          </p>
+          {/* Цена + остаток + корзина (дублируется на обороте) */}
+          <div className="flex items-end justify-between gap-2 mt-1">
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-gray-900 leading-none whitespace-nowrap">
+                {product.price.toFixed(2)} ₽
+              </p>
+              <p className="text-[10px] text-gray-400 mt-0.5 truncate">
+                {inStock ? `${product.stock} шт` : "Нет в наличии"}
+                {packaging ? ` · ${packaging}` : ""}
+              </p>
+            </div>
+            <div onClick={(e) => e.stopPropagation()}>
+              <AddToCartButton product={product} />
+            </div>
+          </div>
         </div>
       </div>
     </div>
