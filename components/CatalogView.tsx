@@ -14,7 +14,7 @@ interface CatalogViewProps {
 }
 
 type ViewMode = "list" | "grid" | "presentation";
-type GridPreset = "2x3" | "3x4" | "3x5";
+type GridPreset = "2x3" | "3x4" | "4x6";
 
 // Пресеты плотности сетки для режима презентации.
 // cols — колонки (адаптивно), photoH — высота фото (чем меньше, тем плотнее).
@@ -24,7 +24,7 @@ const PRESENTATION_PRESETS: Record<
 > = {
   "2x3": { label: "2×3", cols: "grid-cols-2", photoH: "h-64 sm:h-80" },
   "3x4": { label: "3×4", cols: "grid-cols-2 sm:grid-cols-3", photoH: "h-48 sm:h-56" },
-  "3x5": { label: "3×5", cols: "grid-cols-2 sm:grid-cols-3", photoH: "h-40 sm:h-44" },
+  "4x6": { label: "4×6", cols: "grid-cols-3 sm:grid-cols-4", photoH: "h-32 sm:h-36" },
 };
 
 // Порядок групп для отображения
@@ -58,7 +58,7 @@ export default function CatalogView({ products, initialCategory = "" }: CatalogV
       setViewMode(savedView);
     }
     const savedPreset = localStorage.getItem("gridPreset");
-    if (savedPreset === "2x3" || savedPreset === "3x4" || savedPreset === "3x5") {
+    if (savedPreset === "2x3" || savedPreset === "3x4" || savedPreset === "4x6") {
       setGridPreset(savedPreset);
     }
   }, []);
