@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import Image from "next/image";
 
 // Просмотрщик фото на весь экран (lightbox).
 // Открывается по тапу на фото товара, показывает чёткую версию по центру
@@ -79,15 +78,15 @@ export default function Lightbox({
         ✕
       </button>
 
-      {/* Фото по центру. Клик по самому фото не закрывает окно. */}
-      <div className="relative m-4 flex-1" onClick={(e) => e.stopPropagation()}>
-        <Image
+      {/* Область фото. Чёрные поля вокруг — это пустое место контейнера,
+          клик по ним закрывает окно. Клик по самому фото — не закрывает. */}
+      <div className="flex flex-1 items-center justify-center overflow-hidden p-4">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
           src={getHiResUrl(imageUrl)}
           alt={name}
-          fill
-          sizes="100vw"
-          className="object-contain"
-          priority
+          className="max-h-full max-w-full object-contain"
+          onClick={(e) => e.stopPropagation()}
         />
       </div>
 
