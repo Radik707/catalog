@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import Image from "next/image";
 
 // Просмотрщик фото на весь экран (lightbox).
@@ -28,6 +28,21 @@ export default function Lightbox({
   packaging,
   onClose,
 }: LightboxProps) {
+  // Координата начала касания — для определения взмаха (свайпа).
+  const touchStartY = useRef<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartY.current = e.touches[0].clientY;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartY.current === null) return;
+    const deltaY = e.changedTouches[0].clientY - touchStartY.current;
+    // Взмах вверх или вниз больше порога (80px) — закрываем просмотрщик.
+    if (Math.abs(deltaY) > 80) onClose();
+    touchStartY.current = null;
+  };
+
   // Закрытие по Esc + блокировка прокрутки фона на время показа.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -49,6 +64,8 @@ export default function Lightbox({
     <div
       className="fixed inset-0 z-50 flex flex-col bg-black/90"
       onClick={onClose}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
       role="dialog"
       aria-modal="true"
       aria-label={name}
