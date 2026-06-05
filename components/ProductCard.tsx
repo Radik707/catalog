@@ -4,6 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import { Product } from "@/lib/types";
 import AddToCartButton from "./AddToCartButton";
+import Lightbox from "./Lightbox";
 
 interface ProductCardProps {
   product: Product;
@@ -111,6 +112,7 @@ export default function ProductCard({
   viewMode = "list",
 }: ProductCardProps) {
   const [flipped, setFlipped] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
   const inStock = product.stock > 0;
   const packaging = getPackaging(product.group, product.name);
   const badgeStyle = product.badge ? BADGE_STYLES[product.badge] : null;
@@ -127,6 +129,7 @@ export default function ProductCard({
   // Это позволяет карточке сжиматься когда фото скрыто.
   if (viewMode === "grid") {
     return (
+      <>
       <div
         style={{ perspective: "1000px" }}
         className={`relative rounded-lg overflow-hidden border border-gray-100 shadow-sm${inStock ? "" : " opacity-60"}`}
@@ -138,9 +141,20 @@ export default function ProductCard({
             className={`flex flex-col cursor-pointer${inStock ? " bg-white" : " bg-gray-50"}`}
             onClick={() => setFlipped(true)}
           >
-            {/* Фото — только если showPhotos */}
+            {/* Фото — только если showPhotos. Тап по фото открывает
+                просмотрщик; если фото нет — клик уходит наверх и переворачивает карточку. */}
             {showPhotos && (
-              <div className="relative bg-white h-32">
+              <div
+                className="relative bg-white h-32"
+                onClick={
+                  product.imageUrl
+                    ? (e) => {
+                        e.stopPropagation();
+                        setLightboxOpen(true);
+                      }
+                    : undefined
+                }
+              >
                 {product.imageUrl ? (
                   <Image
                     src={product.imageUrl}
@@ -205,11 +219,24 @@ export default function ProductCard({
           </div>
         </div>
       </div>
+
+      {/* Полноэкранный просмотрщик фото */}
+      {lightboxOpen && product.imageUrl && (
+        <Lightbox
+          imageUrl={product.imageUrl}
+          name={product.name}
+          price={product.price}
+          packaging={packaging}
+          onClose={() => setLightboxOpen(false)}
+        />
+      )}
+      </>
     );
   }
 
   // ── РЕЖИМ СПИСКА (текущее поведение) ──
   return (
+    <>
     <div
       style={{ perspective: "1000px" }}
       className={`relative border-b border-gray-100${inStock ? "" : " opacity-60"}`}
@@ -227,12 +254,16 @@ export default function ProductCard({
             </span>
           )}
 
-          {/* Миниатюра — только в режиме «С фото», клик открывает флип */}
+          {/* Миниатюра — только в режиме «С фото».
+              Есть фото → открыть просмотрщик; нет фото → перевернуть карточку. */}
           {showPhotos && (
             <button
-              onClick={() => setFlipped(true)}
+              onClick={() => {
+                if (product.imageUrl) setLightboxOpen(true);
+                else setFlipped(true);
+              }}
               className="flex-shrink-0 w-14 h-14 rounded overflow-hidden border border-gray-100 bg-white focus:outline-none"
-              aria-label="Показать описание товара"
+              aria-label={product.imageUrl ? "Открыть фото" : "Показать описание товара"}
             >
               {product.imageUrl ? (
                 <Image
@@ -303,5 +334,17 @@ export default function ProductCard({
         </div>
       </div>
     </div>
+
+      {/* Полноэкранный просмотрщик фото */}
+      {lightboxOpen && product.imageUrl && (
+        <Lightbox
+          imageUrl={product.imageUrl}
+          name={product.name}
+          price={product.price}
+          packaging={packaging}
+          onClose={() => setLightboxOpen(false)}
+        />
+      )}
+    </>
   );
 }
