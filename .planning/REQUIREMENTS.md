@@ -62,16 +62,33 @@
 
 ## Traceability
 
-Заполняется при создании дорожной карты.
-
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (заполнит дорожная карта) | — | Pending |
+| FMT-01 | Этап 1 | Pending |
+| FMT-02 | Этап 1 | Pending |
+| FMT-03 | Этап 1 | Pending |
+| FMT-04 | Этап 1 | Pending |
+| FMT-05 | Этап 1 | Pending |
+| GRP-01 | Этап 1 | Pending |
+| GRP-02 | Этап 1 | Pending |
+| GRP-03 | Этап 1 | Pending |
+| UPL-01 | Этап 2 | Pending |
+| UPL-02 | Этап 2 | Pending |
+| UPL-03 | Этап 2 | Pending |
+| UPL-04 | Этап 2 | Pending |
+| MEM-01 | Этап 3 | Pending |
+| MEM-02 | Этап 3 | Pending |
+| MEM-03 | Этап 3 | Pending |
+| ADM-01 | Этап 4 | Pending |
+| ADM-02 | Этап 4 | Pending |
+| ADM-03 | Этап 4 | Pending |
+| ADM-04 | Этап 4 | Pending |
+| ADM-05 | Этап 4 | Pending |
 
 **Coverage:**
 - v1 requirements: 20 total
-- Mapped to phases: 0 (до создания дорожной карты)
+- Mapped to phases: 20/20 (100%)
 
 ---
 *Requirements defined: 2026-06-06*
-*Last updated: 2026-06-06 after initialization*
+*Last updated: 2026-06-06 — traceability заполнена при создании дорожной карты*
