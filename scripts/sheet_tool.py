@@ -22,6 +22,7 @@ PROJECT_ROOT = SCRIPT_DIR.parent
 
 SHEET_NAME = "Товары"
 BACKUP_NAME = "Товары_BACKUP"
+NEW_NAME = "Товары_NEW"  # отложенная новая версия (для «всё равно применить»)
 
 
 def load_env() -> None:
@@ -113,8 +114,33 @@ def main() -> None:
         rows = max(0, len(ws.get_all_values()) - 1)
         print(f"COUNT rows={rows}")
 
+    elif cmd == "stash_new":
+        # Отложить текущую (новую, подозрительную) версию в Товары_NEW
+        rows = copy_sheet(ss, SHEET_NAME, NEW_NAME)
+        print(f"STASH_OK rows={rows}")
+
+    elif cmd == "apply_new":
+        # Применить отложенную новую версию: Товары_NEW → Товары
+        from gspread.exceptions import WorksheetNotFound
+        try:
+            ss.worksheet(NEW_NAME)
+        except WorksheetNotFound:
+            print("NO_NEW")
+            sys.exit(1)
+        rows = copy_sheet(ss, NEW_NAME, SHEET_NAME)
+        print(f"APPLY_OK rows={rows}")
+
+    elif cmd == "drop_new":
+        # Удалить отложенную версию (решено оставить прошлую)
+        from gspread.exceptions import WorksheetNotFound
+        try:
+            ss.del_worksheet(ss.worksheet(NEW_NAME))
+        except WorksheetNotFound:
+            pass
+        print("DROP_OK")
+
     else:
-        print("Использование: sheet_tool.py [backup|rollback|count]")
+        print("Использование: sheet_tool.py [backup|rollback|count|stash_new|apply_new|drop_new]")
         sys.exit(2)
 
 

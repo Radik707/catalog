@@ -65,6 +65,10 @@ UPLOAD_SCRIPT = Path(
 SHEET_TOOL = UPLOAD_SCRIPT.parent / "sheet_tool.py"  # бэкап/откат каталога
 PYTHON_BIN = os.environ.get("PYTHON_BIN", sys.executable)
 UPLOAD_TIMEOUT = int(os.environ.get("UPLOAD_TIMEOUT", "600"))
+# Архив последней партии файлов (чтобы админ мог их посмотреть в Telegram)
+LAST_BATCH_DIR = Path(os.environ.get("LAST_BATCH_DIR", str(SCRIPT_DIR / "last_batch")))
+NOTIFY_SCRIPT = UPLOAD_SCRIPT.parent / "notify_tg.py"  # отправка уведомлений в Telegram
+WARN_RATIO = float(os.environ.get("WARN_RATIO", "0.5"))  # порог «подозрительно мало»
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # лимит загрузки 50 МБ
@@ -172,6 +176,53 @@ def run_upload() -> tuple[bool, str, int | None]:
     return True, "", count
 
 
+def stash_new() -> bool:
+    """Отложить текущую (подозрительную) версию в Товары_NEW для возможного применения."""
+    if not SHEET_TOOL.exists():
+        return False
+    try:
+        rc, _ = _run_py(SHEET_TOOL, "stash_new")
+        return rc == 0
+    except subprocess.TimeoutExpired:
+        return False
+
+
+def archive_incoming() -> list[str]:
+    """Переместить загруженные файлы в архив последней партии (для проверки админом).
+
+    Очищает INCOMING_DIR (очередь) и сохраняет файлы в LAST_BATCH_DIR.
+    """
+    LAST_BATCH_DIR.mkdir(parents=True, exist_ok=True)
+    for old in glob.glob(str(LAST_BATCH_DIR / "*.xlsx")):
+        try:
+            os.remove(old)
+        except OSError:
+            pass
+    moved = []
+    for f in glob.glob(str(INCOMING_DIR / "*.xlsx")):
+        dest = LAST_BATCH_DIR / Path(f).name
+        try:
+            os.replace(f, dest)
+            moved.append(dest.name)
+        except OSError as e:
+            log.warning("Не удалось переместить в архив %s: %s", f, e)
+    return moved
+
+
+def notify(mode: str, text: str) -> None:
+    """Уведомление администратору в Telegram (scripts/notify_tg.py). Ошибки не критичны."""
+    if not NOTIFY_SCRIPT.exists():
+        return
+    try:
+        subprocess.run(
+            [PYTHON_BIN, str(NOTIFY_SCRIPT), mode, text],
+            cwd=str(NOTIFY_SCRIPT.parent),
+            capture_output=True, text=True, timeout=60,
+        )
+    except Exception as e:  # noqa: BLE001 — уведомление не должно ронять обновление
+        log.warning("Уведомление не отправлено: %s", e)
+
+
 # ── Маршруты (всё под секретным сегментом /<token>) ──
 
 def check(token: str) -> None:
@@ -246,23 +297,37 @@ def update(token: str):
 
     # 2. Само обновление.
     ok, err, count = run_upload()
+
     if not ok:
+        # Ошибка разбора/записи: возвращаем рабочую версию, файлы — в архив для проверки.
+        rollback_catalog()
+        archive_incoming()
+        notify("error", "❌ Обновление каталога не удалось — файлы не распознались.\n"
+                        f"{err}\nВернул прошлую версию. Нажмите, чтобы посмотреть файлы.")
         return jsonify(ok=False, files=list_files(), message=(
-            err + "\n\nКаталог не тронут. Если всё же что-то сбилось — нажмите «Откатить»."
-        ))
+            "Обновление не удалось — данные в файле не распознались. "
+            "Каталог не изменён, администратор уведомлён."))
 
-    clear_incoming()  # после успеха чистим папку под новый набор
+    # 3. Обновление прошло. Файлы — в архив (для возможной проверки админом).
+    archive_incoming()
+    warn = bool(count is not None and b_rows and count < b_rows * WARN_RATIO)
 
-    # 3. Проверка «подозрительно мало товаров».
-    msg = f"Готово ✅ Загружено товаров: {count if count is not None else '?'}."
-    if b_rows:
-        msg += f" Прежняя версия ({b_rows}) сохранена для отката."
-    warn = bool(count is not None and b_rows and count < b_rows * 0.5)
     if warn:
-        msg += (f"\n\n⚠️ Внимание: загружено всего {count}, а было {b_rows} — это сильно "
-                "меньше обычного. Проверьте файлы. Если каталог сбит — нажмите «Откатить».")
-    msg += " Сайт обновится за минуту."
-    return jsonify(ok=True, warn=warn, message=msg, files=list_files())
+        # Подозрительно мало: откладываем новую, возвращаем прошлую, спрашиваем владельца.
+        stash_new()          # Товары (новые) → Товары_NEW
+        rollback_catalog()   # Товары_BACKUP (прошлые) → Товары  (на сайте — рабочая версия)
+        notify("decision",
+               f"⚠️ Загрузка дала {count} товаров, а было {b_rows} — это сильно меньше обычного.\n"
+               "Я вернул прошлую версию каталога. Что делать?")
+        return jsonify(ok=True, warn=True, files=list_files(), message=(
+            f"Загрузка прошла, но товаров получилось мало ({count} вместо ~{b_rows}). "
+            "На всякий случай вернул прошлую версию и отправил администратору на проверку."))
+
+    # 4. Всё хорошо.
+    notify("plain", f"✅ Каталог обновлён: {count} товаров.")
+    return jsonify(ok=True, warn=False, files=list_files(), message=(
+        f"Готово ✅ Загружено товаров: {count}. Прежняя версия сохранена для отката. "
+        "Сайт обновится за минуту."))
 
 
 @app.post("/<token>/rollback")
