@@ -62,6 +62,7 @@ INCOMING_DIR = Path(os.environ.get("INCOMING_DIR", str(SCRIPT_DIR / "price")))
 UPLOAD_SCRIPT = Path(
     os.environ.get("UPLOAD_SCRIPT", str(SCRIPT_DIR.parent / "scripts" / "upload.py"))
 )
+SHEET_TOOL = UPLOAD_SCRIPT.parent / "sheet_tool.py"  # бэкап/откат каталога
 PYTHON_BIN = os.environ.get("PYTHON_BIN", sys.executable)
 UPLOAD_TIMEOUT = int(os.environ.get("UPLOAD_TIMEOUT", "600"))
 
@@ -105,31 +106,70 @@ def clear_incoming() -> int:
     return len(files)
 
 
-def run_upload() -> tuple[bool, str]:
-    """Запустить upload.py на папке входящих. Вернуть (успех, текст_ответа)."""
+def _run_py(script: Path, *args) -> tuple[int, str]:
+    """Запустить python-скрипт, вернуть (код возврата, объединённый вывод)."""
+    proc = subprocess.run(
+        [PYTHON_BIN, str(script), *args],
+        cwd=str(script.parent),  # чтобы нашлись category_map.json, .env и т.п.
+        capture_output=True,
+        text=True,
+        timeout=UPLOAD_TIMEOUT,
+    )
+    return proc.returncode, (proc.stdout or "") + (proc.stderr or "")
+
+
+def backup_catalog() -> tuple[bool, int | None]:
+    """Резервная копия текущего каталога перед обновлением. (успех, число_строк)."""
+    if not SHEET_TOOL.exists():
+        return False, None
+    try:
+        rc, out = _run_py(SHEET_TOOL, "backup")
+    except subprocess.TimeoutExpired:
+        return False, None
+    if rc != 0:
+        log.warning("Бэкап не удался: %s", out.strip()[-300:])
+        return False, None
+    m = re.search(r"rows=(\d+)", out)
+    return True, (int(m.group(1)) if m else None)
+
+
+def rollback_catalog() -> tuple[bool, str]:
+    """Откат каталога к резервной копии."""
+    if not SHEET_TOOL.exists():
+        return False, "Инструмент отката не найден на сервере."
+    try:
+        rc, out = _run_py(SHEET_TOOL, "rollback")
+    except subprocess.TimeoutExpired:
+        return False, "Откат прерван по таймауту."
+    if "NO_BACKUP" in out:
+        return False, "Нет резервной копии — откатывать не к чему (обновление ещё не делалось)."
+    if rc != 0:
+        tail = "\n".join(out.strip().splitlines()[-6:])
+        return False, f"Ошибка отката:\n{tail}"
+    m = re.search(r"rows=(\d+)", out)
+    rows = m.group(1) if m else "?"
+    return True, (f"Откат выполнен ✅ Восстановлена прошлая версия каталога "
+                  f"({rows} товаров). Сайт вернётся к ней за минуту.")
+
+
+def run_upload() -> tuple[bool, str, int | None]:
+    """Запустить upload.py на папке входящих. Вернуть (успех, текст_ошибки, число_товаров)."""
     if not UPLOAD_SCRIPT.exists():
-        return False, f"Скрипт не найден: {UPLOAD_SCRIPT}"
+        return False, f"Скрипт не найден: {UPLOAD_SCRIPT}", None
 
     log.info("Запуск upload.py на папке %s", INCOMING_DIR)
     try:
-        proc = subprocess.run(
-            [PYTHON_BIN, str(UPLOAD_SCRIPT), "--path", str(INCOMING_DIR)],
-            cwd=str(UPLOAD_SCRIPT.parent),  # чтобы нашлись category_map.json и т.п.
-            capture_output=True,
-            text=True,
-            timeout=UPLOAD_TIMEOUT,
-        )
+        rc, output = _run_py(UPLOAD_SCRIPT, "--path", str(INCOMING_DIR))
     except subprocess.TimeoutExpired:
-        return False, "Обновление прервано по таймауту."
+        return False, "Обновление прервано по таймауту.", None
 
-    output = (proc.stdout or "") + (proc.stderr or "")
-    if proc.returncode != 0:
+    if rc != 0:
         tail = "\n".join(output.strip().splitlines()[-8:])
-        return False, f"Ошибка при обновлении:\n{tail}"
+        return False, f"Ошибка при обновлении:\n{tail}", None
 
     m = re.search(r"Загружено (\d+) товаров", output)
-    count = m.group(1) if m else "?"
-    return True, f"Готово! Загружено товаров: {count}. Сайт обновится за минуту."
+    count = int(m.group(1)) if m else None
+    return True, "", count
 
 
 # ── Маршруты (всё под секретным сегментом /<token>) ──
@@ -195,9 +235,40 @@ def update(token: str):
     check(token)
     if not list_files():
         return jsonify(ok=False, message="Нет файлов для обновления.")
-    ok, msg = run_upload()
-    if ok:
-        clear_incoming()  # после успеха чистим папку под новый набор
+
+    # 1. Резервная копия ДО обновления — без страховки не рискуем.
+    b_ok, b_rows = backup_catalog()
+    if not b_ok:
+        return jsonify(ok=False, files=list_files(), message=(
+            "Не удалось сохранить резервную копию каталога — обновление отменено "
+            "ради безопасности. Попробуйте ещё раз; если повторяется — сообщите."
+        ))
+
+    # 2. Само обновление.
+    ok, err, count = run_upload()
+    if not ok:
+        return jsonify(ok=False, files=list_files(), message=(
+            err + "\n\nКаталог не тронут. Если всё же что-то сбилось — нажмите «Откатить»."
+        ))
+
+    clear_incoming()  # после успеха чистим папку под новый набор
+
+    # 3. Проверка «подозрительно мало товаров».
+    msg = f"Готово ✅ Загружено товаров: {count if count is not None else '?'}."
+    if b_rows:
+        msg += f" Прежняя версия ({b_rows}) сохранена для отката."
+    warn = bool(count is not None and b_rows and count < b_rows * 0.5)
+    if warn:
+        msg += (f"\n\n⚠️ Внимание: загружено всего {count}, а было {b_rows} — это сильно "
+                "меньше обычного. Проверьте файлы. Если каталог сбит — нажмите «Откатить».")
+    msg += " Сайт обновится за минуту."
+    return jsonify(ok=True, warn=warn, message=msg, files=list_files())
+
+
+@app.post("/<token>/rollback")
+def rollback(token: str):
+    check(token)
+    ok, msg = rollback_catalog()
     return jsonify(ok=ok, message=msg, files=list_files())
 
 
@@ -238,6 +309,10 @@ PAGE = r"""<!doctype html>
   .status.ok { background:#ecfdf5; color:#065f46; display:block; }
   .status.err { background:#fef2f2; color:#991b1b; display:block; }
   .status.info { background:#eff6ff; color:#1e40af; display:block; }
+  .rollback { margin-top:24px; padding-top:16px; border-top:1px solid #e5e7eb; text-align:center; }
+  .rollback button { width:100%; }
+  .rollback small { display:block; color:#9ca3af; margin-top:8px; font-size:13px; }
+  .danger { background:#fff; color:#b91c1c; border:1px solid #fca5a5 !important; }
 </style>
 </head>
 <body>
@@ -260,6 +335,11 @@ PAGE = r"""<!doctype html>
   </div>
 
   <div class="status" id="status"></div>
+
+  <div class="rollback">
+    <button class="act danger" id="rollback">↩ Откатить к прошлой версии</button>
+    <small>Если каталог обновился неправильно — вернуть как было до последней загрузки.</small>
+  </div>
 </div>
 
 <script>
@@ -331,12 +411,25 @@ updateBtn.onclick = async () => {
   try {
     const r = await fetch(`/${TOKEN}/update`, { method:"POST" });
     const d = await r.json();
-    show(d.ok ? "ok" : "err", d.message);
+    // Если успех, но есть предупреждение (мало товаров) — показываем тревожным цветом
+    show(d.ok ? (d.warn ? "err" : "ok") : "err", d.message);
     render(d.files);
   } catch (e) {
     show("err", "Не удалось запустить обновление.");
   }
   updateBtn.disabled = false;
+};
+$("rollback").onclick = async () => {
+  if (!confirm("Откатить каталог к прошлой версии (до последней загрузки)?")) return;
+  show("info", "Откатываю каталог…");
+  try {
+    const r = await fetch(`/${TOKEN}/rollback`, { method:"POST" });
+    const d = await r.json();
+    show(d.ok ? "ok" : "err", d.message);
+    render(d.files);
+  } catch (e) {
+    show("err", "Не удалось выполнить откат.");
+  }
 };
 clearBtn.onclick = async () => {
   const r = await fetch(`/${TOKEN}/clear`, { method:"POST" });
