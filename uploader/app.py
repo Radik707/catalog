@@ -343,7 +343,7 @@ PAGE = r"""<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Обновление каталога</title>
+<title>Обновление каталога «Вкусный Дом»</title>
 <style>
   * { box-sizing: border-box; }
   body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
@@ -383,7 +383,7 @@ PAGE = r"""<!doctype html>
 </head>
 <body>
 <div class="wrap">
-  <h1>Обновление каталога</h1>
+  <h1>Обновление каталога «Вкусный Дом»</h1>
   <p class="sub">Загрузите Excel-прайсы (.xlsx) — по одному или сразу несколько — и нажмите «Обновить каталог».</p>
 
   <label class="drop" id="drop">
