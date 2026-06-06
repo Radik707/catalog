@@ -351,8 +351,9 @@ PAGE = r"""<!doctype html>
   .wrap { max-width:560px; margin:0 auto; padding:20px 16px 40px; }
   h1 { font-size:20px; margin:8px 0 4px; }
   p.sub { color:#6b7280; margin:0 0 20px; font-size:14px; }
-  .drop { border:2px dashed #9ca3af; border-radius:14px; background:#fff;
-          padding:28px 16px; text-align:center; cursor:pointer; transition:.15s; }
+  .drop { display:block; width:100%; margin-top:8px; border:2px dashed #9ca3af;
+          border-radius:14px; background:#fff; padding:28px 16px; text-align:center;
+          cursor:pointer; transition:.15s; }
   .drop.over { border-color:#2563eb; background:#eff6ff; }
   .drop strong { color:#2563eb; }
   .drop small { display:block; color:#9ca3af; margin-top:6px; }
