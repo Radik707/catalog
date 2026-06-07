@@ -445,7 +445,7 @@ def upload(token: str):
 @app.post("/<token>/delete")
 def delete(token: str):
     check(token)
-    name = sanitize_filename((request.json or {}).get("name", ""))
+    name = sanitize_filename((request.get_json(silent=True) or {}).get("name", ""))
     target = INCOMING_DIR / name
     if target.exists():
         try:
