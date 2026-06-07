@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Phase 04 executing — plan 04-01 done, 3 plans remaining
-last_updated: "2026-06-07T15:18:00Z"
+status: Phase 04 executing — plan 04-02 done, 2 plans remaining
+last_updated: "2026-06-07T16:30:00Z"
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 11
-  completed_plans: 8
-  percent: 73
+  completed_plans: 9
+  percent: 75
 ---
 
 # Состояние проекта
@@ -24,9 +24,9 @@ progress:
 ## Текущая позиция
 
 Этап: 4 из 4 (Админ-панель владельца) — ВЫПОЛНЯЕТСЯ
-План: 04-01 ВЫПОЛНЕН (sheet_helper + admin.py + Blueprint); следующий → 04-02 (правка названия)
-Статус: Этап 4 в работе. 04-01 завершён: сквозной путь «изменить группу» построен (авторизация → список → правка → «Применить сейчас»). ADM-01, ADM-02, ADM-05 покрыты. Оставшиеся: 04-02 (тип name), 04-03 (фото Cloudinary), 04-04 (деплой sysadmin).
-Последнее действие: 2026-06-07 — выполнен план 04-01: sheet_helper.py, admin.py (Blueprint), монтирование в app.py; коммиты 70b3685, 0637322, d358171, 58dc1f3
+План: 04-02 ВЫПОЛНЕН (тип name в upload.py + поле названия в admin.py); следующий → 04-03 (фото Cloudinary)
+Статус: Этап 4 в работе. 04-02 завершён: правка отображаемого названия товара — тип name, ключ сопоставления не меняется (D-05). ADM-03 закрыт. Оставшиеся: 04-03 (фото Cloudinary), 04-04 (деплой sysadmin).
+Последнее действие: 2026-06-07 — выполнен план 04-02: upload.py (ALLOWED_TYPES + apply_edit_memory + products_to_rows), admin.py (normalize_name + поле + /save); коммиты dffd4b6, 637a1ad
 
 Прогресс: [████████░░] 73% (3/4 этапов завершено, 8/11 планов)
 
@@ -77,9 +77,12 @@ progress:
 - [03-02] Боевой запуск migrate_overrides.py — только через субагента sysadmin (серверное правило проекта)
 - [04-01] ADMIN_SECRET отдельно от APP_SECRET; hmac.compare_digest → abort(404) для всех неверных токенов
 - [04-01] admin.py как Blueprint (изолирует маршруты); shell-out в sheet_helper через _run_py (минимальные зависимости Flask-процесса)
-- [04-01] /save принимает только type="group" в плане 01 — PLAN_01_ALLOWED_TYPES; расширится в 02/03
+- [04-01] /save принимает только type="group" в плане 01 — PLAN_01_ALLOWED_TYPES; расширился в 02
 - [04-01] stdout sheet_helper.py в UTF-8 binary mode (sys.stdout.buffer) — fix для Windows cp1252
 - [04-01] subprocess text=False + decode("utf-8") в admin.py — защита от UnicodeDecodeError на сервере
+- [04-02] Тип правки name реализован в upload.py и admin.py; ключ normalize_name(p["name"]) не меняется при правке (D-05)
+- [04-02] PLAN_02_ALLOWED_TYPES = {"group", "name"} — цена сознательно не редактируется в панели (D-07)
+- [04-02] normalize_name() скопирована в admin.py без зависимостей — ключ нормализуется на сервере
 
 ### Ожидающие задачи
 
@@ -102,5 +105,5 @@ progress:
 ## Непрерывность сессий
 
 Последняя сессия: 2026-06-07
-Остановились на: План 04-01 выполнен. Следующий: 04-02 (правка названия товара, тип name). Серверные планы 03-04 — через субагента sysadmin.
-Файл продолжения: .planning/phases/04-1/04-02-PLAN.md
+Остановились на: План 04-02 выполнен. Следующий: 04-03 (загрузка фото Cloudinary из панели). Серверные планы (04-04) — через субагента sysadmin.
+Файл продолжения: .planning/phases/04-1/04-03-PLAN.md
