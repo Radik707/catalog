@@ -401,55 +401,14 @@ def load_edit_memory() -> dict[str, dict[str, str]]:
     return mapping
 
 
-# Переопределение категории по началу названия товара (регистронезависимо).
-# Порядок важен: более длинные/специфичные префиксы должны идти первыми.
-PRODUCT_OVERRIDES = {
-    "Набор конфет ЛЮСИ": "Коробочные конфеты",
-    "Набор конфет МВН": "Коробочные конфеты",
-    "Набор конфет Сонуар": "Коробочные конфеты",
-    "Фас. кор. конфеты": "Коробочные конфеты",
-    "Вес. драже Арахис": "Детское",
-    "Драже Скитлс": "Батончики и шоколад",
-    "Драже М&М": "Батончики и шоколад",
-    "Соус POMATO": "Соусы и специи",
-    "POMATO": "Соусы и специи",
-    "Соус": "Соусы и специи",
-    "Ж/р Ментос": "Прикассовое",
-    "Аджика АМЦА": "Соусы и специи",
-    "Нап.кофейный": "Напитки",
-    "Let's Be": "Напитки",
-    "Киндер": "Батончики и шоколад",
-    "Цикорий": "Прикассовое",
-    "Холс": "Прикассовое",
-}
-
-# Переопределение по подстроке в названии (регистронезависимо).
-PRODUCT_CONTAINS_OVERRIDES = [
-    ("паста шок", "Батончики и шоколад"),
-    ("шок. паста", "Батончики и шоколад"),
-]
-
-
-def apply_product_override(name: str) -> str | None:
-    """Вернуть переопределённую группу по регистронезависимому совпадению в названии товара.
-
-    Сначала проверяется начало строки (PRODUCT_OVERRIDES),
-    затем вхождение подстроки (PRODUCT_CONTAINS_OVERRIDES).
-    """
-    name_lower = name.lower()
-    for prefix, group in PRODUCT_OVERRIDES.items():
-        if name_lower.startswith(prefix.lower()):
-            return group
-    for substring, group in PRODUCT_CONTAINS_OVERRIDES:
-        if substring.lower() in name_lower:
-            return group
-    return None
-
-
 def apply_group_mapping(products: list[dict], category_map: dict) -> list[dict]:
-    """Добавить поле display_group на основе маппинга категорий и переопределений по товару."""
+    """Добавить поле display_group на основе маппинга категорий из category_map.json.
+
+    Переопределения групп по конкретным товарам больше не хранятся в коде —
+    они находятся во вкладке «Правки» (тип правки 'group') и применяются
+    функцией apply_edit_memory() в main() после вызова этой функции (D-06).
+    """
     unmapped = set()
-    overridden = 0
     for product in products:
         cat = product["source_category"]
         group = category_map.get(cat)
@@ -457,20 +416,12 @@ def apply_group_mapping(products: list[dict], category_map: dict) -> list[dict]:
             unmapped.add(cat)
             group = "Другое"
 
-        override = apply_product_override(product["name"])
-        if override is not None and override != group:
-            group = override
-            overridden += 1
-
         product["display_group"] = group
 
     if unmapped:
         log.warning("Категории без маппинга (попадут в 'Другое'):")
         for cat in sorted(unmapped):
             log.warning("  - %s", cat)
-
-    if overridden:
-        log.info("Переопределено категорий по названию товара: %d", overridden)
 
     return products
 
