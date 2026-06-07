@@ -683,6 +683,13 @@ function fmtTs(iso) {
   } catch { return iso || "—"; }
 }
 
+// Экранирование для безопасной вставки в innerHTML (защита от XSS:
+// имена файлов задаёт оператор, history.json персистентен)
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => (
+    {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
 // Рендер таблицы истории загрузок
 function renderHistory(items) {
   const container = $("history");
@@ -705,9 +712,9 @@ function renderHistory(items) {
       ? item.files.join(", ")
       : "—";
     html += `<tr>
-      <td class="ts">${fmtTs(item.ts)}</td>
-      <td class="fnames">${filesText}</td>
-      <td class="result ${statusCls}">${resultText}</td>
+      <td class="ts">${esc(fmtTs(item.ts))}</td>
+      <td class="fnames">${esc(filesText)}</td>
+      <td class="result ${statusCls}">${esc(resultText)}</td>
     </tr>`;
   }
   html += '</tbody></table>';
