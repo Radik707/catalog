@@ -33,7 +33,7 @@ import logging
 import tempfile
 import threading
 import subprocess
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from flask import Flask, request, jsonify, abort
@@ -479,19 +479,27 @@ def update(token: str):
         # Обработка уже идёт — второй поток не стартуем
         return jsonify(ok=False, message="Обработка уже идёт, подождите.")
 
-    # Замок захвачен — делаем снимок имён файлов и запускаем фон
-    # (Lock освободит _process_async в своём finally-блоке)
-    current_files = list_files()
-    entry_id = append_history({
-        "ts": datetime.utcnow().isoformat(),
-        "status": "processing",
-        "count": None,
-        "result_text": "обрабатывается…",
-        "files": current_files,
-    })
+    # Замок захвачен — делаем снимок имён файлов и запускаем фон.
+    # Ответственность за освобождение замка перейдёт к _process_async
+    # (его finally-блок) ТОЛЬКО после успешного старта потока. Если же
+    # что-то упадёт до старта (append_history или Thread.start), поток
+    # не выполнит finally — освобождаем замок сами, иначе он зависнет навсегда.
+    try:
+        current_files = list_files()
+        entry_id = append_history({
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "status": "processing",
+            "count": None,
+            "result_text": "обрабатывается…",
+            "files": current_files,
+        })
+        thread = threading.Thread(target=_process_async, args=(entry_id,), daemon=True)
+        thread.start()
+    except Exception:
+        PROCESS_LOCK.release()  # поток не стартовал — освобождаем замок сами
+        log.exception("Не удалось запустить фоновую обработку")
+        return jsonify(ok=False, message="Не удалось запустить обработку, попробуйте ещё раз.")
 
-    thread = threading.Thread(target=_process_async, args=(entry_id,), daemon=True)
-    thread.start()
     log.info("Запущен фоновый поток обработки, entry_id=%s", entry_id)
 
     # Немедленный нейтральный ответ — оператор не ждёт
