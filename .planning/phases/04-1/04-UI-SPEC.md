@@ -1,11 +1,12 @@
 ---
 phase: 4
 slug: admin-panel
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 created: 2026-06-07
 revised: 2026-06-07
+reviewed_at: 2026-06-07
 ---
 
 # Этап 4 — Дизайн-контракт UI: Админ-панель владельца
