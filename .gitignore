@@ -27,9 +27,10 @@ pdf/
 __pycache__/
 *.pyc
 
-# загрузчик: входящие файлы и архив последней партии (не хранить в git)
+# загрузчик: входящие файлы, архив последней партии и журнал истории (рантайм, не хранить в git)
 uploader/price/
 uploader/last_batch/
+uploader/history.json
 
 # debug
 npm-debug.log*
