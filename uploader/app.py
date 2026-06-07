@@ -677,7 +677,10 @@ async function uploadFiles(fileList) {
 // Форматирование метки времени ISO → локальный вид «ДД.ММ ЧЧ:ММ»
 function fmtTs(iso) {
   try {
-    const d = new Date(iso + (iso.endsWith("Z") ? "" : "Z"));
+    // Признак зоны: финальный "Z" ИЛИ смещение +HH:MM/-HH:MM после части времени.
+    // Ищем +/- в хвосте после "T..:" (чтобы не спутать с дефисами даты).
+    const hasZone = /Z$/.test(iso) || /T.*[+-]\d{2}:?\d{2}$/.test(iso);
+    const d = new Date(iso + (hasZone ? "" : "Z"));
     const pad = n => String(n).padStart(2, "0");
     return `${pad(d.getDate())}.${pad(d.getMonth()+1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
   } catch { return iso || "—"; }
