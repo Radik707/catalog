@@ -27,6 +27,7 @@ import re
 import sys
 import glob
 import json
+import hmac
 import secrets
 import logging
 import tempfile
@@ -398,7 +399,8 @@ def notify(mode: str, text: str) -> None:
 # ── Маршруты (всё под секретным сегментом /<token>) ──
 
 def check(token: str) -> None:
-    if not APP_SECRET or token != APP_SECRET:
+    # Постоянное по времени сравнение — защита от таймингового подбора секрета
+    if not APP_SECRET or not hmac.compare_digest(token, APP_SECRET):
         abort(404)
 
 
