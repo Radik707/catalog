@@ -367,8 +367,8 @@ def load_edit_memory() -> dict[str, dict[str, str]]:
         log.warning("Вкладка «Правки»: ожидаются колонки 'Товар', 'Тип', 'Значение' — пропускаем")
         return {}
 
-    # Допустимые типы правок в Этапе 3 (D-03: группа + фото + описание)
-    ALLOWED_TYPES = {"group", "photo", "description"}
+    # Допустимые типы правок (Этап 3: группа + фото + описание; Этап 4-02: название D-05)
+    ALLOWED_TYPES = {"group", "photo", "description", "name"}
 
     # --- Сборка словаря памяти ---
     mapping: dict[str, dict[str, str]] = {}
@@ -453,6 +453,11 @@ def apply_edit_memory(
                 p["photo_override"] = edit["photo"]
             if "description" in edit:
                 p["desc_override"] = edit["description"]
+            # Правка отображаемого названия (D-05, этап 4-02).
+            # Ключ сопоставления остаётся normalize_name(p["name"]) из прайса — не меняется.
+            # Только display_name используется при выводе в каталог; p["name"] — ключ прайса.
+            if "name" in edit:
+                p["display_name"] = edit["name"]
         else:
             new_for_memory += 1
     return new_for_memory
@@ -585,8 +590,12 @@ def products_to_rows(
         # Override-поля от apply_edit_memory имеют приоритет над авто-маппингом (D-04/D-06)
         image_url = p.get("photo_override") or get_photo_url(p["name"], photo_data)
         description = p.get("desc_override") or get_photo_description(p["name"], photo_data)
+        # Отображаемое название: display_name из правки (если есть), иначе имя из прайса (D-05).
+        # get_badge / get_photo_url / get_photo_description по-прежнему получают p["name"] —
+        # ключ из прайса не меняется, правка name затрагивает только вывод в каталог.
+        displayed_name = p.get("display_name") or p["name"]
         rows.append([
-            p["name"],
+            displayed_name,
             p["price"],
             p["stock"],
             p["source_category"],
