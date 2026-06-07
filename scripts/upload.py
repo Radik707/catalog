@@ -475,6 +475,38 @@ def apply_group_mapping(products: list[dict], category_map: dict) -> list[dict]:
     return products
 
 
+def apply_edit_memory(
+    products: list[dict],
+    edit_memory: dict[str, dict[str, str]],
+) -> int:
+    """Наложить память ручных правок владельца поверх авто-маппинга (D-06).
+
+    Для каждого товара ищет правку по точному normalize_name(name) (D-04).
+    Применяет только те типы, которые есть в записи памяти:
+      - 'group'       → p['display_group'] = новое значение
+      - 'photo'       → p['photo_override'] = URL (приоритет в products_to_rows)
+      - 'description' → p['desc_override']  = текст (приоритет в products_to_rows)
+
+    Возвращает число товаров, НЕ найденных в памяти (новые для разметки, MEM-03/D-05).
+    """
+    new_for_memory = 0
+    for p in products:
+        key = normalize_name(p["name"])
+        edit = edit_memory.get(key)
+        if edit:
+            # Правка группы — перебивает авто-маппинг (D-06)
+            if "group" in edit:
+                p["display_group"] = edit["group"]
+            # Правки фото/описания — записываем в override-поля для точного совпадения (D-04)
+            if "photo" in edit:
+                p["photo_override"] = edit["photo"]
+            if "description" in edit:
+                p["desc_override"] = edit["description"]
+        else:
+            new_for_memory += 1
+    return new_for_memory
+
+
 # Маппинг папок Cloudinary → логические имена в photo_overrides.json
 CLOUDINARY_FOLDER_ALIAS: dict[str, str] = {"catalog": "akkond"}
 
@@ -585,6 +617,10 @@ def products_to_rows(
 
     Формат: [Наименование, Цена, Остаток, Категория, Группа, Поставщик, Badge, ImageUrl, Description]
     Товары из new_names (реально новые) получают бейдж «новинка».
+
+    Приоритет фото/описания (D-04, D-06):
+      1. p['photo_override'] / p['desc_override'] — правка владельца (точное совпадение)
+      2. get_photo_url / get_photo_description — авто-маппинг (частичное совпадение)
     """
     if badges is None:
         badges = {"исключения": [], "новинка": [], "хит": [], "акция": []}
@@ -595,6 +631,9 @@ def products_to_rows(
     rows = [header]
     for p in products:
         badge = "новинка" if p["name"] in new_names else get_badge(p["name"], badges)
+        # Override-поля от apply_edit_memory имеют приоритет над авто-маппингом (D-04/D-06)
+        image_url = p.get("photo_override") or get_photo_url(p["name"], photo_data)
+        description = p.get("desc_override") or get_photo_description(p["name"], photo_data)
         rows.append([
             p["name"],
             p["price"],
@@ -603,8 +642,8 @@ def products_to_rows(
             p["display_group"],
             p["supplier_file"],
             badge,
-            get_photo_url(p["name"], photo_data),
-            get_photo_description(p["name"], photo_data),
+            image_url,
+            description,
         ])
     return rows
 
@@ -760,6 +799,9 @@ def main():
     # Загрузить маппинг фото
     photo_data = load_photo_data()
 
+    # Загрузить память ручных правок владельца (MEM-01)
+    edit_memory = load_edit_memory()
+
     # Парсить все файлы (авто-определение формата: старый vs новый)
     all_products = []
     new_format_used = False
@@ -798,6 +840,11 @@ def main():
                     new_names.add(p["name"])
                     new_count += 1
         log.info("Новых товаров (в «Новинки»): %d", new_count)
+
+    # Наложить память правок поверх авто-маппинга (D-06: правка владельца побеждает)
+    # Вызов ПОСЛЕ apply_group_mapping и блока нового формата, ПЕРЕД products_to_rows
+    new_for_memory = apply_edit_memory(all_products, edit_memory)
+    log.info("Товаров без правок (новые для памяти): %d", new_for_memory)
 
     # Подготовить строки для Google Sheet
     rows = products_to_rows(all_products, badges, photo_data, new_names)
