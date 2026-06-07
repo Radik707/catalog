@@ -80,6 +80,9 @@ HISTORY_FILE = Path(os.environ.get("HISTORY_FILE", str(SCRIPT_DIR / "history.jso
 
 # Глобальный замок для защиты от двойного запуска обработки (gunicorn -w 1)
 PROCESS_LOCK = threading.Lock()
+# Отдельный замок для атомарности чтения-изменения-записи history.json
+# (защищает связку load → insert/update → save от гонки между потоками)
+HISTORY_LOCK = threading.Lock()
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # лимит загрузки 50 МБ
@@ -127,21 +130,26 @@ def append_history(entry: dict) -> str:
     """
     entry_id = secrets.token_hex(8)
     entry["id"] = entry_id
-    history = load_history()
-    history.insert(0, entry)
-    history = history[:10]  # храним последние 10 записей
-    _save_history_atomic(history)
+    # Весь цикл чтение-изменение-запись под замком — иначе конкурентные
+    # вызовы append/update перетрут изменения друг друга
+    with HISTORY_LOCK:
+        history = load_history()
+        history.insert(0, entry)
+        history = history[:10]  # храним последние 10 записей
+        _save_history_atomic(history)
     return entry_id
 
 
 def update_history(entry_id: str, **fields) -> None:
     """Обновить поля существующей записи по id, сохранить атомарно."""
-    history = load_history()
-    for item in history:
-        if item.get("id") == entry_id:
-            item.update(fields)
-            break
-    _save_history_atomic(history)
+    # Под тем же замком, что и append_history — атомарность read-modify-write
+    with HISTORY_LOCK:
+        history = load_history()
+        for item in history:
+            if item.get("id") == entry_id:
+                item.update(fields)
+                break
+        _save_history_atomic(history)
 
 
 # ── Фоновая обработка ──
