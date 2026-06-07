@@ -76,7 +76,7 @@
 | UPL-02 | Этап 2 | Pending |
 | UPL-03 | Этап 2 | Pending |
 | UPL-04 | Этап 2 | Pending |
-| MEM-01 | Этап 3 | Pending |
+| MEM-01 | Этап 3 | Complete |
 | MEM-02 | Этап 3 | Pending |
 | MEM-03 | Этап 3 | Pending |
 | ADM-01 | Этап 4 | Pending |
