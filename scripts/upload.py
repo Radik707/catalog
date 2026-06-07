@@ -299,6 +299,108 @@ def load_current_groups() -> dict:
     return mapping
 
 
+def load_edit_memory() -> dict[str, dict[str, str]]:
+    """Загрузить память ручных правок владельца из вкладки «Правки» той же Google-таблицы.
+
+    Возвращает словарь {normalize_name(товар): {тип_правки: значение}},
+    где тип правки — одно из: 'group', 'photo', 'description'.
+
+    Схема вкладки «Правки» (по строке на правку):
+      Колонка «Товар»    — нормализованное имя товара (ключ сопоставления, D-04)
+      Колонка «Тип»      — тип правки: group | photo | description
+      Колонка «Значение» — новое значение поля
+
+    Пример строки: «конфеты ромашка» | «group» | «Коробочные конфеты»
+    Несколько строк на один товар накапливаются в словарь типов.
+
+    Graceful-fallback: нет gspread / нет credentials / нет вкладки / ошибка доступа → {},
+    скрипт продолжает работу без правок (как если бы памяти не существовало).
+    """
+    try:
+        import gspread
+        from google.oauth2.service_account import Credentials
+    except ImportError:
+        return {}
+
+    # --- Путь к credentials (те же переменные, что в load_current_groups) ---
+    creds_path = os.environ.get("GOOGLE_CREDENTIALS_PATH", "")
+    if not creds_path:
+        for d in (SCRIPT_DIR, PROJECT_ROOT):
+            c = d / "credentials.json"
+            if c.exists():
+                creds_path = str(c)
+                break
+
+    sheets_id = os.environ.get("GOOGLE_SHEETS_ID", "")
+    if not creds_path or not sheets_id:
+        return {}
+
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive",
+    ]
+
+    # --- Чтение вкладки «Правки» ---
+    try:
+        creds = Credentials.from_service_account_file(creds_path, scopes=scopes)
+        ss = gspread.authorize(creds).open_by_key(sheets_id)
+        try:
+            values = ss.worksheet("Правки").get_all_values()
+        except gspread.exceptions.WorksheetNotFound:
+            # Вкладки ещё нет — это нормально (память пуста), не ошибка
+            log.info("Вкладка «Правки» не найдена — память правок пуста")
+            return {}
+    except Exception as e:  # noqa: BLE001
+        log.warning("Не удалось прочитать вкладку «Правки»: %s", e)
+        return {}
+
+    if not values:
+        return {}
+
+    # --- Найти индексы колонок по заголовкам ---
+    header = values[0]
+    try:
+        товар_i = header.index("Товар")
+        тип_i = header.index("Тип")
+        значение_i = header.index("Значение")
+    except ValueError:
+        log.warning("Вкладка «Правки»: ожидаются колонки 'Товар', 'Тип', 'Значение' — пропускаем")
+        return {}
+
+    # Допустимые типы правок в Этапе 3 (D-03: группа + фото + описание)
+    ALLOWED_TYPES = {"group", "photo", "description"}
+
+    # --- Сборка словаря памяти ---
+    mapping: dict[str, dict[str, str]] = {}
+    min_cols = max(товар_i, тип_i, значение_i) + 1
+    for row in values[1:]:
+        if len(row) < min_cols:
+            continue
+        # Значения ячеек трактуются строго как строки-данные (защита от инъекций, T-03-02)
+        raw_product = str(row[товар_i]).strip()
+        raw_type = str(row[тип_i]).strip()
+        raw_value = str(row[значение_i]).strip()
+
+        if not raw_product:
+            log.warning("Вкладка «Правки»: пустой товар в строке — пропускаем")
+            continue
+        if not raw_type or raw_type not in ALLOWED_TYPES:
+            log.warning(
+                "Вкладка «Правки»: неизвестный тип правки '%s' для товара '%s' — пропускаем",
+                raw_type, raw_product,
+            )
+            continue
+
+        # Ключ — нормализованное имя товара (точное совпадение, D-04)
+        key = normalize_name(raw_product)
+        if key not in mapping:
+            mapping[key] = {}
+        mapping[key][raw_type] = raw_value
+
+    log.info("Загружено правок из памяти: %d", len(mapping))
+    return mapping
+
+
 # Переопределение категории по началу названия товара (регистронезависимо).
 # Порядок важен: более длинные/специфичные префиксы должны идти первыми.
 PRODUCT_OVERRIDES = {
