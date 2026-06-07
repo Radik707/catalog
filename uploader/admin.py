@@ -19,6 +19,7 @@ import sys
 import hmac
 import json
 import logging
+import tempfile
 import threading
 import subprocess
 from pathlib import Path
@@ -33,6 +34,8 @@ log = logging.getLogger("admin")
 SCRIPT_DIR = Path(__file__).resolve().parent
 # sheet_helper.py живёт в ../scripts/ относительно uploader/
 SHEET_HELPER = SCRIPT_DIR.parent / "scripts" / "sheet_helper.py"
+# cloudinary_helper.py — рядом с sheet_helper.py в scripts/
+CLOUDINARY_HELPER = SCRIPT_DIR.parent / "scripts" / "cloudinary_helper.py"
 
 
 def load_env() -> None:
@@ -62,9 +65,15 @@ UPLOAD_TIMEOUT = int(os.environ.get("UPLOAD_TIMEOUT", "600"))
 # --- Blueprint: изолируем маршруты панели от загрузчика ---
 admin_bp = Blueprint("admin", __name__)
 
-# --- Допустимые типы правок: план 02 добавил 'name' к 'group' (D-05, D-07) ---
-# D-07: цена сознательно НЕ редактируется в панели (только group и name)
+# --- Допустимые типы правок: план 02 добавил 'name' к 'group' (D-05, D-07); план 03 photo ---
+# D-07: цена сознательно НЕ редактируется в панели
 PLAN_02_ALLOWED_TYPES = {"group", "name"}
+
+# Допустимые расширения и MIME-типы для загрузки фото (T-04-09)
+ALLOWED_PHOTO_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
+ALLOWED_PHOTO_MIMES = {"image/jpeg", "image/png", "image/webp"}
+# Максимальный размер фото — 10 МБ (T-04-09, T-04-10)
+MAX_PHOTO_BYTES = 10 * 1024 * 1024
 
 
 def normalize_name(name: str) -> str:
@@ -175,7 +184,7 @@ def admin_save(token: str):
     """Сохранить правку товара во вкладку «Правки».
 
     Принимает JSON: {key: str, type: str, value: str}
-    В плане 02: принимает type="group" и type="name" (белый список PLAN_02_ALLOWED_TYPES, D-07).
+    Планы 01-03: принимает type="group", "name", "photo" (план 03 — сброс фото пустым значением).
     rc=0 → 200 + {ok: true}; rc!=0 → 500 + {ok: false}.
     Технические детали — только в log, клиенту нейтральное сообщение (T-04-04).
     """
@@ -190,14 +199,16 @@ def admin_save(token: str):
     if not key:
         return jsonify(ok=False, message="Не удалось сохранить правку. Ключ товара не указан."), 400
 
-    # Белый список типов правок: group + name (T-04-02, T-04-07, D-07)
-    if edit_type not in PLAN_02_ALLOWED_TYPES:
+    # Белый список типов правок: group + name + photo (план 03: photo-сброс, T-04-02, T-04-07)
+    SAVE_ALLOWED_TYPES = {"group", "name", "photo"}
+    if edit_type not in SAVE_ALLOWED_TYPES:
         return jsonify(
             ok=False,
             message="Не удалось сохранить правку. Неподдерживаемый тип правки.",
         ), 400
 
-    if not value:
+    # Значение обязательно для group и name; для photo допустимо пустое (сброс привязки)
+    if not value and edit_type != "photo":
         return jsonify(ok=False, message="Не удалось сохранить правку. Значение не указано."), 400
 
     # --- Нормализация ключа на сервере (D-05) ---
@@ -239,6 +250,170 @@ def admin_save(token: str):
         ok=True,
         message="Правка сохранена. Она применится автоматически при следующем обновлении прайса или нажмите «Применить сейчас».",
     )
+
+
+@admin_bp.post("/<token>/photo")
+def admin_photo(token: str):
+    """Загрузить фото товара в Cloudinary presenter/ и записать привязку в «Правки».
+
+    Принимает multipart/form-data: файл photo + поле key (имя товара из прайса).
+    Валидация ДО загрузки: расширение, mimetype, размер ≤ 10 МБ (T-04-09, T-04-10).
+    Временный файл удаляется в finally — защита от переполнения диска (T-04-10).
+    Ключи Cloudinary не попадают в ответ — только в лог (T-04-11).
+    """
+    check_admin(token)
+
+    # --- Получить файл и ключ товара ---
+    photo_file = request.files.get("photo")
+    key = str(request.form.get("key", "")).strip()
+
+    if not photo_file or not photo_file.filename:
+        return jsonify(
+            ok=False,
+            message="Не удалось загрузить фото. Файл не выбран.",
+        ), 400
+
+    if not key:
+        return jsonify(
+            ok=False,
+            message="Не удалось загрузить фото. Ключ товара не указан.",
+        ), 400
+
+    # Нормализовать ключ для записи в «Правки» (D-05)
+    key = normalize_name(key)
+
+    # Оригинальное имя файла для public_id и ref
+    orig_name = photo_file.filename
+
+    # --- Валидация расширения (T-04-09) ---
+    ext = Path(orig_name).suffix.lower()
+    if ext not in ALLOWED_PHOTO_EXTS:
+        return jsonify(
+            ok=False,
+            message="Не удалось загрузить фото. Проверьте формат файла (JPG, PNG, WebP) и размер (до 10 МБ).",
+        ), 400
+
+    # --- Валидация MIME-типа (T-04-09) ---
+    mime = (photo_file.mimetype or "").lower()
+    if mime not in ALLOWED_PHOTO_MIMES:
+        return jsonify(
+            ok=False,
+            message="Не удалось загрузить фото. Проверьте формат файла (JPG, PNG, WebP) и размер (до 10 МБ).",
+        ), 400
+
+    # --- Читаем файл и проверяем размер ДО сохранения на диск (T-04-09, T-04-10) ---
+    file_bytes = photo_file.read()
+    if len(file_bytes) > MAX_PHOTO_BYTES:
+        return jsonify(
+            ok=False,
+            message="Не удалось загрузить фото. Проверьте формат файла (JPG, PNG, WebP) и размер (до 10 МБ).",
+        ), 400
+
+    # --- Сохранить во временный файл с безопасным суффиксом ---
+    tmp_path = None
+    try:
+        # Суффикс берётся из проверенного расширения (только .jpg/.jpeg/.png/.webp)
+        with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+            tmp.write(file_bytes)
+            tmp_path = tmp.name
+
+        log.info("admin /photo: временный файл %s (%d байт)", tmp_path, len(file_bytes))
+
+        # --- Загрузить в Cloudinary через shell-out в cloudinary_helper.py ---
+        try:
+            rc, output = _run_py(
+                CLOUDINARY_HELPER,
+                "upload",
+                "--path", tmp_path,
+                "--name", orig_name,
+            )
+        except subprocess.TimeoutExpired:
+            log.warning("admin /photo: таймаут загрузки в Cloudinary")
+            return jsonify(
+                ok=False,
+                message="Не удалось загрузить фото. Проверьте соединение и попробуйте ещё раз.",
+            ), 500
+        except Exception as e:
+            log.warning("admin /photo: ошибка запуска cloudinary_helper: %s", e)
+            return jsonify(
+                ok=False,
+                message="Не удалось загрузить фото. Проверьте соединение и попробуйте ещё раз.",
+            ), 500
+
+        if rc != 0:
+            log.warning("cloudinary_helper rc=%d: %s", rc, output.strip()[-300:])
+            return jsonify(
+                ok=False,
+                message="Не удалось загрузить фото. Проверьте соединение и попробуйте ещё раз.",
+            ), 500
+
+        # Разобрать JSON-результат из stdout cloudinary_helper
+        try:
+            lines = [l.strip() for l in output.strip().splitlines() if l.strip().startswith("{")]
+            json_line = lines[-1] if lines else "{}"
+            cld_result = json.loads(json_line)
+        except (json.JSONDecodeError, IndexError) as e:
+            log.warning("admin /photo: не удалось распарсить ответ cloudinary_helper: %s", e)
+            return jsonify(
+                ok=False,
+                message="Не удалось загрузить фото. Попробуйте ещё раз.",
+            ), 500
+
+        if not cld_result.get("ok"):
+            # cloudinary_helper вернул ошибку — пробрасываем нейтральное сообщение
+            log.warning("admin /photo: cloudinary_helper вернул ошибку: %s", cld_result)
+            return jsonify(
+                ok=False,
+                message="Не удалось загрузить фото. Проверьте формат файла (JPG, PNG, WebP) и размер (до 10 МБ).",
+            ), 500
+
+        ref = cld_result["ref"]
+        url = cld_result["url"]
+
+        # --- Записать привязку photo в «Правки» через sheet_helper ---
+        try:
+            rc2, output2 = _run_py(
+                SHEET_HELPER,
+                "append_edit",
+                "--key", key,
+                "--type", "photo",
+                "--value", ref,
+            )
+        except subprocess.TimeoutExpired:
+            log.warning("admin /photo: таймаут записи привязки в «Правки»")
+            return jsonify(
+                ok=False,
+                message="Фото загружено, но не удалось сохранить привязку. Попробуйте ещё раз.",
+            ), 500
+        except Exception as e:
+            log.warning("admin /photo: ошибка sheet_helper при записи photo: %s", e)
+            return jsonify(
+                ok=False,
+                message="Фото загружено, но не удалось сохранить привязку. Попробуйте ещё раз.",
+            ), 500
+
+        if rc2 != 0:
+            log.warning("sheet_helper append_edit photo rc=%d: %s", rc2, output2.strip()[-300:])
+            return jsonify(
+                ok=False,
+                message="Фото загружено, но не удалось сохранить привязку. Попробуйте ещё раз.",
+            ), 500
+
+        log.info("admin /photo: фото привязано key=%s ref=%s", key, ref)
+        return jsonify(
+            ok=True,
+            ref=ref,
+            url=url,
+            message="Правка сохранена. Фото появится в каталоге при следующем обновлении или нажмите «Применить сейчас».",
+        )
+
+    finally:
+        # Временный файл удаляется всегда — защита от переполнения диска (T-04-10)
+        if tmp_path:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
 
 
 @admin_bp.post("/<token>/apply")
@@ -348,6 +523,19 @@ PAGE = r"""<!doctype html>
   .empty-state h3 { margin: 0 0 8px; color: #374151; font-size: 16px; }
   /* Экран 2 (правка) — скрыт по умолчанию */
   #screen-edit { display: none; }
+  /* Зона загрузки фото (Dropzone) — мобильная, min-height 80px */
+  .photo-drop {
+    border: 2px dashed #d1d5db; border-radius: 12px; padding: 24px;
+    text-align: center; cursor: pointer; background: #f9fafb;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .photo-drop:hover, .photo-drop.drag-over {
+    border-color: #2563eb; background: #eff6ff;
+  }
+  .photo-drop input[type="file"] { display: none; }
+  /* Превью текущего/выбранного фото */
+  .photo-preview { max-height: 160px; max-width: 100%; border-radius: 8px;
+                   object-fit: contain; margin-top: 12px; display: none; }
 </style>
 </head>
 <body>
@@ -433,6 +621,28 @@ PAGE = r"""<!doctype html>
             <option>Новинки</option>
             <option>Другое</option>
           </select>
+        </div>
+
+        <!-- Зона загрузки фото (D-06): выбор с камеры или галереи на телефоне -->
+        <div class="mb-3">
+          <label class="form-label">Фото товара</label>
+          <!-- capture="environment" — открыть заднюю камеру на телефоне по умолчанию -->
+          <div class="photo-drop" id="photo-drop" onclick="document.getElementById('photo-input').click()">
+            <input type="file" id="photo-input" accept="image/*" capture="environment">
+            <div id="photo-drop-text">
+              <div style="font-size:28px; color:#9ca3af; margin-bottom:8px">&#128247;</div>
+              <div style="font-weight:600; color:#374151">Нажмите или перетащите фото</div>
+              <div class="text-muted" style="font-size:13px; margin-top:4px">JPG, PNG, WebP — до 10 МБ</div>
+            </div>
+            <img id="photo-preview" class="photo-preview" alt="Превью фото">
+          </div>
+          <!-- Статус загрузки фото (прогресс/ошибка) -->
+          <div id="status-photo" class="status" style="margin-top:8px"></div>
+          <!-- Кнопка «Сбросить фото» — видна если уже есть привязка -->
+          <button id="btn-reset-photo" class="btn btn-danger btn-ghost btn-sm mt-2"
+                  style="display:none" onclick="resetPhoto()">
+            Сбросить фото
+          </button>
         </div>
 
         <div id="status-edit" class="status"></div>
@@ -794,6 +1004,162 @@ document.getElementById("search-input").addEventListener("input", () => {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(() => applyFilters(), 300);
 });
+
+/* ── Зона загрузки фото (план 03, D-06) ── */
+
+// Показать статус в баннере загрузки фото
+function showPhoto(kind, text) {
+  const el = document.getElementById("status-photo");
+  el.className = "status " + kind;
+  el.textContent = text;
+}
+
+// Обработка перетаскивания файла в зону загрузки
+(function initDropZone() {
+  const drop = document.getElementById("photo-drop");
+  if (!drop) return;
+  drop.addEventListener("dragover", e => {
+    e.preventDefault();
+    drop.classList.add("drag-over");
+  });
+  drop.addEventListener("dragleave", () => drop.classList.remove("drag-over"));
+  drop.addEventListener("drop", e => {
+    e.preventDefault();
+    drop.classList.remove("drag-over");
+    const files = e.dataTransfer && e.dataTransfer.files;
+    if (files && files.length > 0) handlePhotoFile(files[0]);
+  });
+})();
+
+// При выборе файла через input — обработать и загрузить
+document.getElementById("photo-input").addEventListener("change", e => {
+  const f = e.target.files && e.target.files[0];
+  if (f) handlePhotoFile(f);
+  // Сбросить input, чтобы можно было выбрать тот же файл повторно
+  e.target.value = "";
+});
+
+// Обработать выбранный файл: показать превью и загрузить в Cloudinary
+async function handlePhotoFile(file) {
+  // Клиентская валидация расширения и размера (дублирует серверную проверку T-04-09)
+  const ext = file.name.split(".").pop().toLowerCase();
+  const allowedExts = ["jpg", "jpeg", "png", "webp"];
+  if (!allowedExts.includes(ext)) {
+    showPhoto("err", "Не удалось загрузить фото. Проверьте формат файла (JPG, PNG, WebP) и размер (до 10 МБ).");
+    return;
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    showPhoto("err", "Не удалось загрузить фото. Проверьте формат файла (JPG, PNG, WebP) и размер (до 10 МБ).");
+    return;
+  }
+
+  // Показать локальное превью сразу при выборе (до загрузки)
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const preview = document.getElementById("photo-preview");
+    preview.src = ev.target.result;
+    preview.style.display = "block";
+    document.getElementById("photo-drop-text").style.display = "none";
+  };
+  reader.readAsDataURL(file);
+
+  if (!currentProduct) {
+    showPhoto("err", "Ошибка: товар не выбран.");
+    return;
+  }
+
+  showPhoto("info", "Загружаем фото...");
+
+  // Отправить файл на сервер через FormData → /photo
+  const fd = new FormData();
+  fd.append("photo", file, file.name);
+  fd.append("key", currentProduct.name); // нормализация на сервере (D-05)
+
+  try {
+    const r = await fetch(`/${TOKEN}/photo`, { method: "POST", body: fd });
+    const d = await r.json();
+    if (d && d.ok) {
+      showPhoto("ok", d.message || "Фото сохранено.");
+      // Обновить превью по URL из Cloudinary (окончательный URL)
+      if (d.url) {
+        const preview = document.getElementById("photo-preview");
+        preview.src = d.url;
+        preview.style.display = "block";
+      }
+      // Обновить image_url товара в локальном состоянии
+      currentProduct.image_url = d.url || currentProduct.image_url;
+      const idx = allProducts.findIndex(p => p.name === currentProduct.name);
+      if (idx >= 0) allProducts[idx].image_url = currentProduct.image_url;
+      // Показать кнопку «Сбросить фото»
+      document.getElementById("btn-reset-photo").style.display = "";
+    } else {
+      showPhoto("err", (d && d.message) || "Не удалось загрузить фото. Проверьте формат файла (JPG, PNG, WebP) и размер (до 10 МБ).");
+      // Убрать превью при ошибке загрузки
+      document.getElementById("photo-preview").style.display = "none";
+      document.getElementById("photo-drop-text").style.display = "";
+    }
+  } catch (e) {
+    showPhoto("err", "Ошибка соединения. Попробуйте ещё раз.");
+    document.getElementById("photo-preview").style.display = "none";
+    document.getElementById("photo-drop-text").style.display = "";
+  }
+}
+
+// Сброс фото — пишет пустую photo-правку (привязка удаляется при следующем обновлении)
+async function resetPhoto() {
+  if (!currentProduct) return;
+  showPhoto("info", "Сбрасываем привязку фото...");
+  const fd = new FormData();
+  // Отправляем специальный файл-заглушку — серверная валидация не пройдёт,
+  // поэтому сброс выполняется через /save с пустым значением
+  const d = await apiCall(`/${TOKEN}/save`, {
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ key: currentProduct.name, type: "photo", value: "" }),
+  });
+  if (d && d.ok) {
+    showPhoto("ok", "Привязка фото сброшена.");
+    document.getElementById("photo-preview").style.display = "none";
+    document.getElementById("photo-drop-text").style.display = "";
+    document.getElementById("btn-reset-photo").style.display = "none";
+    currentProduct.image_url = "";
+  } else {
+    showPhoto("err", (d && d.message) || "Не удалось сбросить фото.");
+  }
+}
+
+/* ── Расширение showEditScreen: заполнять зону фото ── */
+// Переопределяем после объявления оригинальной функции — обёртка не нужна,
+// просто патчим вызов: при открытии экрана правки показываем текущее фото.
+const _origShowEditScreen = showEditScreen;
+// eslint-disable-next-line no-global-assign
+window.showEditScreen = function(product) {
+  _origShowEditScreen(product);
+
+  // Сбросить состояние зоны загрузки фото
+  const preview = document.getElementById("photo-preview");
+  const dropText = document.getElementById("photo-drop-text");
+  const statusPhoto = document.getElementById("status-photo");
+  const btnReset = document.getElementById("btn-reset-photo");
+
+  statusPhoto.className = "status";
+  statusPhoto.textContent = "";
+
+  if (product.image_url) {
+    // Показать текущее фото товара
+    preview.src = product.image_url;
+    preview.style.display = "block";
+    dropText.style.display = "none";
+    btnReset.style.display = "";
+  } else {
+    // Нет фото — показать приглашение загрузить
+    preview.src = "";
+    preview.style.display = "none";
+    dropText.style.display = "";
+    btnReset.style.display = "none";
+  }
+};
+// Восстановить привязку к кнопке после переопределения
+showEditScreen = window.showEditScreen;
 
 /* ── Инициализация ── */
 loadProducts();
