@@ -803,6 +803,12 @@ loadHistory();
 </html>"""
 
 
+# Подключить admin-панель как Blueprint (изолирует маршруты панели от загрузчика)
+# Отсутствие ADMIN_SECRET не ломает старт — check_admin вернёт abort(404) для всех запросов
+from admin import admin_bp
+app.register_blueprint(admin_bp)
+
+
 def main() -> None:
     if not APP_SECRET:
         log.error("Не задан APP_SECRET (секрет в URL). См. .env")
