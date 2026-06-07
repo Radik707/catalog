@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Phase 03 planned — ready to execute
-last_updated: "2026-06-07T08:30:00.000Z"
+status: Phase 03 in progress — plan 03-01 complete
+last_updated: "2026-06-07T08:52:21Z"
 progress:
   total_phases: 4
   completed_phases: 2
   total_plans: 7
-  completed_plans: 5
-  percent: 50
+  completed_plans: 6
+  percent: 57
 ---
 
 # Состояние проекта
@@ -24,11 +24,11 @@ progress:
 ## Текущая позиция
 
 Этап: 3 из 4 (Память правок)
-План: 2 плана готовы и проверены (03-01 ядро памяти, 03-02 миграция захардкоженных правил)
-Статус: Этапы 1 и 2 завершены. Этап 3 спланирован: 03-01 (wave 1, autonomous) — load_edit_memory + apply_edit_memory + лог новых товаров; 03-02 (wave 2, чекпоинт через sysadmin) — migrate_overrides.py + удаление словарей из upload.py. Проверка плана PASSED (2 итерации). Дальше — `/gsd:execute-phase 3`.
-Последнее действие: 2026-06-07 — plan-phase этапа 3: pattern-mapper + planner (2 плана) + plan-checker (PASSED); ворота требований и решений (7/7) пройдены
+План: 03-01 выполнен (ядро памяти правок). Осталось: 03-02 (миграция захардкоженных правил)
+Статус: Этапы 1 и 2 завершены. Этап 3 в процессе: 03-01 выполнен — load_edit_memory + apply_edit_memory + лог новых товаров (MEM-01, MEM-02, MEM-03). Следующий — 03-02 (wave 2, чекпоинт через sysadmin) — migrate_overrides.py + удаление PRODUCT_OVERRIDES из upload.py.
+Последнее действие: 2026-06-07 — выполнен 03-01 (ядро памяти правок): 2 коммита (fa4530e, 26e5940), все проверки PASSED
 
-Прогресс: [█████░░░░░] 50% (2/4 этапов завершено); этап 3 — спланирован, 2 плана готовы
+Прогресс: [██████░░░░] 57% (2/4 этапов завершено, 6/7 планов); этап 3 — в процессе, 1/2 плана выполнено
 
 ## Метрики выполнения
 
@@ -67,6 +67,10 @@ progress:
 - [02-01] PROCESS_LOCK через threading.Lock; acquire(blocking=False) — единственный источник правды «идёт обработка»
 - [02-01] Атомарная запись history.json через tempfile.mkstemp + os.replace — защита от повреждения при сбое
 - [02-01] Поллинг /history каждые 4 с; останавливается когда нет processing-записей; кнопка «Обновить» разблокируется немедленно
+- [03-01] Схема вкладки «Правки»: колонки Товар | Тип | Значение (расширяемая, D-02)
+- [03-01] Фото/описание через override-поля photo_override/desc_override (вариант а, D-04)
+- [03-01] Бэкап вкладки «Правки» в Этапе 3 не создаётся (upload.py только читает, T-03-05 accepted)
+- [03-01] WorksheetNotFound → log.info (норма); Exception → log.warning (ошибка доступа)
 
 ### Ожидающие задачи
 
@@ -89,5 +93,5 @@ progress:
 ## Непрерывность сессий
 
 Последняя сессия: 2026-06-07
-Остановились на: этап 3 «Память правок» спланирован (2 плана, проверка PASSED). Дальше — выполнение: `/gsd:execute-phase 3`.
-Файл продолжения: .planning/phases/03-1/03-01-PLAN.md
+Остановились на: план 03-01 выполнен (ядро памяти правок: load_edit_memory + apply_edit_memory). Следующий — 03-02 (миграция PRODUCT_OVERRIDES + деплой через sysadmin).
+Файл продолжения: .planning/phases/03-1/03-02-PLAN.md
