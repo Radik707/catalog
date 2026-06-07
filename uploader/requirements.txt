@@ -6,3 +6,5 @@ gspread>=6.0
 google-auth>=2.28
 requests>=2.31
 PySocks>=1.7        # для доступа к Telegram через SOCKS-прокси
+# Загрузка фото из админ-панели в Cloudinary (этап 4)
+cloudinary>=1.40
