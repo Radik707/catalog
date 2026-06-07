@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Phase 04 executing — plan 04-02 done, 2 plans remaining
-last_updated: "2026-06-07T16:30:00Z"
+status: Phase 04 executing — plan 04-03 done, 1 plan remaining (04-04 deploy via sysadmin)
+last_updated: "2026-06-07T18:00:00Z"
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 11
-  completed_plans: 9
-  percent: 75
+  completed_plans: 10
+  percent: 82
 ---
 
 # Состояние проекта
@@ -24,11 +24,11 @@ progress:
 ## Текущая позиция
 
 Этап: 4 из 4 (Админ-панель владельца) — ВЫПОЛНЯЕТСЯ
-План: 04-02 ВЫПОЛНЕН (тип name в upload.py + поле названия в admin.py); следующий → 04-03 (фото Cloudinary)
-Статус: Этап 4 в работе. 04-02 завершён: правка отображаемого названия товара — тип name, ключ сопоставления не меняется (D-05). ADM-03 закрыт. Оставшиеся: 04-03 (фото Cloudinary), 04-04 (деплой sysadmin).
-Последнее действие: 2026-06-07 — выполнен план 04-02: upload.py (ALLOWED_TYPES + apply_edit_memory + products_to_rows), admin.py (normalize_name + поле + /save); коммиты dffd4b6, 637a1ad
+План: 04-03 ВЫПОЛНЕН (cloudinary_helper.py + маршрут /photo + Dropzone); следующий → 04-04 (деплой sysadmin)
+Статус: Этап 4 в работе. 04-03 завершён: ADM-04 закрыт — владелец грузит фото с телефона в presenter/, привязка photo пишется в «Правки». Осталось: 04-04 (деплой через sysadmin).
+Последнее действие: 2026-06-07 — выполнен план 04-03: cloudinary_helper.py, admin.py (/photo + Dropzone), requirements.txt; коммиты d21c8fa, 7d6b963, 895ed24
 
-Прогресс: [████████░░] 73% (3/4 этапов завершено, 8/11 планов)
+Прогресс: [█████████░] 82% (3/4 этапов завершено, 10/11 планов)
 
 ## Метрики выполнения
 
@@ -83,6 +83,9 @@ progress:
 - [04-02] Тип правки name реализован в upload.py и admin.py; ключ normalize_name(p["name"]) не меняется при правке (D-05)
 - [04-02] PLAN_02_ALLOWED_TYPES = {"group", "name"} — цена сознательно не редактируется в панели (D-07)
 - [04-02] normalize_name() скопирована в admin.py без зависимостей — ключ нормализуется на сервере
+- [04-03] cloudinary_helper.py: shell-out из admin.py; папка всегда presenter/ (D-06); graceful при отсутствии ключей
+- [04-03] /photo: валидация ext+mime+size ДО Cloudinary; tempfile + finally os.unlink (T-04-09, T-04-10)
+- [04-03] /save белый список расширен до {group, name, photo}; photo допускает пустое value (сброс привязки)
 
 ### Ожидающие задачи
 
@@ -105,5 +108,5 @@ progress:
 ## Непрерывность сессий
 
 Последняя сессия: 2026-06-07
-Остановились на: План 04-02 выполнен. Следующий: 04-03 (загрузка фото Cloudinary из панели). Серверные планы (04-04) — через субагента sysadmin.
-Файл продолжения: .planning/phases/04-1/04-03-PLAN.md
+Остановились на: План 04-03 выполнен. Следующий: 04-04 (деплой через субагента sysadmin — установка cloudinary, перезапуск службы, боевая проверка фото с телефона).
+Файл продолжения: .planning/phases/04-1/04-04-PLAN.md

@@ -118,7 +118,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2)*
 
-- [ ] 04-03-PLAN.md — Ломтик «привязать фото с телефона»: cloudinary_helper + /photo (валидация JPG/PNG/WebP ≤10 МБ) + Dropzone (ADM-04)
+- [x] 04-03-PLAN.md — Ломтик «привязать фото с телефона»: cloudinary_helper + /photo (валидация JPG/PNG/WebP ≤10 МБ) + Dropzone (ADM-04)
 
 **Wave 4** *(blocked on Wave 3)*
 
@@ -135,4 +135,4 @@ Plans:
 | 1. Боевой прогон нового формата 1С | 3/3 | Complete   | 2026-06-07 |
 | 2. Переделка страницы загрузчика | 2/2 | Complete   | 2026-06-07 |
 | 3. Память правок | 2/2 | Complete   | 2026-06-07 |
-| 4. Админ-панель владельца | 2/4 | In Progress|  |
+| 4. Админ-панель владельца | 3/4 | In Progress|  |
