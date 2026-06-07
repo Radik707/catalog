@@ -429,7 +429,14 @@ def upload(token: str):
             skipped.append(f.filename)
             continue
         dest = unique_path(INCOMING_DIR, sanitize_filename(f.filename))
-        f.save(str(dest))
+        # Сохранение на диск может упасть (нет места, прав, путь занят) —
+        # не даём трассировке уйти оператору, пропускаем файл и продолжаем
+        try:
+            f.save(str(dest))
+        except OSError as e:
+            log.warning("Не удалось сохранить файл %s: %s", f.filename, e)
+            skipped.append(f.filename)
+            continue
         saved.append(dest.name)
         log.info("Загружен файл: %s", dest.name)
     return jsonify(ok=True, saved=saved, skipped=skipped, files=list_files())
