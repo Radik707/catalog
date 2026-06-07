@@ -62,9 +62,20 @@ UPLOAD_TIMEOUT = int(os.environ.get("UPLOAD_TIMEOUT", "600"))
 # --- Blueprint: изолируем маршруты панели от загрузчика ---
 admin_bp = Blueprint("admin", __name__)
 
-# --- Допустимые типы правок в этом плане (расширится в 02/03) ---
-# В плане 01: только 'group'; name/photo добавятся в планах 02/03
-PLAN_01_ALLOWED_TYPES = {"group"}
+# --- Допустимые типы правок: план 02 добавил 'name' к 'group' (D-05, D-07) ---
+# D-07: цена сознательно НЕ редактируется в панели (только group и name)
+PLAN_02_ALLOWED_TYPES = {"group", "name"}
+
+
+def normalize_name(name: str) -> str:
+    """Нормализовать название — ключ сопоставления (копия из upload.py, без зависимостей).
+
+    Убирает хвостовую единицу (шт/кг/упак), переводит в нижний регистр, сжимает пробелы.
+    Используется в /save для вычисления ключа правки на сервере (D-05).
+    """
+    import re as _re
+    clean = _re.sub(r",\s*[А-Яа-яA-Za-z.]+\s*$", "", name).strip()
+    return _re.sub(r"\s+", " ", clean).strip().lower()
 
 # ── Строки групп для выпадающего списка (11 базовых + служебные) ──
 GROUPS = [
@@ -164,7 +175,7 @@ def admin_save(token: str):
     """Сохранить правку товара во вкладку «Правки».
 
     Принимает JSON: {key: str, type: str, value: str}
-    В плане 01: принимает только type="group" (белый список PLAN_01_ALLOWED_TYPES).
+    В плане 02: принимает type="group" и type="name" (белый список PLAN_02_ALLOWED_TYPES, D-07).
     rc=0 → 200 + {ok: true}; rc!=0 → 500 + {ok: false}.
     Технические детали — только в log, клиенту нейтральное сообщение (T-04-04).
     """
@@ -179,8 +190,8 @@ def admin_save(token: str):
     if not key:
         return jsonify(ok=False, message="Не удалось сохранить правку. Ключ товара не указан."), 400
 
-    # Белый список типов правок — в этом плане только group (T-04-02)
-    if edit_type not in PLAN_01_ALLOWED_TYPES:
+    # Белый список типов правок: group + name (T-04-02, T-04-07, D-07)
+    if edit_type not in PLAN_02_ALLOWED_TYPES:
         return jsonify(
             ok=False,
             message="Не удалось сохранить правку. Неподдерживаемый тип правки.",
@@ -188,6 +199,11 @@ def admin_save(token: str):
 
     if not value:
         return jsonify(ok=False, message="Не удалось сохранить правку. Значение не указано."), 400
+
+    # --- Нормализация ключа на сервере (D-05) ---
+    # Ключ правки всегда = normalize_name(имя из прайса) — независимо от типа правки.
+    # Это гарантирует, что правка name не «уведёт» товар на другой ключ.
+    key = normalize_name(key)
 
     # --- Запись через sheet_helper append_edit ---
     try:
@@ -298,7 +314,7 @@ def admin_apply(token: str):
 # ── Одностраничный HTML (PAGE) ──
 # Структура: Tabler CSS из CDN (только стили, без JS), mobile-first, container-sm 640px.
 # Экран 1: список товаров с фильтрами и поиском.
-# Экран 2: правка товара (группа).
+# Экран 2: правка товара (отображаемое название + группа).
 # Тексты строго из копирайтинг-контракта UI-SPEC.
 PAGE = r"""<!doctype html>
 <html lang="ru">
@@ -385,6 +401,15 @@ PAGE = r"""<!doctype html>
         <div class="mb-3">
           <label class="form-label text-muted" style="font-size:14px">Название (из прайса):</label>
           <div id="edit-name-display" class="fw-semibold" style="font-size:16px"></div>
+        </div>
+
+        <!-- Поле отображаемого названия (план 02, D-05) — пустое = использовать из прайса -->
+        <div class="mb-3">
+          <label class="form-label" for="edit-display-name">Отображаемое название</label>
+          <input id="edit-display-name" class="form-control" type="text"
+                 placeholder="Введите название для каталога..."
+                 autocomplete="off">
+          <div class="form-text text-muted">Оставьте пустым, чтобы использовать название из прайса</div>
         </div>
 
         <div class="mb-3">
@@ -479,20 +504,32 @@ function showEditScreen(product) {
   currentProduct = product;
   // Заполняем поля экрана правки
   document.getElementById("edit-name-display").textContent = product.name;
+
+  // Предзаполнить поле «Отображаемое название» — текущей правкой или пустым (D-05)
+  const nameInput = document.getElementById("edit-display-name");
+  nameInput.value = product.display_name || "";
+
   const sel = document.getElementById("edit-group");
   // Предвыбрать текущую группу из каталога (если есть)
   sel.value = product.group || "";
+
   // Сброс статуса и кнопки
   document.getElementById("status-edit").className = "status";
   document.getElementById("status-edit").textContent = "";
   document.getElementById("btn-save").disabled = true;
+
   // Переключить экран
   document.getElementById("screen-list").style.display = "none";
   document.getElementById("screen-edit").style.display = "";
-  // Слушатель изменения группы — активирует кнопку «Сохранить правку»
-  sel.onchange = () => {
-    document.getElementById("btn-save").disabled = (sel.value === "");
-  };
+
+  // Активировать кнопку «Сохранить правку» при любом изменении полей (план 02, UI-SPEC)
+  function checkChanged() {
+    const nameChanged = nameInput.value !== (product.display_name || "");
+    const groupChanged = sel.value !== "" && sel.value !== (product.group || "");
+    document.getElementById("btn-save").disabled = !(nameChanged || groupChanged);
+  }
+  nameInput.oninput = checkChanged;
+  sel.onchange = checkChanged;
 }
 
 /* ── Фильтрация и поиск ── */
@@ -647,41 +684,72 @@ async function loadProducts() {
 
 async function saveEdit() {
   if (!currentProduct) return;
-  const group = document.getElementById("edit-group").value;
-  if (!group) return;
+
+  const group       = document.getElementById("edit-group").value;
+  const displayName = document.getElementById("edit-display-name").value.trim();
+
+  // Проверяем наличие хотя бы одного изменения
+  const nameChanged  = displayName !== (currentProduct.display_name || "");
+  const groupChanged = group !== "" && group !== (currentProduct.group || "");
+  if (!nameChanged && !groupChanged) return;
 
   document.getElementById("btn-save").disabled = true;
   showEdit("info", "Сохраняем правку...");
 
-  // Нормализованный ключ вычисляем на сервере при записи — передаём сырое имя
-  // На стороне sheet_helper normalize_name будет применён к --key
-  // Здесь передаём нормализованный ключ: упрощённая нормализация в JS
-  // (точное соответствие normalize_name из upload.py необязательно в UI —
-  //  нормализация происходит в sheet_helper при записи; здесь просто ID карточки)
+  // Ключ правки = сырое имя из прайса; normalize_name применяется на сервере в /save (D-05)
   const key = currentProduct.name;
 
-  const d = await apiCall(`/${TOKEN}/save`, {
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ key: key, type: "group", value: group }),
-  });
+  // Сохраняем правки последовательно (может быть 1 или 2 типа)
+  let lastResult = null;
+  let anyOk = false;
+
+  // Правка отображаемого названия (план 02, D-05)
+  if (nameChanged) {
+    const d = await apiCall(`/${TOKEN}/save`, {
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: key, type: "name", value: displayName }),
+    });
+    lastResult = d;
+    if (d && d.ok) {
+      anyOk = true;
+      // Обновить локальный объект товара
+      currentProduct.display_name = displayName;
+      const idx = allProducts.findIndex(p => p.name === currentProduct.name);
+      if (idx >= 0) allProducts[idx].display_name = displayName;
+    }
+  }
+
+  // Правка группы (план 01)
+  if (groupChanged) {
+    const d = await apiCall(`/${TOKEN}/save`, {
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: key, type: "group", value: group }),
+    });
+    lastResult = d;
+    if (d && d.ok) {
+      anyOk = true;
+      // Обновить локальный объект товара
+      currentProduct.group = group;
+      const idx = allProducts.findIndex(p => p.name === currentProduct.name);
+      if (idx >= 0) allProducts[idx].group = group;
+    }
+  }
 
   document.getElementById("btn-save").disabled = false;
 
-  if (!d) {
+  if (!lastResult) {
     showEdit("err", "Ошибка соединения. Попробуйте ещё раз.");
     return;
   }
 
-  showEdit(d.ok ? "ok" : "err", d.message);
+  // Показать последний статус; при успехе — вернуться к списку через 1.5 с
+  showEdit(anyOk ? "ok" : "err",
+    anyOk
+      ? "Правка сохранена. Она применится автоматически при следующем обновлении прайса или нажмите «Применить сейчас»."
+      : (lastResult.message || "Не удалось сохранить правку."));
 
-  if (d.ok) {
-    // Обновить карточку в памяти (чтобы фильтр отразил изменение)
-    currentProduct.group = group;
-    // Через 1.5 с вернуться к списку
+  if (anyOk) {
     setTimeout(() => {
-      // Обновить данные в allProducts
-      const idx = allProducts.findIndex(p => p.name === currentProduct.name);
-      if (idx >= 0) allProducts[idx].group = group;
       showList();
       renderProducts(allProducts);
     }, 1500);
