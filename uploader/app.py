@@ -19,14 +19,20 @@ scripts/upload.py, который заливает данные в Google Sheet.
     PYTHON_BIN       — интерпретатор для запуска upload.py (по умолч. текущий)
     UPLOAD_TIMEOUT   — таймаут запуска upload.py в секундах (по умолч. 600)
     HOST, PORT       — адрес/порт для встроенного сервера (по умолч. 127.0.0.1:8000)
+    HISTORY_FILE     — путь к файлу истории JSON (по умолч. <script_dir>/history.json)
 """
 
 import os
 import re
 import sys
 import glob
+import json
+import secrets
 import logging
+import tempfile
+import threading
 import subprocess
+from datetime import datetime
 from pathlib import Path
 
 from flask import Flask, request, jsonify, abort
@@ -69,9 +75,167 @@ UPLOAD_TIMEOUT = int(os.environ.get("UPLOAD_TIMEOUT", "600"))
 LAST_BATCH_DIR = Path(os.environ.get("LAST_BATCH_DIR", str(SCRIPT_DIR / "last_batch")))
 NOTIFY_SCRIPT = UPLOAD_SCRIPT.parent / "notify_tg.py"  # отправка уведомлений в Telegram
 WARN_RATIO = float(os.environ.get("WARN_RATIO", "0.5"))  # порог «подозрительно мало»
+# Путь к файлу истории загрузок (env с дефолтом)
+HISTORY_FILE = Path(os.environ.get("HISTORY_FILE", str(SCRIPT_DIR / "history.json")))
+
+# Глобальный замок для защиты от двойного запуска обработки (gunicorn -w 1)
+PROCESS_LOCK = threading.Lock()
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # лимит загрузки 50 МБ
+
+
+# ── Журнал истории ──
+
+def load_history() -> list[dict]:
+    """Загрузить историю загрузок из JSON-файла.
+
+    При отсутствии файла или повреждённом JSON возвращает пустой список.
+    """
+    if not HISTORY_FILE.exists():
+        return []
+    try:
+        with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, list) else []
+    except (json.JSONDecodeError, OSError):
+        return []
+
+
+def _save_history_atomic(history: list[dict]) -> None:
+    """Атомарная запись истории: сначала во временный файл, затем os.replace."""
+    HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
+    # Создаём временный файл в той же директории для атомарного переименования
+    fd, tmp_path = tempfile.mkstemp(dir=HISTORY_FILE.parent, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(history, f, ensure_ascii=False, indent=2)
+        os.replace(tmp_path, HISTORY_FILE)
+    except Exception:
+        # Убираем временный файл если что-то пошло не так
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
+def append_history(entry: dict) -> str:
+    """Добавить запись в начало истории, обрезать до 10 записей, сохранить атомарно.
+
+    Возвращает уникальный id записи для последующего обновления.
+    """
+    entry_id = secrets.token_hex(8)
+    entry["id"] = entry_id
+    history = load_history()
+    history.insert(0, entry)
+    history = history[:10]  # храним последние 10 записей
+    _save_history_atomic(history)
+    return entry_id
+
+
+def update_history(entry_id: str, **fields) -> None:
+    """Обновить поля существующей записи по id, сохранить атомарно."""
+    history = load_history()
+    for item in history:
+        if item.get("id") == entry_id:
+            item.update(fields)
+            break
+    _save_history_atomic(history)
+
+
+# ── Фоновая обработка ──
+
+def _process_async(entry_id: str) -> None:
+    """Фоновая обработка: бэкап → upload.py → warn/stash/rollback → notify → история.
+
+    Выполняется в отдельном потоке (threading.Thread daemon).
+    Все подробные сообщения уходят ТОЛЬКО владельцу через notify().
+    Оператор видит только нейтральный result_text в таблице истории.
+    Lock освобождается в finally — гарантированно, даже при исключении.
+    """
+    try:
+        # 1. Резервная копия ДО обновления — без страховки не рискуем
+        b_ok, b_rows = backup_catalog()
+        if not b_ok:
+            notify("error", "❌ Не удалось сохранить резервную копию каталога — обновление отменено.")
+            update_history(
+                entry_id,
+                status="error",
+                count=None,
+                result_text="Ошибка создания резервной копии — обновление отменено. Администратор уведомлён.",
+            )
+            return
+
+        # 2. Само обновление
+        ok, err, count = run_upload()
+
+        if not ok:
+            # Ошибка разбора/записи: возвращаем рабочую версию, файлы — в архив
+            rollback_catalog()
+            archive_incoming()
+            notify(
+                "error",
+                "❌ Обновление каталога не удалось — файлы не распознались.\n"
+                f"{err}\nВернул прошлую версию. Нажмите, чтобы посмотреть файлы.",
+            )
+            update_history(
+                entry_id,
+                status="error",
+                count=None,
+                result_text="Ошибка обработки — администратор уведомлён. Каталог не изменён.",
+            )
+            return
+
+        # 3. Обновление прошло. Файлы — в архив
+        archive_incoming()
+        warn = bool(count is not None and b_rows and count < b_rows * WARN_RATIO)
+
+        if warn:
+            # Подозрительно мало: откладываем новую, возвращаем прошлую, спрашиваем владельца
+            stash_new()
+            rollback_catalog()
+            notify(
+                "decision",
+                f"⚠️ Загрузка дала {count} товаров, а было {b_rows} — это сильно меньше обычного.\n"
+                "Я вернул прошлую версию каталога. Что делать?",
+            )
+            update_history(
+                entry_id,
+                status="warn",
+                count=count,
+                result_text="Мало товаров — отправлено на проверку администратору. Пока действует прошлая версия.",
+            )
+            return
+
+        # 4. Всё хорошо
+        notify("plain", f"✅ Каталог обновлён: {count} товаров.")
+        update_history(
+            entry_id,
+            status="ok",
+            count=count,
+            result_text=f"Загружено {count} товаров. Сайт обновится за минуту.",
+        )
+
+    except Exception as exc:
+        # Любое необработанное исключение — нейтральный статус оператору, детали владельцу
+        log.exception("Необработанное исключение в _process_async: %s", exc)
+        try:
+            notify("error", f"❌ Непредвиденная ошибка обновления каталога: {exc}")
+        except Exception:
+            pass
+        try:
+            update_history(
+                entry_id,
+                status="error",
+                count=None,
+                result_text="Ошибка обработки — администратор уведомлён.",
+            )
+        except Exception:
+            pass
+    finally:
+        # Освобождаем замок — всегда, чтобы зависший поток не заблокировал следующий запуск
+        PROCESS_LOCK.release()
 
 
 # ── Работа с файлами ──
@@ -283,51 +447,49 @@ def clear(token: str):
 
 @app.post("/<token>/update")
 def update(token: str):
+    """Асинхронное обновление каталога.
+
+    Мгновенно возвращает оператору нейтральное подтверждение,
+    вся обработка идёт в фоновом потоке (_process_async).
+    Защита от двойного запуска через PROCESS_LOCK (acquire без блокировки).
+    """
     check(token)
     if not list_files():
         return jsonify(ok=False, message="Нет файлов для обновления.")
 
-    # 1. Резервная копия ДО обновления — без страховки не рискуем.
-    b_ok, b_rows = backup_catalog()
-    if not b_ok:
-        return jsonify(ok=False, files=list_files(), message=(
-            "Не удалось сохранить резервную копию каталога — обновление отменено "
-            "ради безопасности. Попробуйте ещё раз; если повторяется — сообщите."
-        ))
+    # Пытаемся захватить замок без ожидания
+    if not PROCESS_LOCK.acquire(blocking=False):
+        # Обработка уже идёт — второй поток не стартуем
+        return jsonify(ok=False, message="Обработка уже идёт, подождите.")
 
-    # 2. Само обновление.
-    ok, err, count = run_upload()
+    # Замок захвачен — делаем снимок имён файлов и запускаем фон
+    # (Lock освободит _process_async в своём finally-блоке)
+    current_files = list_files()
+    entry_id = append_history({
+        "ts": datetime.utcnow().isoformat(),
+        "status": "processing",
+        "count": None,
+        "result_text": "обрабатывается…",
+        "files": current_files,
+    })
 
-    if not ok:
-        # Ошибка разбора/записи: возвращаем рабочую версию, файлы — в архив для проверки.
-        rollback_catalog()
-        archive_incoming()
-        notify("error", "❌ Обновление каталога не удалось — файлы не распознались.\n"
-                        f"{err}\nВернул прошлую версию. Нажмите, чтобы посмотреть файлы.")
-        return jsonify(ok=False, files=list_files(), message=(
-            "Обновление не удалось — данные в файле не распознались. "
-            "Каталог не изменён, администратор уведомлён."))
+    thread = threading.Thread(target=_process_async, args=(entry_id,), daemon=True)
+    thread.start()
+    log.info("Запущен фоновый поток обработки, entry_id=%s", entry_id)
 
-    # 3. Обновление прошло. Файлы — в архив (для возможной проверки админом).
-    archive_incoming()
-    warn = bool(count is not None and b_rows and count < b_rows * WARN_RATIO)
+    # Немедленный нейтральный ответ — оператор не ждёт
+    return jsonify(ok=True, message="Файлы отправлены, обработка идёт.")
 
-    if warn:
-        # Подозрительно мало: откладываем новую, возвращаем прошлую, спрашиваем владельца.
-        stash_new()          # Товары (новые) → Товары_NEW
-        rollback_catalog()   # Товары_BACKUP (прошлые) → Товары  (на сайте — рабочая версия)
-        notify("decision",
-               f"⚠️ Загрузка дала {count} товаров, а было {b_rows} — это сильно меньше обычного.\n"
-               "Я вернул прошлую версию каталога. Что делать?")
-        return jsonify(ok=True, warn=True, files=list_files(), message=(
-            f"Загрузка прошла, но товаров получилось мало ({count} вместо ~{b_rows}). "
-            "На всякий случай вернул прошлую версию и отправил администратору на проверку."))
 
-    # 4. Всё хорошо.
-    notify("plain", f"✅ Каталог обновлён: {count} товаров.")
-    return jsonify(ok=True, warn=False, files=list_files(), message=(
-        f"Готово ✅ Загружено товаров: {count}. Прежняя версия сохранена для отката. "
-        "Сайт обновится за минуту."))
+@app.get("/<token>/history")
+def history(token: str):
+    """Вернуть историю загрузок (последние 10 записей) в формате JSON.
+
+    Поля каждой записи: id, ts, status, count, result_text, files.
+    Трассировки и технические детали не включаются (D-07).
+    """
+    check(token)
+    return jsonify(history=load_history())
 
 
 @app.post("/<token>/rollback")
@@ -379,6 +541,22 @@ PAGE = r"""<!doctype html>
   .rollback button { width:100%; }
   .rollback small { display:block; color:#9ca3af; margin-top:8px; font-size:13px; }
   .danger { background:#fff; color:#b91c1c; border:1px solid #fca5a5 !important; }
+  /* Таблица истории */
+  .history-section { margin-top:24px; padding-top:16px; border-top:1px solid #e5e7eb; }
+  .history-section h2 { font-size:15px; color:#374151; margin:0 0 10px; }
+  .history-table { width:100%; border-collapse:collapse; font-size:13px; }
+  .history-table th { text-align:left; color:#6b7280; font-weight:500;
+                      padding:4px 8px 8px; border-bottom:1px solid #e5e7eb; }
+  .history-table td { padding:8px; border-bottom:1px solid #f3f4f6; vertical-align:top; }
+  .history-table tr:last-child td { border-bottom:none; }
+  .history-table .ts { color:#6b7280; white-space:nowrap; font-size:12px; }
+  .history-table .fnames { color:#374151; }
+  .history-table .result { color:#111827; }
+  .history-table .result.processing { color:#1e40af; }
+  .history-table .result.ok { color:#065f46; }
+  .history-table .result.warn { color:#92400e; }
+  .history-table .result.err { color:#991b1b; }
+  .history-empty { color:#9ca3af; font-size:13px; text-align:center; padding:12px 0; }
 </style>
 </head>
 <body>
@@ -406,6 +584,12 @@ PAGE = r"""<!doctype html>
     <button class="act danger" id="rollback">↩ Откатить к прошлой версии</button>
     <small>Если каталог обновился неправильно — вернуть как было до последней загрузки.</small>
   </div>
+
+  <!-- История загрузок -->
+  <div class="history-section">
+    <h2>История загрузок</h2>
+    <div id="history"></div>
+  </div>
 </div>
 
 <script>
@@ -414,6 +598,9 @@ const $ = (id) => document.getElementById(id);
 const drop = $("drop"), input = $("input"), list = $("list"),
       empty = $("empty"), status = $("status"),
       updateBtn = $("update"), clearBtn = $("clear");
+
+// Идентификатор таймера поллинга истории
+let pollTimer = null;
 
 function show(kind, text) {
   status.className = "status " + kind;
@@ -462,6 +649,72 @@ async function uploadFiles(fileList) {
   }
 }
 
+// Форматирование метки времени ISO → локальный вид «ДД.ММ ЧЧ:ММ»
+function fmtTs(iso) {
+  try {
+    const d = new Date(iso + (iso.endsWith("Z") ? "" : "Z"));
+    const pad = n => String(n).padStart(2, "0");
+    return `${pad(d.getDate())}.${pad(d.getMonth()+1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  } catch { return iso || "—"; }
+}
+
+// Рендер таблицы истории загрузок
+function renderHistory(items) {
+  const container = $("history");
+  if (!items || !items.length) {
+    container.innerHTML = '<div class="history-empty">Загрузок ещё не было</div>';
+    return;
+  }
+  let html = '<table class="history-table"><thead><tr>'
+    + '<th>Время</th><th>Файлы</th><th>Итог</th>'
+    + '</tr></thead><tbody>';
+  for (const item of items) {
+    const statusCls = item.status === "processing" ? "processing"
+                    : item.status === "ok" ? "ok"
+                    : item.status === "warn" ? "warn"
+                    : "err";
+    const resultText = item.status === "processing"
+      ? "⏳ обрабатывается…"
+      : (item.result_text || "—");
+    const filesText = Array.isArray(item.files) && item.files.length
+      ? item.files.join(", ")
+      : "—";
+    html += `<tr>
+      <td class="ts">${fmtTs(item.ts)}</td>
+      <td class="fnames">${filesText}</td>
+      <td class="result ${statusCls}">${resultText}</td>
+    </tr>`;
+  }
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+// Загрузить и отобразить историю; вернуть true если есть «обрабатывается»
+async function loadHistory() {
+  try {
+    const r = await fetch(`/${TOKEN}/history`);
+    const d = await r.json();
+    const items = d.history || [];
+    renderHistory(items);
+    return items.some(i => i.status === "processing");
+  } catch (e) {
+    // Ошибка сети — не ломаем UI
+    return false;
+  }
+}
+
+// Запустить поллинг истории каждые 4 секунды, пока есть «обрабатывается»
+function startPolling() {
+  if (pollTimer) return; // уже запущен
+  pollTimer = setInterval(async () => {
+    const hasProcessing = await loadHistory();
+    if (!hasProcessing) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
+  }, 4000);
+}
+
 input.onchange = () => { uploadFiles(input.files); input.value = ""; };
 ["dragenter","dragover"].forEach(ev => drop.addEventListener(ev, e => {
   e.preventDefault(); drop.classList.add("over");
@@ -473,16 +726,19 @@ drop.addEventListener("drop", e => uploadFiles(e.dataTransfer.files));
 
 updateBtn.onclick = async () => {
   updateBtn.disabled = true;
-  show("info", "Обновляю каталог, подождите…");
+  show("info", "Отправляю запрос…");
   try {
     const r = await fetch(`/${TOKEN}/update`, { method:"POST" });
     const d = await r.json();
-    // Если успех, но есть предупреждение (мало товаров) — показываем тревожным цветом
-    show(d.ok ? (d.warn ? "err" : "ok") : "err", d.message);
-    render(d.files);
+    // Нейтральный ответ — только d.message, без технических деталей
+    show(d.ok ? "info" : "err", d.message);
+    // Сразу показываем историю (строка «обрабатывается…») и запускаем поллинг
+    await loadHistory();
+    if (d.ok) startPolling();
   } catch (e) {
     show("err", "Не удалось запустить обновление.");
   }
+  // Разблокируем кнопку сразу — повторный клик вернёт «Обработка уже идёт»
   updateBtn.disabled = false;
 };
 $("rollback").onclick = async () => {
@@ -504,7 +760,9 @@ clearBtn.onclick = async () => {
   show("info", d.message);
 };
 
+// Инициализация: загрузить список файлов и историю
 refresh();
+loadHistory();
 </script>
 </body>
 </html>"""
