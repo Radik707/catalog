@@ -1,6 +1,15 @@
 r"""
 upload.py — Скрипт-конвертер Excel → Google Sheet
-Этап 0, Задачи 0.2 + 0.3: парсинг Excel и запись в Google Sheet
+Поддерживает два формата прайс-листов: старый (A=категория/название, B=цена, C=остаток)
+и новый формат 1С (название в колонке D, «Цена»/«Остаток» в дальних колонках ≥ N).
+Формат определяется автоматически по индексу колонки «Цена».
+
+Новые товары (из нового формата, отсутствующие в текущем каталоге) получают
+группу «Новинки» и бейдж «новинка». При недоступности текущих групп каталога
+скрипт прерывается с кодом 1 (sys.exit), не допуская попадания всех товаров в «Новинки».
+
+Режим --dry-run: парсинг без записи в Google Sheet. Используется для проверки
+перед боевым прогоном (на сервере запускается через uploader/app.py с бэкапом через sheet_tool.py).
 
 Использование:
     python upload.py                            # парсинг + запись в Google Sheet
@@ -14,6 +23,7 @@ upload.py — Скрипт-конвертер Excel → Google Sheet
 """
 
 import os
+import re
 import sys
 import json
 import glob
@@ -164,6 +174,129 @@ def parse_excel_file(filepath: str) -> list[dict]:
     wb.close()
     log.info("  Найдено товаров: %d", len(products))
     return products
+
+
+# ── Поддержка НОВОГО формата выгрузки 1С ──
+# В новом формате: название в колонке D (индекс 3), а «Цена»/«Остаток» — в дальних
+# колонках (например N/O). Категорий-разделителей нет. Каждый товар продублирован
+# строкой с названием в колонке A (двойная запятая) — её пропускаем.
+NEW_FORMAT_NAME_COL = 3  # колонка D
+
+
+def find_header_cols(ws) -> tuple[int | None, int | None]:
+    """Найти индексы колонок «Цена» и «Остаток» в первых строках листа."""
+    for row in ws.iter_rows(min_row=1, max_row=10, values_only=True):
+        price_col = stock_col = None
+        for j, v in enumerate(row):
+            if v is None:
+                continue
+            s = str(v).strip().lower()
+            if s == "цена":
+                price_col = j
+            elif s == "остаток":
+                stock_col = j
+        if price_col is not None and stock_col is not None:
+            return price_col, stock_col
+    return None, None
+
+
+def is_new_format(price_col: int | None) -> bool:
+    """Новый формат — если «Цена» найдена в дальней колонке (D и правее), а не в B/C."""
+    return price_col is not None and price_col >= 5
+
+
+def clean_new_name(name: str) -> str:
+    """Убрать хвостовую ', <ед.>' (', шт' / ', кг' / ', упак' и т.п.) из названия."""
+    return re.sub(r",\s*[А-Яа-яA-Za-z.]+\s*$", "", name).strip()
+
+
+def normalize_name(name: str) -> str:
+    """Нормализовать название для сопоставления (без хвостовой единицы, нижний регистр)."""
+    return re.sub(r"\s+", " ", clean_new_name(name)).strip().lower()
+
+
+def parse_new_format(filepath: str, price_col: int, stock_col: int) -> list[dict]:
+    """Распарсить файл нового формата. Категорий нет (source_category пустой)."""
+    filename = Path(filepath).name
+    log.info("Парсинг (новый формат): %s", filename)
+    wb = openpyxl.load_workbook(filepath, data_only=True, read_only=True)
+    ws = wb.active
+    products = []
+    for row in ws.iter_rows(min_row=1, values_only=True):
+        name = row[NEW_FORMAT_NAME_COL] if len(row) > NEW_FORMAT_NAME_COL else None
+        price = row[price_col] if len(row) > price_col else None
+        stock = row[stock_col] if len(row) > stock_col else None
+        if not name or price is None:
+            continue
+        name = str(name).strip()
+        if name.lower() == "наименование":
+            continue
+        try:
+            price = round(float(price), 2)
+        except (ValueError, TypeError):
+            continue
+        try:
+            stock = int(float(stock)) if stock is not None else 0
+        except (ValueError, TypeError):
+            stock = 0
+        products.append({
+            "name": clean_new_name(name),
+            "price": price,
+            "stock": stock,
+            "source_category": "",   # категории нет — группа определяется по текущему каталогу
+            "supplier_file": filename,
+        })
+    wb.close()
+    log.info("  Найдено товаров: %d", len(products))
+    return products
+
+
+def load_current_groups() -> dict:
+    """Прочитать текущий каталог (лист «Товары») → {норм_название: группа}.
+
+    Нужно для нового формата: сохранить группировку существующих товаров и
+    определить действительно новые (которых не было).
+    """
+    try:
+        import gspread
+        from google.oauth2.service_account import Credentials
+    except ImportError:
+        return {}
+    creds_path = os.environ.get("GOOGLE_CREDENTIALS_PATH", "")
+    if not creds_path:
+        for d in (SCRIPT_DIR, PROJECT_ROOT):
+            c = d / "credentials.json"
+            if c.exists():
+                creds_path = str(c)
+                break
+    sheets_id = os.environ.get("GOOGLE_SHEETS_ID", "")
+    if not creds_path or not sheets_id:
+        return {}
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive",
+    ]
+    try:
+        creds = Credentials.from_service_account_file(creds_path, scopes=scopes)
+        ss = gspread.authorize(creds).open_by_key(sheets_id)
+        values = ss.worksheet("Товары").get_all_values()
+    except Exception as e:  # noqa: BLE001
+        log.warning("Не удалось прочитать текущие группы: %s", e)
+        return {}
+    if not values:
+        return {}
+    header = values[0]
+    try:
+        name_i = header.index("Наименование")
+        grp_i = header.index("Группа")
+    except ValueError:
+        return {}
+    mapping = {}
+    for r in values[1:]:
+        if len(r) > max(name_i, grp_i) and r[name_i] and r[grp_i]:
+            mapping[normalize_name(r[name_i])] = r[grp_i]
+    log.info("Загружено групп из текущего каталога: %d", len(mapping))
+    return mapping
 
 
 # Переопределение категории по началу названия товара (регистронезависимо).
@@ -344,18 +477,22 @@ def products_to_rows(
     products: list[dict],
     badges: dict | None = None,
     photo_data: dict[str, dict[str, str]] | None = None,
+    new_names: set | None = None,
 ) -> list[list]:
     """Преобразовать список товаров в строки для Google Sheet.
 
     Формат: [Наименование, Цена, Остаток, Категория, Группа, Поставщик, Badge, ImageUrl, Description]
+    Товары из new_names (реально новые) получают бейдж «новинка».
     """
     if badges is None:
         badges = {"исключения": [], "новинка": [], "хит": [], "акция": []}
     if photo_data is None:
         photo_data = {}
+    new_names = new_names or set()
     header = ["Наименование", "Цена", "Остаток", "Категория", "Группа", "Поставщик", "Badge", "ImageUrl", "Description"]
     rows = [header]
     for p in products:
+        badge = "новинка" if p["name"] in new_names else get_badge(p["name"], badges)
         rows.append([
             p["name"],
             p["price"],
@@ -363,7 +500,7 @@ def products_to_rows(
             p["source_category"],
             p["display_group"],
             p["supplier_file"],
-            get_badge(p["name"], badges),
+            badge,
             get_photo_url(p["name"], photo_data),
             get_photo_description(p["name"], photo_data),
         ])
@@ -521,19 +658,47 @@ def main():
     # Загрузить маппинг фото
     photo_data = load_photo_data()
 
-    # Парсить все файлы
+    # Парсить все файлы (авто-определение формата: старый vs новый)
     all_products = []
+    new_format_used = False
     for filepath in xlsx_files:
-        products = parse_excel_file(filepath)
-        all_products.extend(products)
+        wb = openpyxl.load_workbook(filepath, data_only=True, read_only=True)
+        price_col, stock_col = find_header_cols(wb.active)
+        wb.close()
+        if is_new_format(price_col):
+            new_format_used = True
+            all_products.extend(parse_new_format(filepath, price_col, stock_col))
+        else:
+            all_products.extend(parse_excel_file(filepath))
 
     log.info("Всего товаров из %d файлов: %d", len(xlsx_files), len(all_products))
 
-    # Применить маппинг групп
+    # Применить маппинг групп (старый формат — по category_map + переопределения)
     all_products = apply_group_mapping(all_products, category_map)
 
+    # Новый формат: групп в файле нет — берём из текущего каталога по названию,
+    # а товары, которых раньше не было, помечаем как новинки и кладём в «Новинки».
+    new_names: set = set()
+    if new_format_used:
+        current_groups = load_current_groups()
+        if not current_groups:
+            log.error("Новый формат, но не удалось прочитать текущие группы каталога — "
+                      "обновление прервано (иначе все товары попали бы в «Новинки»).")
+            sys.exit(1)
+        new_count = 0
+        for p in all_products:
+            if p["source_category"] == "":  # пришёл из нового формата
+                g = current_groups.get(normalize_name(p["name"]))
+                if g and g != "Новинки":
+                    p["display_group"] = g
+                else:
+                    p["display_group"] = "Новинки"
+                    new_names.add(p["name"])
+                    new_count += 1
+        log.info("Новых товаров (в «Новинки»): %d", new_count)
+
     # Подготовить строки для Google Sheet
-    rows = products_to_rows(all_products, badges, photo_data)
+    rows = products_to_rows(all_products, badges, photo_data, new_names)
 
     # Статистика по группам
     groups = {}
