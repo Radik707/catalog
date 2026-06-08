@@ -606,20 +606,20 @@ PAGE = r"""<!doctype html>
 
   /* Название + карандаш правки */
   .pcard-name-row { display: flex; align-items: flex-start; gap: 6px; }
+  /* Название НИКОГДА не обрезается: переносится полностью на любое число строк.
+     overflow-wrap/word-break — чтобы и длинные слова не вылезали за карточку.
+     Высоту не фиксируем — пусть карточка растёт по тексту (grid auto-fill держит). */
   .pcard-name { font-size: 14px; font-weight: 600; color: #111827; line-height: 1.25;
-                word-break: break-word; flex: 1; }
-  /* В сетке название — ровно 2 строки с многоточием (line-clamp),
-     чтобы высота карточек не «прыгала». В списке — без ограничения. */
-  .view-grid .pcard-name {
-    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
-    overflow: hidden;
-  }
+                flex: 1; white-space: normal;
+                overflow-wrap: break-word; word-break: break-word; }
   .pcard-edit-name { cursor: pointer; background: none; border: 0; font-size: 16px;
                      line-height: 1; padding: 2px; color: #6b7280; }
   .pcard-name-input { width: 100%; font-size: 14px; }
 
-  /* Select группы — крупный, удобный для пальца */
-  .pcard-group { width: 100%; font-size: 14px; min-height: 44px; }
+  /* Select группы — крупный, удобный для пальца.
+     padding-right оставляет место под стрелку списка, чтобы длинные значения
+     (напр. «Конфеты и печенье») не налезали на стрелку. */
+  .pcard-group { width: 100%; font-size: 14px; min-height: 44px; padding-right: 26px; }
 
   /* ── Кнопки-переключатели меток «NEW» / «Хит» ── */
   .pcard-badges-toggle { display: flex; gap: 6px; }
@@ -658,9 +658,10 @@ PAGE = r"""<!doctype html>
   .view-grid.density-m .pcard-body { padding: 8px;  gap: 6px; }
   .view-grid.density-s .pcard-body { padding: 6px;  gap: 5px; }
 
-  /* Название */
+  /* Название — только уменьшаем шрифт по плотности, БЕЗ обрезки.
+     Текст переносится полностью, высота карточки растёт по содержимому. */
   .view-grid.density-l .pcard-name { font-size: 14px; }
-  .view-grid.density-m .pcard-name { font-size: 13px; }
+  .view-grid.density-m .pcard-name { font-size: 12.5px; line-height: 1.2; }
   .view-grid.density-s .pcard-name { font-size: 11.5px; line-height: 1.2; }
 
   /* Карандаш правки названия */
@@ -675,15 +676,17 @@ PAGE = r"""<!doctype html>
   .view-grid.density-m .pcard-hints { font-size: 11px; }
   .view-grid.density-s .pcard-hints { font-size: 10.5px; }
 
-  /* Кнопки-метки NEW / Хит — высота не ниже 28px (тач-цель сохраняется) */
-  .view-grid.density-l .badge-toggle { min-height: 38px; font-size: 13px; }
-  .view-grid.density-m .badge-toggle { min-height: 32px; font-size: 12px; }
-  .view-grid.density-s .badge-toggle { min-height: 28px; font-size: 11px; padding: 0 4px; }
+  /* Кнопки-метки NEW / Хит — компактнее, чтобы освободить место под полное название.
+     Остаются нажимаемыми и читаемыми (тач-цель не ниже ~26px). */
+  .view-grid.density-l .badge-toggle { min-height: 34px; font-size: 12.5px; }
+  .view-grid.density-m .badge-toggle { min-height: 28px; font-size: 11px; padding: 0 4px; }
+  .view-grid.density-s .badge-toggle { min-height: 26px; font-size: 10.5px; padding: 0 3px; }
 
-  /* Выпадающий список группы — остаётся кликабельным на всех уровнях */
-  .view-grid.density-l .pcard-group { font-size: 14px; min-height: 44px; }
-  .view-grid.density-m .pcard-group { font-size: 12px; min-height: 34px; padding: 4px 8px; }
-  .view-grid.density-s .pcard-group { font-size: 11.5px; min-height: 30px; padding: 2px 6px; }
+  /* Выпадающий список группы — остаётся кликабельным на всех уровнях.
+     padding-right под стрелку увеличен, чтобы текст значения не перекрывался стрелкой. */
+  .view-grid.density-l .pcard-group { font-size: 14px; min-height: 44px; padding-right: 26px; }
+  .view-grid.density-m .pcard-group { font-size: 11.5px; min-height: 32px; padding: 3px 22px 3px 6px; }
+  .view-grid.density-s .pcard-group { font-size: 11px;   min-height: 28px; padding: 2px 20px 2px 5px; }
 
   /* Кнопка фото — высота не ниже 30px (тач-цель сохраняется) */
   .view-grid.density-l .pcard-photo-btn { min-height: 44px; font-size: 14px; }
