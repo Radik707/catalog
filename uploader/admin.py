@@ -934,7 +934,7 @@ function buildCard(p, i) {
       </div>
       <select class="form-select pcard-group">${groupOpts}</select>
       <button class="btn btn-outline-secondary pcard-photo-btn" type="button">${photoBtnLabel}</button>
-      <input type="file" id="${fileId}" accept="image/*" capture="environment">
+      <input type="file" id="${fileId}" accept="image/*">
       <div class="pcard-status"></div>
     </div>`;
 
