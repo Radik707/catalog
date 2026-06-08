@@ -529,25 +529,45 @@ PAGE = r"""<!doctype html>
                  min-height: 44px; }
   .filter-tab.active { background: #2563eb; color: #fff; border-color: #2563eb; }
 
-  /* Переключатель вида (Сетка / Список) */
-  .view-toggle { display: inline-flex; border: 1px solid #d1d5db; border-radius: 8px;
-                 overflow: hidden; }
-  .view-toggle button { border: 0; background: #fff; padding: 8px 16px; cursor: pointer;
-                        font-size: 14px; color: #374151; min-height: 44px; }
-  .view-toggle button.active { background: #2563eb; color: #fff; }
+  /* Переключатель вида (Сетка / Список) и регулятор плотности — одинаковый стиль */
+  .view-toggle, .density-toggle {
+    display: inline-flex; border: 1px solid #d1d5db; border-radius: 8px;
+    overflow: hidden;
+  }
+  .view-toggle button, .density-toggle button {
+    border: 0; background: #fff; padding: 8px 16px; cursor: pointer;
+    font-size: 14px; color: #374151; min-height: 44px;
+  }
+  .view-toggle button.active, .density-toggle button.active {
+    background: #2563eb; color: #fff;
+  }
+  /* Разделитель между кнопками плотности */
+  .density-toggle button + button { border-left: 1px solid #d1d5db; }
+  /* Регулятор плотности скрыт в режиме «Список» (управляется JS-классом) */
+  .density-toggle.hidden { display: none; }
 
   /* Пустое состояние */
   .empty-state { text-align: center; padding: 48px 16px; color: #6b7280; }
   .empty-state h3 { margin: 0 0 8px; color: #374151; font-size: 16px; }
 
   /* ── Контейнер карточек: режим «Сетка» ── */
-  /* 2 колонки на телефоне, 3 на планшете (>=768px), 4 на широком (>=1100px). */
+  /* Число колонок подстраивается под ширину экрана через auto-fill + minmax.
+     Минимальная ширина карточки задаётся уровнем плотности (density-l/m/s):
+     чем мельче — тем больше карточек в ряд. На узком экране (телефон) колонок
+     становится меньше автоматически. --ui-scale пропорционально ужимает всё
+     внутри карточки (фото, шрифты, кнопки, отступы). */
   #products.view-grid {
-    display: grid; gap: 12px;
-    grid-template-columns: repeat(2, 1fr);
+    display: grid;
+    gap: var(--grid-gap, 12px);
+    grid-template-columns: repeat(auto-fill, minmax(var(--card-min, 230px), 1fr));
   }
-  @media (min-width: 768px)  { #products.view-grid { grid-template-columns: repeat(3, 1fr); } }
-  @media (min-width: 1100px) { #products.view-grid { grid-template-columns: repeat(4, 1fr); } }
+
+  /* Крупно (по умолчанию): большие карточки, ≈3–4 в ряд на мониторе */
+  #products.view-grid.density-l { --card-min: 230px; --grid-gap: 12px; --ui-scale: 1;    }
+  /* Средне: ≈4–5 в ряд */
+  #products.view-grid.density-m { --card-min: 175px; --grid-gap: 10px; --ui-scale: 0.86; }
+  /* Мелко: ≈6–7 в ряд, всё компактное */
+  #products.view-grid.density-s { --card-min: 130px; --grid-gap: 8px;  --ui-scale: 0.72; }
 
   /* ── Контейнер карточек: режим «Список» ── */
   #products.view-list { display: flex; flex-direction: column; gap: 10px; }
@@ -562,8 +582,13 @@ PAGE = r"""<!doctype html>
   .pcard-photo img { width: 100%; height: 100%; object-fit: contain; }
   .pcard-photo .ph-empty { color: #d1d5db; }
 
-  /* Сетка: фото сверху, фиксированная высота */
-  .view-grid .pcard-photo { height: 140px; }
+  /* Сетка: фото сверху, высота масштабируется уровнем плотности.
+     calc на базе 150px × --ui-scale: Крупно ~150px, Средне ~129px, Мелко ~108px.
+     Дополнительно уточняем явными правилами ниже для аккуратных значений. */
+  .view-grid .pcard-photo { height: calc(150px * var(--ui-scale, 1)); }
+  .view-grid.density-l .pcard-photo { height: 150px; }
+  .view-grid.density-m .pcard-photo { height: 110px; }
+  .view-grid.density-s .pcard-photo { height: 82px; }
   /* Список: мини-превью слева */
   .view-list .pcard { display: flex; align-items: stretch; }
   .view-list .pcard-photo { width: 72px; min-width: 72px; height: auto; }
@@ -583,6 +608,12 @@ PAGE = r"""<!doctype html>
   .pcard-name-row { display: flex; align-items: flex-start; gap: 6px; }
   .pcard-name { font-size: 14px; font-weight: 600; color: #111827; line-height: 1.25;
                 word-break: break-word; flex: 1; }
+  /* В сетке название — ровно 2 строки с многоточием (line-clamp),
+     чтобы высота карточек не «прыгала». В списке — без ограничения. */
+  .view-grid .pcard-name {
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+    overflow: hidden;
+  }
   .pcard-edit-name { cursor: pointer; background: none; border: 0; font-size: 16px;
                      line-height: 1; padding: 2px; color: #6b7280; }
   .pcard-name-input { width: 100%; font-size: 14px; }
@@ -614,6 +645,54 @@ PAGE = r"""<!doctype html>
 
   /* Кнопка «Применить сейчас» */
   .btn-apply { min-height: 48px; font-size: 16px; font-weight: 600; }
+
+  /* ──────────────────────────────────────────────────────────────────
+     ПРОПОРЦИОНАЛЬНОЕ МАСШТАБИРОВАНИЕ КАРТОЧЕК ПО УРОВНЯМ ПЛОТНОСТИ
+     Все правила ниже действуют ТОЛЬКО в режиме «Сетка» (.view-grid).
+     Режим «Список» не затрагивается. Тач-цели кнопок не опускаем ниже ~28–30px,
+     чтобы по ним можно было попасть даже на «Мелко».
+     ────────────────────────────────────────────────────────────────── */
+
+  /* Отступы и зазоры тела карточки */
+  .view-grid.density-l .pcard-body { padding: 10px; gap: 8px; }
+  .view-grid.density-m .pcard-body { padding: 8px;  gap: 6px; }
+  .view-grid.density-s .pcard-body { padding: 6px;  gap: 5px; }
+
+  /* Название */
+  .view-grid.density-l .pcard-name { font-size: 14px; }
+  .view-grid.density-m .pcard-name { font-size: 13px; }
+  .view-grid.density-s .pcard-name { font-size: 11.5px; line-height: 1.2; }
+
+  /* Карандаш правки названия */
+  .view-grid.density-m .pcard-edit-name { font-size: 15px; }
+  .view-grid.density-s .pcard-edit-name { font-size: 14px; padding: 1px; }
+
+  /* Бейджи (⚠ / Новинка) и подписи-подсказки */
+  .view-grid.density-m .badge-attn,
+  .view-grid.density-m .badge-new { font-size: 12px; padding: 1px 6px; }
+  .view-grid.density-s .badge-attn,
+  .view-grid.density-s .badge-new { font-size: 11px; padding: 1px 5px; }
+  .view-grid.density-m .pcard-hints { font-size: 11px; }
+  .view-grid.density-s .pcard-hints { font-size: 10.5px; }
+
+  /* Кнопки-метки NEW / Хит — высота не ниже 28px (тач-цель сохраняется) */
+  .view-grid.density-l .badge-toggle { min-height: 38px; font-size: 13px; }
+  .view-grid.density-m .badge-toggle { min-height: 32px; font-size: 12px; }
+  .view-grid.density-s .badge-toggle { min-height: 28px; font-size: 11px; padding: 0 4px; }
+
+  /* Выпадающий список группы — остаётся кликабельным на всех уровнях */
+  .view-grid.density-l .pcard-group { font-size: 14px; min-height: 44px; }
+  .view-grid.density-m .pcard-group { font-size: 12px; min-height: 34px; padding: 4px 8px; }
+  .view-grid.density-s .pcard-group { font-size: 11.5px; min-height: 30px; padding: 2px 6px; }
+
+  /* Кнопка фото — высота не ниже 30px (тач-цель сохраняется) */
+  .view-grid.density-l .pcard-photo-btn { min-height: 44px; font-size: 14px; }
+  .view-grid.density-m .pcard-photo-btn { min-height: 34px; font-size: 12px; padding: 4px 6px; }
+  .view-grid.density-s .pcard-photo-btn { min-height: 30px; font-size: 11px; padding: 2px 4px; }
+
+  /* Статус-строка карточки */
+  .view-grid.density-m .pcard-status,
+  .view-grid.density-s .pcard-status { font-size: 11px; }
 </style>
 </head>
 <body>
@@ -640,9 +719,17 @@ PAGE = r"""<!doctype html>
       <button class="filter-tab" data-filter="nophoto">Без фото</button>
       <button class="filter-tab" data-filter="all">Все</button>
     </div>
-    <div class="view-toggle" id="view-toggle">
-      <button data-view="grid">Сетка</button>
-      <button data-view="list">Список</button>
+    <div class="d-flex align-items-center flex-wrap gap-2">
+      <!-- Регулятор плотности сетки (виден только в режиме «Сетка») -->
+      <div class="density-toggle" id="density-toggle">
+        <button data-density="l">Крупно</button>
+        <button data-density="m">Средне</button>
+        <button data-density="s">Мелко</button>
+      </div>
+      <div class="view-toggle" id="view-toggle">
+        <button data-view="grid">Сетка</button>
+        <button data-view="list">Список</button>
+      </div>
     </div>
   </div>
 
@@ -673,6 +760,8 @@ let allProducts = [];
 let activeFilter = "attention";
 // Текущий вид: "grid" | "list" (сохраняется в localStorage)
 let activeView = localStorage.getItem("admin_view") || "grid";
+// Текущая плотность сетки: "l" | "m" | "s" (Крупно/Средне/Мелко), по умолчанию Крупно
+let activeDensity = localStorage.getItem("admin_density") || "l";
 // Таймер живого поиска (debounce 300ms)
 let searchTimer = null;
 // Список групп для выпадающего списка — точно как массив GROUPS в admin.py.
@@ -750,8 +839,12 @@ function filteredProducts() {
 
 function render() {
   const container = document.getElementById("products");
-  // Класс контейнера под выбранный вид
-  container.className = activeView === "list" ? "view-list" : "view-grid";
+  // Класс контейнера под выбранный вид; в сетке добавляем класс плотности.
+  if (activeView === "list") {
+    container.className = "view-list";
+  } else {
+    container.className = "view-grid density-" + activeDensity;
+  }
 
   const list = filteredProducts();
   container.innerHTML = "";
@@ -812,7 +905,9 @@ function buildCard(p, i) {
   });
 
   // ── Кнопка фото ──
-  const photoBtnLabel = p.image_url ? "📷 Заменить фото" : "📷 Добавить фото";
+  // Текст зависит от уровня плотности: на «Мелко» — короткая иконка/«Фото»,
+  // на «Средне» — «Фото», на «Крупно» — полный «Заменить/Добавить фото».
+  const photoBtnLabel = photoButtonLabel(!!p.image_url);
 
   // ── Кнопки-переключатели меток: активная (зелёная) если совпадает с p.badge ──
   const newActive = (p.badge === "новинка") ? " active" : "";
@@ -1006,7 +1101,8 @@ async function uploadPhoto(file, p, card, cardStatus) {
       // Обновить превью на карточке
       const photoBox = card.querySelector(".pcard-photo");
       photoBox.innerHTML = `<img src="${esc(p.image_url)}" alt="${esc(p.name)}">`;
-      card.querySelector(".pcard-photo-btn").textContent = "📷 Заменить фото";
+      // После загрузки кнопка превращается в «Заменить» (с учётом плотности)
+      card.querySelector(".pcard-photo-btn").textContent = photoButtonLabel(true);
       cardStatus("ok", "Фото сохранено ✓");
       toast("ok", "Фото сохранено ✓");
     } else {
@@ -1069,6 +1165,7 @@ document.getElementById("view-toggle").addEventListener("click", e => {
   activeView = btn.dataset.view;
   localStorage.setItem("admin_view", activeView);
   updateViewButtons();
+  updateDensityUI();
   render();
 });
 
@@ -1076,6 +1173,34 @@ function updateViewButtons() {
   document.querySelectorAll("#view-toggle button").forEach(b => {
     b.classList.toggle("active", b.dataset.view === activeView);
   });
+}
+
+/* ── Регулятор плотности сетки (Крупно / Средне / Мелко) ── */
+document.getElementById("density-toggle").addEventListener("click", e => {
+  const btn = e.target.closest("button[data-density]");
+  if (!btn) return;
+  activeDensity = btn.dataset.density;
+  localStorage.setItem("admin_density", activeDensity);
+  updateDensityUI();
+  render(); // перерисовка — чтобы текст кнопки фото обновился под уровень
+});
+
+// Обновить вид регулятора: подсветить активную кнопку и скрыть его в «Списке»
+function updateDensityUI() {
+  const toggle = document.getElementById("density-toggle");
+  // Плотность нужна только в сетке — в списке прячем контрол
+  toggle.classList.toggle("hidden", activeView !== "grid");
+  toggle.querySelectorAll("button").forEach(b => {
+    b.classList.toggle("active", b.dataset.density === activeDensity);
+  });
+}
+
+// Текст кнопки фото в зависимости от уровня плотности.
+// hasPhoto — true если у товара уже есть фото (тогда «Заменить»), иначе «Добавить».
+function photoButtonLabel(hasPhoto) {
+  if (activeDensity === "s") return "📷"; // Мелко — только иконка
+  if (activeDensity === "m") return "📷 Фото"; // Средне — коротко
+  return hasPhoto ? "📷 Заменить фото" : "📷 Добавить фото"; // Крупно — полностью
 }
 
 /* ── Живой поиск с debounce 300ms ── */
@@ -1086,6 +1211,7 @@ document.getElementById("search-input").addEventListener("input", () => {
 
 /* ── Инициализация ── */
 updateViewButtons();
+updateDensityUI();
 loadProducts();
 </script>
 </body>
