@@ -86,7 +86,8 @@ def normalize_name(name: str) -> str:
     clean = _re.sub(r",\s*[А-Яа-яA-Za-z.]+\s*$", "", name).strip()
     return _re.sub(r"\s+", " ", clean).strip().lower()
 
-# ── Строки групп для выпадающего списка (11 базовых + служебные) ──
+# ── Строки групп для выпадающего списка (только настоящие категории) ──
+# «Новинки» сюда НЕ входит: это МЕТКА (badge), а не группа — управляется кнопками на карточке.
 GROUPS = [
     "Напитки",
     "Энергетики",
@@ -102,7 +103,6 @@ GROUPS = [
     "Прикассовое",
     "Коробочные конфеты",
     "Крупы и бакалея",
-    "Новинки",
     "Другое",
 ]
 
@@ -199,16 +199,17 @@ def admin_save(token: str):
     if not key:
         return jsonify(ok=False, message="Не удалось сохранить правку. Ключ товара не указан."), 400
 
-    # Белый список типов правок: group + name + photo (план 03: photo-сброс, T-04-02, T-04-07)
-    SAVE_ALLOWED_TYPES = {"group", "name", "photo"}
+    # Белый список типов правок: group + name + photo + badge (метка «новинка»/«хит», T-04-02)
+    SAVE_ALLOWED_TYPES = {"group", "name", "photo", "badge"}
     if edit_type not in SAVE_ALLOWED_TYPES:
         return jsonify(
             ok=False,
             message="Не удалось сохранить правку. Неподдерживаемый тип правки.",
         ), 400
 
-    # Значение обязательно для group и name; для photo допустимо пустое (сброс привязки)
-    if not value and edit_type != "photo":
+    # Значение обязательно для group и name; для photo и badge допустимо пустое
+    # (photo — сброс привязки; badge — снятие метки «без метки»)
+    if not value and edit_type not in ("photo", "badge"):
         return jsonify(ok=False, message="Не удалось сохранить правку. Значение не указано."), 400
 
     # --- Нормализация ключа на сервере (D-05) ---
@@ -589,6 +590,19 @@ PAGE = r"""<!doctype html>
   /* Select группы — крупный, удобный для пальца */
   .pcard-group { width: 100%; font-size: 14px; min-height: 44px; }
 
+  /* ── Кнопки-переключатели меток «NEW» / «Хит» ── */
+  .pcard-badges-toggle { display: flex; gap: 6px; }
+  .badge-toggle {
+    flex: 1; min-height: 38px; font-size: 13px; font-weight: 600;
+    border-radius: 8px; cursor: pointer; border: 1px solid #d1d5db;
+    background: #f3f4f6; color: #6b7280; transition: background .12s, color .12s;
+  }
+  /* Активная метка — зелёная (загорается) */
+  .badge-toggle.active {
+    background: #16a34a; color: #fff; border-color: #16a34a;
+  }
+  .badge-toggle:disabled { opacity: .6; cursor: default; }
+
   /* Кнопка фото */
   .pcard-photo-btn { width: 100%; min-height: 44px; font-size: 14px; }
   .pcard input[type="file"] { display: none; }
@@ -661,12 +675,13 @@ let activeFilter = "attention";
 let activeView = localStorage.getItem("admin_view") || "grid";
 // Таймер живого поиска (debounce 300ms)
 let searchTimer = null;
-// Список групп для выпадающего списка — точно как массив GROUPS в admin.py
+// Список групп для выпадающего списка — точно как массив GROUPS в admin.py.
+// «Новинки» здесь НЕТ: это метка (badge), управляется кнопками NEW/Хит на карточке.
 const GROUPS = [
   "Напитки", "Энергетики", "Батончики и шоколад", "Чай и кофе", "Снэки",
   "Детское", "Лапша и каши", "Стоевъ и Сэнсой", "Соусы и специи", "Консервация",
   "Конфеты и печенье", "Прикассовое", "Коробочные конфеты", "Крупы и бакалея",
-  "Новинки", "Другое"
+  "Другое"
 ];
 
 /* ── Утилиты ── */
@@ -799,6 +814,10 @@ function buildCard(p, i) {
   // ── Кнопка фото ──
   const photoBtnLabel = p.image_url ? "📷 Заменить фото" : "📷 Добавить фото";
 
+  // ── Кнопки-переключатели меток: активная (зелёная) если совпадает с p.badge ──
+  const newActive = (p.badge === "новинка") ? " active" : "";
+  const hitActive = (p.badge === "хит") ? " active" : "";
+
   card.innerHTML = `
     <div class="pcard-photo">${photoHtml}</div>
     <div class="pcard-body">
@@ -807,6 +826,12 @@ function buildCard(p, i) {
       <div class="pcard-name-row">
         <span class="pcard-name">${esc(shownName)}</span>
         <button class="pcard-edit-name" title="Изменить название">&#9998;</button>
+      </div>
+      <div class="pcard-badges-toggle">
+        <button class="badge-toggle badge-toggle-new${newActive}" type="button"
+                data-badge="новинка">NEW</button>
+        <button class="badge-toggle badge-toggle-hit${hitActive}" type="button"
+                data-badge="хит">Хит</button>
       </div>
       <select class="form-select pcard-group">${groupOpts}</select>
       <button class="btn btn-outline-secondary pcard-photo-btn" type="button">${photoBtnLabel}</button>
@@ -848,6 +873,51 @@ function buildCard(p, i) {
       toast("err", (d && d.message) || "Не удалось сохранить. Попробуйте ещё раз.");
     }
   });
+
+  // ── Кнопки-переключатели меток «NEW» / «Хит» (взаимоисключающие, метка одна) ──
+  const btnNew = card.querySelector(".badge-toggle-new");
+  const btnHit = card.querySelector(".badge-toggle-hit");
+
+  // Перекрасить кнопки под текущее значение p.badge
+  function paintBadges() {
+    btnNew.classList.toggle("active", p.badge === "новинка");
+    btnHit.classList.toggle("active", p.badge === "хит");
+  }
+
+  // Обработчик нажатия: вычисляем новую метку, оптимистично перекрашиваем, сохраняем
+  async function toggleBadge(targetBadge) {
+    const prev = p.badge;                          // запомнить для отката при ошибке
+    // Тап по активной снимает метку (""), по неактивной — ставит её
+    const newBadge = (p.badge === targetBadge) ? "" : targetBadge;
+
+    // Оптимистично: сразу обновить состояние и перекрасить
+    p.badge = newBadge;
+    syncProduct(p);
+    paintBadges();
+    btnNew.disabled = true; btnHit.disabled = true;
+    cardStatus("", "Сохраняем...");
+
+    const d = await apiCall(`/${TOKEN}/save`, {
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: p.name, type: "badge", value: newBadge }),
+    });
+
+    btnNew.disabled = false; btnHit.disabled = false;
+    if (d && d.ok) {
+      cardStatus("ok", "Метка обновлена ✓");
+      toast("ok", "Метка обновлена ✓");
+    } else {
+      // Откат к прежнему состоянию
+      p.badge = prev;
+      syncProduct(p);
+      paintBadges();
+      cardStatus("err", "Не сохранено");
+      toast("err", (d && d.message) || "Не удалось обновить метку. Попробуйте ещё раз.");
+    }
+  }
+
+  btnNew.addEventListener("click", () => toggleBadge("новинка"));
+  btnHit.addEventListener("click", () => toggleBadge("хит"));
 
   // Кнопка фото → клик по скрытому input
   const fileInput = card.querySelector('input[type="file"]');

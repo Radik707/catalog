@@ -367,8 +367,8 @@ def load_edit_memory() -> dict[str, dict[str, str]]:
         log.warning("Вкладка «Правки»: ожидаются колонки 'Товар', 'Тип', 'Значение' — пропускаем")
         return {}
 
-    # Допустимые типы правок (Этап 3: группа + фото + описание; Этап 4-02: название D-05)
-    ALLOWED_TYPES = {"group", "photo", "description", "name"}
+    # Допустимые типы правок (Этап 3: группа + фото + описание; Этап 4-02: название D-05; метка badge)
+    ALLOWED_TYPES = {"group", "photo", "description", "name", "badge"}
 
     # --- Сборка словаря памяти ---
     mapping: dict[str, dict[str, str]] = {}
@@ -437,6 +437,9 @@ def apply_edit_memory(
       - 'group'       → p['display_group'] = новое значение
       - 'photo'       → p['photo_override'] = URL (приоритет в products_to_rows)
       - 'description' → p['desc_override']  = текст (приоритет в products_to_rows)
+      - 'name'        → p['display_name']   = отображаемое имя (ключ прайса не меняется, D-05)
+      - 'badge'       → p['badge_override']  = метка («новинка»/«хит»/«акция»);
+                        пустая строка означает явное снятие метки (приоритет в products_to_rows)
 
     Возвращает число товаров, НЕ найденных в памяти (новые для разметки, MEM-03/D-05).
     """
@@ -458,6 +461,10 @@ def apply_edit_memory(
             # Только display_name используется при выводе в каталог; p["name"] — ключ прайса.
             if "name" in edit:
                 p["display_name"] = edit["name"]
+            # Правка метки (badge): ручное значение перебивает авто-определение.
+            # Пустая строка — явное снятие метки («без метки»), её тоже сохраняем.
+            if "badge" in edit:
+                p["badge_override"] = edit["badge"]
         else:
             new_for_memory += 1
     return new_for_memory
@@ -586,7 +593,11 @@ def products_to_rows(
     header = ["Наименование", "Цена", "Остаток", "Категория", "Группа", "Поставщик", "Badge", "ImageUrl", "Description"]
     rows = [header]
     for p in products:
-        badge = "новинка" if p["name"] in new_names else get_badge(p["name"], badges)
+        # Приоритет: ручная правка метки владельца → авто-новинка → авто-метка из badges.json
+        if "badge_override" in p:
+            badge = p["badge_override"]        # "" = явно без метки; "хит"/"новинка" = ручная метка
+        else:
+            badge = "новинка" if p["name"] in new_names else get_badge(p["name"], badges)
         # Override-поля от apply_edit_memory имеют приоритет над авто-маппингом (D-04/D-06)
         image_url = p.get("photo_override") or get_photo_url(p["name"], photo_data)
         description = p.get("desc_override") or get_photo_description(p["name"], photo_data)

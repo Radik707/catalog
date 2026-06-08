@@ -37,7 +37,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
 
 # --- Допустимые типы правок (белый список — защита памяти правок от мусора) ---
-ALLOWED_TYPES = {"group", "photo", "description", "name"}
+ALLOWED_TYPES = {"group", "photo", "description", "name", "badge"}
 
 
 def load_env() -> None:
@@ -139,11 +139,65 @@ def load_edit_keys() -> set:
     return keys
 
 
+def load_edit_values() -> dict:
+    """Загрузить значения правок из вкладки «Правки» → {норм_ключ: {тип: значение}}.
+
+    В отличие от load_edit_keys (только ключи), возвращает и значения по типам —
+    нужно, чтобы карточка панели показывала ещё НЕ применённую метку (badge),
+    выбранную владельцем, даже после перезагрузки страницы.
+
+    При нескольких строках на один товар одного типа побеждает ПОСЛЕДНЯЯ (свежая) строка.
+    Graceful-fallback: при любой ошибке → пустой словарь {}.
+    """
+    try:
+        ss = _get_spreadsheet()
+        try:
+            values = ss.worksheet("Правки").get_all_values()
+        except Exception:
+            # Вкладка «Правки» не найдена — память правок пуста, это нормально
+            log.info("Вкладка «Правки» не найдена — память правок пуста")
+            return {}
+    except Exception as e:
+        log.warning("Не удалось прочитать вкладку «Правки»: %s", e)
+        return {}
+
+    if not values:
+        return {}
+
+    # --- Найти индексы колонок «Товар», «Тип», «Значение» ---
+    header = values[0]
+    try:
+        товар_i = header.index("Товар")
+        тип_i = header.index("Тип")
+        значение_i = header.index("Значение")
+    except ValueError:
+        log.warning("Вкладка «Правки»: ожидаются колонки 'Товар', 'Тип', 'Значение' — пропускаем")
+        return {}
+
+    # --- Сборка словаря значений (последняя строка по типу побеждает) ---
+    mapping: dict = {}
+    min_cols = max(товар_i, тип_i, значение_i) + 1
+    for row in values[1:]:
+        if len(row) < min_cols:
+            continue
+        raw_product = str(row[товар_i]).strip()
+        raw_type = str(row[тип_i]).strip()
+        raw_value = str(row[значение_i]).strip()
+        if not raw_product or raw_type not in ALLOWED_TYPES:
+            continue
+        key = normalize_name(raw_product)
+        mapping.setdefault(key, {})[raw_type] = raw_value
+    return mapping
+
+
 def load_products() -> list:
-    """Прочитать лист «Товары» → список товаров с полями {name, group, image_url, is_new}.
+    """Прочитать лист «Товары» → список товаров с полями {name, group, image_url, is_new, badge}.
 
     is_new=True если нормализованное имя товара ОТСУТСТВУЕТ в памяти «Правки» (MEM-03):
     владелец ещё не «касался» этого товара через панель.
+    Поле badge — текущая метка товара («новинка»/«хит»/«акция»/""); ОЖИДАЮЩАЯ правка badge
+    из вкладки «Правки» перебивает значение из листа «Товары» (чтобы кнопка на карточке
+    отражала уже выбранную, но ещё не применённую метку).
     Graceful-fallback: при любой ошибке → пустой список [].
     """
     try:
@@ -164,12 +218,13 @@ def load_products() -> list:
         log.warning("Лист «Товары»: нет колонки «Наименование»")
         return []
 
-    # Группа и ImageUrl опциональны — берём по индексу или None
+    # Группа, ImageUrl и Badge опциональны — берём по индексу или None
     grp_i = header.index("Группа") if "Группа" in header else None
     img_i = header.index("ImageUrl") if "ImageUrl" in header else None
+    badge_i = header.index("Badge") if "Badge" in header else None
 
-    # --- Загрузить ключи «Правки» для определения is_new ---
-    edit_keys = load_edit_keys()
+    # --- Загрузить значения «Правки» (ключи для is_new + значения для ожидающей метки) ---
+    edit_values = load_edit_values()
 
     products = []
     for row in values[1:]:
@@ -185,14 +240,24 @@ def load_products() -> list:
         # URL фото (пустая строка если нет)
         image_url = str(row[img_i]).strip() if img_i is not None and len(row) > img_i else ""
 
+        # Метка из листа «Товары» (пустая строка если нет)
+        badge = str(row[badge_i]).strip() if badge_i is not None and len(row) > badge_i else ""
+
+        key = normalize_name(raw_name)
         # Товар «новинка для панели» — если его нет в памяти «Правки»
-        is_new = normalize_name(raw_name) not in edit_keys
+        is_new = key not in edit_values
+
+        # Ожидающая правка метки перебивает значение из листа «Товары»
+        # (пустая строка в правке = явно снятая метка — тоже учитываем).
+        if key in edit_values and "badge" in edit_values[key]:
+            badge = edit_values[key]["badge"]
 
         products.append({
             "name": raw_name,
             "group": group,
             "image_url": image_url,
             "is_new": is_new,
+            "badge": badge,
         })
 
     log.info("Загружено товаров: %d", len(products))
@@ -250,7 +315,7 @@ def main() -> None:
         "--type",
         dest="edit_type",
         choices=list(ALLOWED_TYPES),
-        help="Тип правки: group | photo | description | name",
+        help="Тип правки: group | photo | description | name | badge",
     )
     parser.add_argument("--value", help="Новое значение правки")
     # Аргумент для normalize
