@@ -36,7 +36,7 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
-from flask import Flask, request, jsonify, abort
+from flask import Flask, request, jsonify, abort, redirect
 
 logging.basicConfig(
     level=logging.INFO,
@@ -406,6 +406,12 @@ def check(token: str) -> None:
 
 @app.get("/<token>")
 def index(token: str):
+    # Если это секрет админ-панели без завершающего слэша — перенаправляем на
+    # панель (её маршрут — /<token>/). Закладки и адресная строка на планшете/
+    # телефоне часто срезают слэш, из-за чего запрос попадал сюда и давал 404.
+    admin_secret = os.environ.get("ADMIN_SECRET", "")
+    if admin_secret and hmac.compare_digest(token, admin_secret):
+        return redirect(f"/{token}/", code=308)
     check(token)
     INCOMING_DIR.mkdir(parents=True, exist_ok=True)
     return PAGE.replace("__TOKEN__", token)
