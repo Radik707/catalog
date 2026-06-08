@@ -716,11 +716,11 @@ PAGE = r"""<!doctype html>
   <!-- Вкладки-фильтры + переключатель вида -->
   <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
     <div class="filter-tabs" id="filter-tabs">
-      <button class="filter-tab active" data-filter="attention">Требуют внимания</button>
+      <button class="filter-tab" data-filter="attention">Требуют внимания</button>
       <button class="filter-tab" data-filter="new">Новинки</button>
       <button class="filter-tab" data-filter="nogroup">Без группы</button>
       <button class="filter-tab" data-filter="nophoto">Без фото</button>
-      <button class="filter-tab" data-filter="all">Все</button>
+      <button class="filter-tab active" data-filter="all">Все</button>
     </div>
     <div class="d-flex align-items-center flex-wrap gap-2">
       <!-- Регулятор плотности сетки (виден только в режиме «Сетка») -->
@@ -760,7 +760,7 @@ const TOKEN = "__TOKEN__";
 // Полный список товаров (загружается один раз)
 let allProducts = [];
 // Текущий активный фильтр
-let activeFilter = "attention";
+let activeFilter = "all";
 // Текущий вид: "grid" | "list" (сохраняется в localStorage)
 let activeView = localStorage.getItem("admin_view") || "grid";
 // Текущая плотность сетки: "l" | "m" | "s" (Крупно/Средне/Мелко), по умолчанию Крупно
@@ -882,7 +882,7 @@ function buildCard(p, i) {
 
   // ── Фото ──
   const photoHtml = p.image_url
-    ? `<img src="${esc(p.image_url)}" alt="${esc(p.name)}">`
+    ? `<img src="${esc(p.image_url)}" alt="${esc(p.name)}" loading="lazy" decoding="async">`
     : `<svg class="ph-empty" width="40" height="40" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v13.5a1.5 1.5 0 001.5 1.5z"/></svg>`;
 
   // ── Бейджи и подписи ──
