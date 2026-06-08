@@ -492,6 +492,21 @@ def _build_url_index(photo_urls: dict[str, str]) -> dict[str, str]:
     return index
 
 
+def load_url_index() -> dict[str, str]:
+    """Загрузить индекс {folder/filename → url} и {filename → url} из photo_urls.json.
+
+    Используется в products_to_rows() для резолва фото-référence из правки владельца
+    (тип 'photo' хранит ссылку вида "presenter/файл.webp", а не полный URL Cloudinary).
+    При отсутствии файла возвращает пустой словарь — скрипт работает без ошибок.
+    """
+    photo_urls_path = SCRIPT_DIR / "photo_urls.json"
+    if not photo_urls_path.exists():
+        return {}
+    with open(photo_urls_path, "r", encoding="utf-8") as f:
+        photo_urls: dict[str, str] = json.load(f)
+    return _build_url_index(photo_urls)
+
+
 def load_photo_data() -> dict[str, dict[str, str]]:
     """Загрузить маппинг название_товара → {url, description} из photo_map.json + photo_urls.json.
 
@@ -570,11 +585,33 @@ def get_photo_description(name: str, photo_data: dict[str, dict[str, str]]) -> s
     return entry.get("description", "") if entry else ""
 
 
+def _resolve_photo_override(ref: str, url_index: dict[str, str]) -> str:
+    """Превратить фото-référence из правки владельца в полный URL Cloudinary.
+
+    Правка типа 'photo' хранит ссылку вида "presenter/файл.webp" или "akkond_search/файл.jpg",
+    а сайт ждёт полный https-URL. Логика резолва:
+      - если значение уже начинается с http → вернуть как есть (это готовый URL);
+      - иначе искать в url_index по значению целиком, затем по basename (имя файла);
+      - если нигде не нашлось → вернуть пустую строку (вызывающий код сделает fallback).
+    """
+    if not ref:
+        return ""
+    if ref.startswith("http"):
+        return ref
+    if ref in url_index:
+        return url_index[ref]
+    basename = ref.replace("\\", "/").split("/")[-1]
+    if basename in url_index:
+        return url_index[basename]
+    return ""
+
+
 def products_to_rows(
     products: list[dict],
     badges: dict | None = None,
     photo_data: dict[str, dict[str, str]] | None = None,
     new_names: set | None = None,
+    url_index: dict[str, str] | None = None,
 ) -> list[list]:
     """Преобразовать список товаров в строки для Google Sheet.
 
@@ -584,11 +621,17 @@ def products_to_rows(
     Приоритет фото/описания (D-04, D-06):
       1. p['photo_override'] / p['desc_override'] — правка владельца (точное совпадение)
       2. get_photo_url / get_photo_description — авто-маппинг (частичное совпадение)
+
+    photo_override хранит фото-référence ("presenter/файл.webp"), её резолвим в полный
+    URL через url_index (см. _resolve_photo_override). Если в url_index не нашлось —
+    fallback на авто-маппинг get_photo_url по названию товара.
     """
     if badges is None:
         badges = {"исключения": [], "новинка": [], "хит": [], "акция": []}
     if photo_data is None:
         photo_data = {}
+    if url_index is None:
+        url_index = {}
     new_names = new_names or set()
     header = ["Наименование", "Цена", "Остаток", "Категория", "Группа", "Поставщик", "Badge", "ImageUrl", "Description"]
     rows = [header]
@@ -598,8 +641,14 @@ def products_to_rows(
             badge = p["badge_override"]        # "" = явно без метки; "хит"/"новинка" = ручная метка
         else:
             badge = "новинка" if p["name"] in new_names else get_badge(p["name"], badges)
-        # Override-поля от apply_edit_memory имеют приоритет над авто-маппингом (D-04/D-06)
-        image_url = p.get("photo_override") or get_photo_url(p["name"], photo_data)
+        # Override-поля от apply_edit_memory имеют приоритет над авто-маппингом (D-04/D-06).
+        # photo_override — это фото-référence ("presenter/файл.webp"), резолвим её в URL.
+        # Если резолв не удался (нет в url_index) — fallback на авто-маппинг по названию.
+        photo_ref = p.get("photo_override")
+        if photo_ref:
+            image_url = _resolve_photo_override(photo_ref, url_index) or get_photo_url(p["name"], photo_data)
+        else:
+            image_url = get_photo_url(p["name"], photo_data)
         description = p.get("desc_override") or get_photo_description(p["name"], photo_data)
         # Отображаемое название: display_name из правки (если есть), иначе имя из прайса (D-05).
         # get_badge / get_photo_url / get_photo_description по-прежнему получают p["name"] —
@@ -770,6 +819,9 @@ def main():
     # Загрузить маппинг фото
     photo_data = load_photo_data()
 
+    # Загрузить индекс URL для резолва фото-référence из правок владельца (тип 'photo')
+    url_index = load_url_index()
+
     # Загрузить память ручных правок владельца (MEM-01)
     edit_memory = load_edit_memory()
 
@@ -818,7 +870,7 @@ def main():
     log.info("Товаров без правок (новые для памяти): %d", new_for_memory)
 
     # Подготовить строки для Google Sheet
-    rows = products_to_rows(all_products, badges, photo_data, new_names)
+    rows = products_to_rows(all_products, badges, photo_data, new_names, url_index)
 
     # Статистика по группам
     groups = {}
