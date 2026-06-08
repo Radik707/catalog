@@ -487,9 +487,9 @@ def admin_apply(token: str):
 
 
 # ── Одностраничный HTML (PAGE) ──
-# Структура: Tabler CSS из CDN (только стили, без JS), mobile-first, container-sm 640px.
-# Экран 1: список товаров с фильтрами и поиском.
-# Экран 2: правка товара (отображаемое название + группа).
+# Структура: Tabler CSS из CDN (только стили, без JS), mobile-first, адаптивный контейнер.
+# Один экран: сетка/список фото-карточек с инлайн-правкой группы, названия и фото.
+# Правка происходит прямо на карточке — без отдельного экрана (D-03: без сторонних JS из CDN).
 # Тексты строго из копирайтинг-контракта UI-SPEC.
 PAGE = r"""<!doctype html>
 <html lang="ru">
@@ -500,61 +500,125 @@ PAGE = r"""<!doctype html>
 <!-- Tabler CSS подключается только как стили (без JS-рисков из CDN) — D-03 -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0-beta21/dist/css/tabler.min.css">
 <style>
-  /* Базовые переопределения, совместимые с загрузчиком */
+  /* ── Базовые стили ── */
   body { background: #f3f4f6; }
-  /* Статусный баннер — наследуем из загрузчика (uploader/app.py) */
+
+  /* Общий плавающий тост статуса (низ экрана) */
+  #toast {
+    position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%);
+    max-width: 92%; padding: 12px 18px; border-radius: 12px; font-size: 14px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.18); z-index: 1000; display: none;
+    white-space: pre-wrap; text-align: center;
+  }
+  #toast.ok   { background: #ecfdf5; color: #065f46; display: block; }
+  #toast.err  { background: #fef2f2; color: #991b1b; display: block; }
+  #toast.info { background: #eff6ff; color: #1e40af; display: block; }
+
+  /* Статусный баннер «Применить сейчас» */
   .status { margin-top: 16px; padding: 14px; border-radius: 12px; font-size: 14px;
             white-space: pre-wrap; display: none; }
   .status.ok   { background: #ecfdf5; color: #065f46; display: block; }
   .status.err  { background: #fef2f2; color: #991b1b; display: block; }
   .status.info { background: #eff6ff; color: #1e40af; display: block; }
-  /* Карточка товара — кликабельна для перехода к экрану правки */
-  .product-card { cursor: pointer; transition: box-shadow 0.15s; }
-  .product-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.10); }
-  /* Кнопка «Применить сейчас» — min-height 48px для удобного нажатия с телефона */
-  .btn-apply { min-height: 48px; font-size: 16px; font-weight: 600; }
+
   /* Вкладки-фильтры */
-  .filter-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
-  .filter-tab  { padding: 6px 12px; border-radius: 8px; border: 1px solid #d1d5db;
-                 background: #fff; cursor: pointer; font-size: 14px; color: #374151; }
+  .filter-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .filter-tab  { padding: 8px 14px; border-radius: 8px; border: 1px solid #d1d5db;
+                 background: #fff; cursor: pointer; font-size: 14px; color: #374151;
+                 min-height: 44px; }
   .filter-tab.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+
+  /* Переключатель вида (Сетка / Список) */
+  .view-toggle { display: inline-flex; border: 1px solid #d1d5db; border-radius: 8px;
+                 overflow: hidden; }
+  .view-toggle button { border: 0; background: #fff; padding: 8px 16px; cursor: pointer;
+                        font-size: 14px; color: #374151; min-height: 44px; }
+  .view-toggle button.active { background: #2563eb; color: #fff; }
+
   /* Пустое состояние */
   .empty-state { text-align: center; padding: 48px 16px; color: #6b7280; }
   .empty-state h3 { margin: 0 0 8px; color: #374151; font-size: 16px; }
-  /* Экран 2 (правка) — скрыт по умолчанию */
-  #screen-edit { display: none; }
-  /* Зона загрузки фото (Dropzone) — мобильная, min-height 80px */
-  .photo-drop {
-    border: 2px dashed #d1d5db; border-radius: 12px; padding: 24px;
-    text-align: center; cursor: pointer; background: #f9fafb;
-    transition: border-color 0.15s, background 0.15s;
+
+  /* ── Контейнер карточек: режим «Сетка» ── */
+  /* 2 колонки на телефоне, 3 на планшете (>=768px), 4 на широком (>=1100px). */
+  #products.view-grid {
+    display: grid; gap: 12px;
+    grid-template-columns: repeat(2, 1fr);
   }
-  .photo-drop:hover, .photo-drop.drag-over {
-    border-color: #2563eb; background: #eff6ff;
-  }
-  .photo-drop input[type="file"] { display: none; }
-  /* Превью текущего/выбранного фото */
-  .photo-preview { max-height: 160px; max-width: 100%; border-radius: 8px;
-                   object-fit: contain; margin-top: 12px; display: none; }
+  @media (min-width: 768px)  { #products.view-grid { grid-template-columns: repeat(3, 1fr); } }
+  @media (min-width: 1100px) { #products.view-grid { grid-template-columns: repeat(4, 1fr); } }
+
+  /* ── Контейнер карточек: режим «Список» ── */
+  #products.view-list { display: flex; flex-direction: column; gap: 10px; }
+
+  /* Карточка */
+  .pcard { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
+           overflow: hidden; }
+
+  /* Фото — белый фон, object-contain (как на сайте) */
+  .pcard-photo { width: 100%; background: #fff; display: flex; align-items: center;
+                 justify-content: center; overflow: hidden; }
+  .pcard-photo img { width: 100%; height: 100%; object-fit: contain; }
+  .pcard-photo .ph-empty { color: #d1d5db; }
+
+  /* Сетка: фото сверху, фиксированная высота */
+  .view-grid .pcard-photo { height: 140px; }
+  /* Список: мини-превью слева */
+  .view-list .pcard { display: flex; align-items: stretch; }
+  .view-list .pcard-photo { width: 72px; min-width: 72px; height: auto; }
+  .view-list .pcard-body { flex: 1; min-width: 0; }
+
+  .pcard-body { padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+
+  /* Бейджи */
+  .pcard-badges { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .badge-attn { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa;
+                font-weight: 600; padding: 2px 8px; border-radius: 6px; font-size: 13px; }
+  .badge-new  { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe;
+                font-weight: 600; padding: 2px 8px; border-radius: 6px; font-size: 13px; }
+  .pcard-hints { font-size: 12px; color: #6b7280; }
+
+  /* Название + карандаш правки */
+  .pcard-name-row { display: flex; align-items: flex-start; gap: 6px; }
+  .pcard-name { font-size: 14px; font-weight: 600; color: #111827; line-height: 1.25;
+                word-break: break-word; flex: 1; }
+  .pcard-edit-name { cursor: pointer; background: none; border: 0; font-size: 16px;
+                     line-height: 1; padding: 2px; color: #6b7280; }
+  .pcard-name-input { width: 100%; font-size: 14px; }
+
+  /* Select группы — крупный, удобный для пальца */
+  .pcard-group { width: 100%; font-size: 14px; min-height: 44px; }
+
+  /* Кнопка фото */
+  .pcard-photo-btn { width: 100%; min-height: 44px; font-size: 14px; }
+  .pcard input[type="file"] { display: none; }
+
+  /* Короткая пометка статуса на карточке */
+  .pcard-status { font-size: 12px; min-height: 16px; }
+  .pcard-status.ok  { color: #065f46; }
+  .pcard-status.err { color: #991b1b; }
+
+  /* Кнопка «Применить сейчас» */
+  .btn-apply { min-height: 48px; font-size: 16px; font-weight: 600; }
 </style>
 </head>
 <body>
-<div class="container-sm py-3">
+<div class="container py-3" style="max-width:1200px">
 
-  <!-- ── Экран 1: Список товаров ── -->
-  <div id="screen-list">
-    <div class="mb-3">
-      <h1 class="h3 mb-0">Вкусный Дом — Панель управления</h1>
-      <p class="text-muted mb-0" style="font-size:14px">Товары и правки</p>
-    </div>
+  <!-- ── Шапка ── -->
+  <div class="mb-3">
+    <h1 class="h3 mb-0">Вкусный Дом — Панель управления</h1>
+    <p class="text-muted mb-0" style="font-size:14px">Товары и правки</p>
+  </div>
 
-    <!-- Поиск по названию -->
-    <div class="mb-3">
-      <input id="search-input" class="form-control" type="search"
-             placeholder="Поиск по названию..." autocomplete="off">
-    </div>
+  <!-- Поиск по названию -->
+  <div class="mb-3">
+    <input id="search-input" class="form-control" type="search"
+           placeholder="Поиск по названию..." autocomplete="off">
+  </div>
 
-    <!-- Вкладки-фильтры -->
+  <!-- Вкладки-фильтры + переключатель вида -->
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
     <div class="filter-tabs" id="filter-tabs">
       <button class="filter-tab active" data-filter="attention">Требуют внимания</button>
       <button class="filter-tab" data-filter="new">Новинки</button>
@@ -562,112 +626,48 @@ PAGE = r"""<!doctype html>
       <button class="filter-tab" data-filter="nophoto">Без фото</button>
       <button class="filter-tab" data-filter="all">Все</button>
     </div>
-
-    <!-- Список карточек товаров -->
-    <div id="products-list"></div>
-
-    <!-- Статусный баннер -->
-    <div id="status" class="status"></div>
-
-    <!-- Кнопка «Применить сейчас» — фиксирована внизу -->
-    <div class="mt-4">
-      <button id="btn-apply" class="btn btn-primary w-100 btn-apply"
-              onclick="applyNow()">
-        Применить сейчас
-      </button>
+    <div class="view-toggle" id="view-toggle">
+      <button data-view="grid">Сетка</button>
+      <button data-view="list">Список</button>
     </div>
   </div>
 
-  <!-- ── Экран 2: Правка товара ── -->
-  <div id="screen-edit">
-    <div class="mb-3">
-      <button class="btn btn-ghost" onclick="showList()">← Назад к списку</button>
-    </div>
+  <!-- Сетка/список карточек товаров -->
+  <div id="products" class="view-grid"></div>
 
-    <div class="card">
-      <div class="card-body">
-        <div class="mb-3">
-          <label class="form-label text-muted" style="font-size:14px">Название (из прайса):</label>
-          <div id="edit-name-display" class="fw-semibold" style="font-size:16px"></div>
-        </div>
+  <!-- Статусный баннер «Применить сейчас» -->
+  <div id="status" class="status"></div>
 
-        <!-- Поле отображаемого названия (план 02, D-05) — пустое = использовать из прайса -->
-        <div class="mb-3">
-          <label class="form-label" for="edit-display-name">Отображаемое название</label>
-          <input id="edit-display-name" class="form-control" type="text"
-                 placeholder="Введите название для каталога..."
-                 autocomplete="off">
-          <div class="form-text text-muted">Оставьте пустым, чтобы использовать название из прайса</div>
-        </div>
-
-        <div class="mb-3">
-          <label class="form-label" for="edit-group">Группа</label>
-          <select id="edit-group" class="form-select">
-            <option value="">Выберите группу...</option>
-            <option>Напитки</option>
-            <option>Энергетики</option>
-            <option>Батончики и шоколад</option>
-            <option>Чай и кофе</option>
-            <option>Снэки</option>
-            <option>Детское</option>
-            <option>Лапша и каши</option>
-            <option>Стоевъ и Сэнсой</option>
-            <option>Соусы и специи</option>
-            <option>Консервация</option>
-            <option>Конфеты и печенье</option>
-            <option>Прикассовое</option>
-            <option>Коробочные конфеты</option>
-            <option>Крупы и бакалея</option>
-            <option>Новинки</option>
-            <option>Другое</option>
-          </select>
-        </div>
-
-        <!-- Зона загрузки фото (D-06): выбор с камеры или галереи на телефоне -->
-        <div class="mb-3">
-          <label class="form-label">Фото товара</label>
-          <!-- capture="environment" — открыть заднюю камеру на телефоне по умолчанию -->
-          <div class="photo-drop" id="photo-drop" onclick="document.getElementById('photo-input').click()">
-            <input type="file" id="photo-input" accept="image/*" capture="environment">
-            <div id="photo-drop-text">
-              <div style="font-size:28px; color:#9ca3af; margin-bottom:8px">&#128247;</div>
-              <div style="font-weight:600; color:#374151">Нажмите или перетащите фото</div>
-              <div class="text-muted" style="font-size:13px; margin-top:4px">JPG, PNG, WebP — до 10 МБ</div>
-            </div>
-            <img id="photo-preview" class="photo-preview" alt="Превью фото">
-          </div>
-          <!-- Статус загрузки фото (прогресс/ошибка) -->
-          <div id="status-photo" class="status" style="margin-top:8px"></div>
-          <!-- Кнопка «Сбросить фото» — видна если уже есть привязка -->
-          <button id="btn-reset-photo" class="btn btn-danger btn-ghost btn-sm mt-2"
-                  style="display:none" onclick="resetPhoto()">
-            Сбросить фото
-          </button>
-        </div>
-
-        <div id="status-edit" class="status"></div>
-
-        <button id="btn-save" class="btn btn-primary w-100" style="min-height:48px;font-size:16px"
-                onclick="saveEdit()" disabled>
-          Сохранить правку
-        </button>
-      </div>
-    </div>
+  <!-- Кнопка «Применить сейчас» -->
+  <div class="mt-4 mb-5">
+    <button id="btn-apply" class="btn btn-primary w-100 btn-apply" onclick="applyNow()">
+      Применить сейчас
+    </button>
   </div>
 
-</div><!-- /container-sm -->
+</div><!-- /container -->
+
+<!-- Общий плавающий тост -->
+<div id="toast"></div>
 
 <script>
 /* ── Константы и состояние ── */
 const TOKEN = "__TOKEN__";
-// Текущий выбранный товар (для экрана правки)
-let currentProduct = null;
 // Полный список товаров (загружается один раз)
 let allProducts = [];
 // Текущий активный фильтр
 let activeFilter = "attention";
+// Текущий вид: "grid" | "list" (сохраняется в localStorage)
+let activeView = localStorage.getItem("admin_view") || "grid";
 // Таймер живого поиска (debounce 300ms)
 let searchTimer = null;
+// Список групп для выпадающего списка — точно как массив GROUPS в admin.py
+const GROUPS = [
+  "Напитки", "Энергетики", "Батончики и шоколад", "Чай и кофе", "Снэки",
+  "Детское", "Лапша и каши", "Стоевъ и Сэнсой", "Соусы и специи", "Консервация",
+  "Конфеты и печенье", "Прикассовое", "Коробочные конфеты", "Крупы и бакалея",
+  "Новинки", "Другое"
+];
 
 /* ── Утилиты ── */
 
@@ -678,15 +678,20 @@ function esc(s) {
   ));
 }
 
-// Показать статусный баннер; kind = "ok" | "err" | "info"
-function show(kind, text) {
-  const el = document.getElementById("status");
-  el.className = "status " + kind;
+// Плавающий тост; kind = "ok" | "err" | "info"
+let toastTimer = null;
+function toast(kind, text) {
+  const el = document.getElementById("toast");
+  el.className = kind;
   el.textContent = text;
+  el.style.display = "block";
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.style.display = "none"; }, 3500);
 }
 
-function showEdit(kind, text) {
-  const el = document.getElementById("status-edit");
+// Статусный баннер «Применить сейчас»
+function show(kind, text) {
+  const el = document.getElementById("status");
   el.className = "status " + kind;
   el.textContent = text;
 }
@@ -695,54 +700,10 @@ function showEdit(kind, text) {
 async function apiCall(url, opts) {
   try {
     const r = await fetch(url, { method: "POST", ...opts });
-    const d = await r.json();
-    return d;
+    return await r.json();
   } catch (e) {
     return null;
   }
-}
-
-/* ── Навигация между экранами ── */
-
-function showList() {
-  document.getElementById("screen-list").style.display = "";
-  document.getElementById("screen-edit").style.display = "none";
-  currentProduct = null;
-}
-
-function showEditScreen(product) {
-  currentProduct = product;
-  // Заполняем поля экрана правки
-  document.getElementById("edit-name-display").textContent = product.name;
-
-  // Предзаполнить поле «Отображаемое название» — текущей правкой или пустым (D-05)
-  const nameInput = document.getElementById("edit-display-name");
-  nameInput.value = product.display_name || "";
-
-  const sel = document.getElementById("edit-group");
-  // Предвыбрать текущую группу из каталога (если есть)
-  sel.value = product.group || "";
-
-  // Сброс статуса и кнопки
-  document.getElementById("status-edit").className = "status";
-  document.getElementById("status-edit").textContent = "";
-  document.getElementById("btn-save").disabled = true;
-
-  // Переключить экран.
-  // ВАЖНО: для #screen-edit ставим именно "block", а НЕ "" — пустая строка
-  // убрала бы локальный стиль, и снова сработало бы правило CSS «#screen-edit{display:none}»,
-  // из-за чего экран правки оставался спрятанным (баг «белый экран»).
-  document.getElementById("screen-list").style.display = "none";
-  document.getElementById("screen-edit").style.display = "block";
-
-  // Активировать кнопку «Сохранить правку» при любом изменении полей (план 02, UI-SPEC)
-  function checkChanged() {
-    const nameChanged = nameInput.value !== (product.display_name || "");
-    const groupChanged = sel.value !== "" && sel.value !== (product.group || "");
-    document.getElementById("btn-save").disabled = !(nameChanged || groupChanged);
-  }
-  nameInput.oninput = checkChanged;
-  sel.onchange = checkChanged;
 }
 
 /* ── Фильтрация и поиск ── */
@@ -752,225 +713,257 @@ function needsAttention(p) {
   return p.is_new || !p.group || !p.image_url;
 }
 
-// Применить фильтр вкладки и поисковый запрос к списку карточек
-function applyFilters() {
+// Вернуть подмножество товаров под текущий фильтр и поиск
+function filteredProducts() {
   const query = document.getElementById("search-input").value.trim().toLowerCase();
-  const cards = document.querySelectorAll(".product-card");
-  let visibleCount = 0;
+  return allProducts.filter(p => {
+    let matchFilter;
+    if (activeFilter === "attention")     matchFilter = needsAttention(p);
+    else if (activeFilter === "new")      matchFilter = !!p.is_new;
+    else if (activeFilter === "nogroup")  matchFilter = !p.group;
+    else if (activeFilter === "nophoto")  matchFilter = !p.image_url;
+    else                                  matchFilter = true; // "all"
 
-  cards.forEach(card => {
-    const name = (card.dataset.name || "").toLowerCase();
-    const group = (card.dataset.group || "");
-    const image = (card.dataset.image || "");
-    const isNew = card.dataset.isnew === "true";
-
-    // Фильтр по вкладке
-    let matchFilter = false;
-    if (activeFilter === "attention") matchFilter = (isNew || !group || !image);
-    else if (activeFilter === "new")  matchFilter = isNew;
-    else if (activeFilter === "nogroup") matchFilter = !group;
-    else if (activeFilter === "nophoto") matchFilter = !image;
-    else matchFilter = true; // "all"
-
-    // Фильтр по поиску
-    const matchSearch = (query === "" || name.includes(query));
-
-    const visible = matchFilter && matchSearch;
-    card.style.display = visible ? "" : "none";
-    if (visible) visibleCount++;
+    const matchSearch = (query === "" || (p.name || "").toLowerCase().includes(query));
+    return matchFilter && matchSearch;
   });
-
-  // Показать пустое состояние если нет видимых карточек
-  renderEmptyState(visibleCount);
 }
 
-function renderEmptyState(visibleCount) {
-  const container = document.getElementById("products-list");
-  let emptyEl = document.getElementById("empty-state");
-  if (visibleCount === 0) {
-    if (!emptyEl) {
-      emptyEl = document.createElement("div");
-      emptyEl.id = "empty-state";
-      emptyEl.className = "empty-state";
-      container.appendChild(emptyEl);
-    }
-    if (activeFilter === "attention") {
-      emptyEl.innerHTML = '<h3>Все товары в порядке</h3>' +
-        '<p>Новых товаров без группы или фото нет. Можно применить правки или подождать следующего прайса.</p>';
-    } else {
-      emptyEl.innerHTML = '<h3>Товары не найдены по этому фильтру</h3>';
-    }
-    emptyEl.style.display = "";
-  } else {
-    if (emptyEl) emptyEl.style.display = "none";
-  }
-}
+/* ── Рендер карточек ──
+   Рендерим ТОЛЬКО отфильтрованные товары (а не show/hide всех ~870),
+   чтобы на телефоне не тормозило. Перерисовываем при смене фильтра/поиска/вида. */
 
-/* ── Рендер списка товаров ── */
+function render() {
+  const container = document.getElementById("products");
+  // Класс контейнера под выбранный вид
+  container.className = activeView === "list" ? "view-list" : "view-grid";
 
-function renderProducts(products) {
-  const container = document.getElementById("products-list");
+  const list = filteredProducts();
   container.innerHTML = "";
 
-  if (!products || products.length === 0) {
-    container.innerHTML = '<div class="empty-state"><h3>Все товары в порядке</h3>' +
-      '<p>Новых товаров без группы или фото нет. Можно применить правки или подождать следующего прайса.</p></div>';
+  if (list.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.style.gridColumn = "1 / -1";
+    if (activeFilter === "attention") {
+      empty.innerHTML = '<h3>Все товары в порядке</h3>' +
+        '<p>Новых товаров без группы или фото нет. Можно применить правки или подождать следующего прайса.</p>';
+    } else {
+      empty.innerHTML = '<h3>Товары не найдены по этому фильтру</h3>';
+    }
+    container.appendChild(empty);
     return;
   }
 
-  products.forEach(p => {
-    const card = document.createElement("div");
-    card.className = "card mb-2 product-card";
-    // data-атрибуты для фильтрации (esc защищает от XSS в data-атрибутах тоже)
-    card.dataset.name = (p.name || "").toLowerCase();
-    card.dataset.group = p.group || "";
-    card.dataset.image = p.image_url || "";
-    card.dataset.isnew = p.is_new ? "true" : "false";
-    card.dataset.productJson = JSON.stringify(p); // для передачи в showEditScreen
+  list.forEach((p, i) => {
+    container.appendChild(buildCard(p, i));
+  });
+}
 
-    // Бейджи статуса товара
-    let badges = "";
-    if (p.is_new || !p.group || !p.image_url) {
-      // Бейдж «!» оранжевый — требует внимания (T-04-05: esc для имён)
-      badges += '<span class="badge bg-warning-lt me-1">!</span>';
-    }
-    if (p.is_new && p.group && p.image_url) {
-      // Только новинка, всё остальное в порядке — синий бейдж «Н»
-      badges += '<span class="badge bg-blue-lt me-1">Н</span>';
-    }
+// Построить одну карточку товара
+function buildCard(p, i) {
+  const card = document.createElement("div");
+  card.className = "pcard";
+  card.dataset.idx = i;
 
-    // Подписи статуса
-    let hints = [];
-    if (!p.group) hints.push("Без группы");
-    if (!p.image_url) hints.push("Без фото");
-    if (p.is_new) hints.push("Новинка");
-    const hintsHtml = hints.length
-      ? `<small class="text-muted">${esc(hints.join(' · '))}</small>`
-      : "";
+  // Уникальный id input файла — чтобы карточки не путались
+  const fileId = "file-" + i;
 
-    card.innerHTML = `
-      <div class="card-body py-2">
-        <div class="d-flex align-items-start gap-2">
-          <div class="flex-grow-1">
-            ${badges}
-            <span style="font-size:14px;font-weight:600">${esc(p.name)}</span>
-            <div>${hintsHtml}</div>
-          </div>
-          <span class="text-muted" style="font-size:18px">›</span>
-        </div>
-      </div>`;
+  // ── Фото ──
+  const photoHtml = p.image_url
+    ? `<img src="${esc(p.image_url)}" alt="${esc(p.name)}">`
+    : `<svg class="ph-empty" width="40" height="40" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v13.5a1.5 1.5 0 001.5 1.5z"/></svg>`;
 
-    // Клик по карточке → экран правки
-    card.addEventListener("click", () => {
-      try {
-        showEditScreen(JSON.parse(card.dataset.productJson));
-      } catch (e) {
-        show("err", "Ошибка открытия товара. Обновите страницу.");
-      }
-    });
+  // ── Бейджи и подписи ──
+  let badges = "";
+  if (!p.group || !p.image_url) badges += '<span class="badge-attn">&#9888;</span>';
+  if (p.is_new)                 badges += '<span class="badge-new">Новинка</span>';
 
-    container.appendChild(card);
+  const hints = [];
+  if (!p.group)     hints.push("Без группы");
+  if (!p.image_url) hints.push("Без фото");
+  if (p.is_new)     hints.push("Новинка");
+  const hintsHtml = hints.length
+    ? `<div class="pcard-hints">${esc(hints.join(" · "))}</div>` : "";
+
+  // ── Отображаемое имя ──
+  const shownName = p.display_name || p.name;
+
+  // ── Выпадающий список группы ──
+  let groupOpts = '<option value="">Выберите группу...</option>';
+  GROUPS.forEach(g => {
+    const sel = (p.group === g) ? " selected" : "";
+    groupOpts += `<option${sel}>${esc(g)}</option>`;
   });
 
-  // Применить текущий фильтр к только что отрисованным карточкам
-  applyFilters();
+  // ── Кнопка фото ──
+  const photoBtnLabel = p.image_url ? "📷 Заменить фото" : "📷 Добавить фото";
+
+  card.innerHTML = `
+    <div class="pcard-photo">${photoHtml}</div>
+    <div class="pcard-body">
+      <div class="pcard-badges">${badges}</div>
+      ${hintsHtml}
+      <div class="pcard-name-row">
+        <span class="pcard-name">${esc(shownName)}</span>
+        <button class="pcard-edit-name" title="Изменить название">&#9998;</button>
+      </div>
+      <select class="form-select pcard-group">${groupOpts}</select>
+      <button class="btn btn-outline-secondary pcard-photo-btn" type="button">${photoBtnLabel}</button>
+      <input type="file" id="${fileId}" accept="image/*" capture="environment">
+      <div class="pcard-status"></div>
+    </div>`;
+
+  // ── Привязка событий ──
+  const statusEl = card.querySelector(".pcard-status");
+
+  // Короткая пометка статуса на карточке
+  function cardStatus(kind, text) {
+    statusEl.className = "pcard-status " + kind;
+    statusEl.textContent = text;
+  }
+
+  // Правка названия по карандашу — превращаем в input
+  card.querySelector(".pcard-edit-name").addEventListener("click", () => {
+    startNameEdit(card, p, cardStatus);
+  });
+
+  // Автосохранение группы при изменении (без кнопки, без перехода)
+  const groupSel = card.querySelector(".pcard-group");
+  groupSel.addEventListener("change", async () => {
+    const value = groupSel.value;
+    if (!value) return; // «Выберите группу...» — ничего не делаем
+    cardStatus("", "Сохраняем...");
+    const d = await apiCall(`/${TOKEN}/save`, {
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: p.name, type: "group", value: value }),
+    });
+    if (d && d.ok) {
+      p.group = value;
+      syncProduct(p);
+      cardStatus("ok", "Сохранено ✓");
+      toast("ok", "Группа сохранена ✓");
+    } else {
+      cardStatus("err", "Не сохранено");
+      toast("err", (d && d.message) || "Не удалось сохранить. Попробуйте ещё раз.");
+    }
+  });
+
+  // Кнопка фото → клик по скрытому input
+  const fileInput = card.querySelector('input[type="file"]');
+  card.querySelector(".pcard-photo-btn").addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", e => {
+    const f = e.target.files && e.target.files[0];
+    if (f) uploadPhoto(f, p, card, cardStatus);
+    e.target.value = ""; // сброс — чтобы можно было выбрать тот же файл повторно
+  });
+
+  return card;
+}
+
+// Синхронизировать изменённый товар в allProducts
+function syncProduct(p) {
+  const idx = allProducts.findIndex(x => x.name === p.name);
+  if (idx >= 0) allProducts[idx] = p;
+}
+
+/* ── Инлайн-правка названия ── */
+function startNameEdit(card, p, cardStatus) {
+  const row = card.querySelector(".pcard-name-row");
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "form-control pcard-name-input";
+  input.value = p.display_name || p.name;
+  input.placeholder = "Название для каталога";
+  row.style.display = "none";
+  row.insertAdjacentElement("afterend", input);
+  input.focus();
+  input.select();
+
+  let done = false;
+  async function commit() {
+    if (done) return;
+    done = true;
+    const value = input.value.trim();
+    // Пустое значение = вернуть имя из прайса (на сервер уходит пустая правка name)
+    cardStatus("", "Сохраняем...");
+    const d = await apiCall(`/${TOKEN}/save`, {
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: p.name, type: "name", value: value }),
+    });
+    input.remove();
+    if (d && d.ok) {
+      p.display_name = value;
+      syncProduct(p);
+      card.querySelector(".pcard-name").textContent = value || p.name;
+      cardStatus("ok", "Сохранено ✓");
+      toast("ok", "Название сохранено ✓");
+    } else {
+      cardStatus("err", "Не сохранено");
+      toast("err", (d && d.message) || "Не удалось сохранить название.");
+    }
+    row.style.display = "";
+  }
+
+  input.addEventListener("blur", commit);
+  input.addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); input.blur(); }
+    else if (e.key === "Escape") { done = true; input.remove(); row.style.display = ""; }
+  });
+}
+
+/* ── Загрузка фото ── */
+async function uploadPhoto(file, p, card, cardStatus) {
+  // Клиентская валидация (дублирует серверную T-04-09)
+  const ext = (file.name.split(".").pop() || "").toLowerCase();
+  const allowedExts = ["jpg", "jpeg", "png", "webp"];
+  const errMsg = "Не удалось загрузить фото. Проверьте формат файла (JPG, PNG, WebP) и размер (до 10 МБ).";
+  if (!allowedExts.includes(ext)) { cardStatus("err", "Неверный формат"); toast("err", errMsg); return; }
+  if (file.size > 10 * 1024 * 1024) { cardStatus("err", "Файл слишком большой"); toast("err", errMsg); return; }
+
+  cardStatus("", "Загружаем фото...");
+
+  const fd = new FormData();
+  fd.append("photo", file, file.name);
+  fd.append("key", p.name); // нормализация на сервере (D-05)
+
+  try {
+    const r = await fetch(`/${TOKEN}/photo`, { method: "POST", body: fd });
+    const d = await r.json();
+    if (d && d.ok) {
+      p.image_url = d.url || p.image_url;
+      syncProduct(p);
+      // Обновить превью на карточке
+      const photoBox = card.querySelector(".pcard-photo");
+      photoBox.innerHTML = `<img src="${esc(p.image_url)}" alt="${esc(p.name)}">`;
+      card.querySelector(".pcard-photo-btn").textContent = "📷 Заменить фото";
+      cardStatus("ok", "Фото сохранено ✓");
+      toast("ok", "Фото сохранено ✓");
+    } else {
+      cardStatus("err", "Ошибка загрузки");
+      toast("err", (d && d.message) || errMsg);
+    }
+  } catch (e) {
+    cardStatus("err", "Ошибка соединения");
+    toast("err", "Ошибка соединения. Попробуйте ещё раз.");
+  }
 }
 
 /* ── Загрузка товаров ── */
-
 async function loadProducts() {
-  show("info", "Загружаем список товаров...");
+  toast("info", "Загружаем список товаров...");
   try {
     const r = await fetch(`/${TOKEN}/products`);
     const d = await r.json();
     allProducts = d.products || [];
-    renderProducts(allProducts);
-    // Убрать баннер «загрузка»
-    document.getElementById("status").className = "status";
-    document.getElementById("status").textContent = "";
+    render();
+    document.getElementById("toast").style.display = "none";
   } catch (e) {
-    show("err", "Не удалось загрузить товары. Проверьте соединение.");
-  }
-}
-
-/* ── Сохранить правку ── */
-
-async function saveEdit() {
-  if (!currentProduct) return;
-
-  const group       = document.getElementById("edit-group").value;
-  const displayName = document.getElementById("edit-display-name").value.trim();
-
-  // Проверяем наличие хотя бы одного изменения
-  const nameChanged  = displayName !== (currentProduct.display_name || "");
-  const groupChanged = group !== "" && group !== (currentProduct.group || "");
-  if (!nameChanged && !groupChanged) return;
-
-  document.getElementById("btn-save").disabled = true;
-  showEdit("info", "Сохраняем правку...");
-
-  // Ключ правки = сырое имя из прайса; normalize_name применяется на сервере в /save (D-05)
-  const key = currentProduct.name;
-
-  // Сохраняем правки последовательно (может быть 1 или 2 типа)
-  let lastResult = null;
-  let anyOk = false;
-
-  // Правка отображаемого названия (план 02, D-05)
-  if (nameChanged) {
-    const d = await apiCall(`/${TOKEN}/save`, {
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key: key, type: "name", value: displayName }),
-    });
-    lastResult = d;
-    if (d && d.ok) {
-      anyOk = true;
-      // Обновить локальный объект товара
-      currentProduct.display_name = displayName;
-      const idx = allProducts.findIndex(p => p.name === currentProduct.name);
-      if (idx >= 0) allProducts[idx].display_name = displayName;
-    }
-  }
-
-  // Правка группы (план 01)
-  if (groupChanged) {
-    const d = await apiCall(`/${TOKEN}/save`, {
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key: key, type: "group", value: group }),
-    });
-    lastResult = d;
-    if (d && d.ok) {
-      anyOk = true;
-      // Обновить локальный объект товара
-      currentProduct.group = group;
-      const idx = allProducts.findIndex(p => p.name === currentProduct.name);
-      if (idx >= 0) allProducts[idx].group = group;
-    }
-  }
-
-  document.getElementById("btn-save").disabled = false;
-
-  if (!lastResult) {
-    showEdit("err", "Ошибка соединения. Попробуйте ещё раз.");
-    return;
-  }
-
-  // Показать последний статус; при успехе — вернуться к списку через 1.5 с
-  showEdit(anyOk ? "ok" : "err",
-    anyOk
-      ? "Правка сохранена. Она применится автоматически при следующем обновлении прайса или нажмите «Применить сейчас»."
-      : (lastResult.message || "Не удалось сохранить правку."));
-
-  if (anyOk) {
-    setTimeout(() => {
-      showList();
-      renderProducts(allProducts);
-    }, 1500);
+    toast("err", "Не удалось загрузить товары. Проверьте соединение.");
   }
 }
 
 /* ── «Применить сейчас» ── */
-
 async function applyNow() {
   const btn = document.getElementById("btn-apply");
   btn.disabled = true;
@@ -985,186 +978,44 @@ async function applyNow() {
   }
 
   show(d.ok ? "info" : "err", d.message);
-  // Разблокировать кнопку через 30 с
   setTimeout(() => { btn.disabled = false; }, 30000);
   if (!d.ok) btn.disabled = false;
 }
 
 /* ── Вкладки-фильтры ── */
-
 document.getElementById("filter-tabs").addEventListener("click", e => {
   const tab = e.target.closest(".filter-tab");
   if (!tab) return;
   document.querySelectorAll(".filter-tab").forEach(t => t.classList.remove("active"));
   tab.classList.add("active");
   activeFilter = tab.dataset.filter;
-  applyFilters();
+  render();
 });
+
+/* ── Переключатель вида (Сетка / Список) ── */
+document.getElementById("view-toggle").addEventListener("click", e => {
+  const btn = e.target.closest("button[data-view]");
+  if (!btn) return;
+  activeView = btn.dataset.view;
+  localStorage.setItem("admin_view", activeView);
+  updateViewButtons();
+  render();
+});
+
+function updateViewButtons() {
+  document.querySelectorAll("#view-toggle button").forEach(b => {
+    b.classList.toggle("active", b.dataset.view === activeView);
+  });
+}
 
 /* ── Живой поиск с debounce 300ms ── */
-
 document.getElementById("search-input").addEventListener("input", () => {
   clearTimeout(searchTimer);
-  searchTimer = setTimeout(() => applyFilters(), 300);
+  searchTimer = setTimeout(() => render(), 300);
 });
-
-/* ── Зона загрузки фото (план 03, D-06) ── */
-
-// Показать статус в баннере загрузки фото
-function showPhoto(kind, text) {
-  const el = document.getElementById("status-photo");
-  el.className = "status " + kind;
-  el.textContent = text;
-}
-
-// Обработка перетаскивания файла в зону загрузки
-(function initDropZone() {
-  const drop = document.getElementById("photo-drop");
-  if (!drop) return;
-  drop.addEventListener("dragover", e => {
-    e.preventDefault();
-    drop.classList.add("drag-over");
-  });
-  drop.addEventListener("dragleave", () => drop.classList.remove("drag-over"));
-  drop.addEventListener("drop", e => {
-    e.preventDefault();
-    drop.classList.remove("drag-over");
-    const files = e.dataTransfer && e.dataTransfer.files;
-    if (files && files.length > 0) handlePhotoFile(files[0]);
-  });
-})();
-
-// При выборе файла через input — обработать и загрузить
-document.getElementById("photo-input").addEventListener("change", e => {
-  const f = e.target.files && e.target.files[0];
-  if (f) handlePhotoFile(f);
-  // Сбросить input, чтобы можно было выбрать тот же файл повторно
-  e.target.value = "";
-});
-
-// Обработать выбранный файл: показать превью и загрузить в Cloudinary
-async function handlePhotoFile(file) {
-  // Клиентская валидация расширения и размера (дублирует серверную проверку T-04-09)
-  const ext = file.name.split(".").pop().toLowerCase();
-  const allowedExts = ["jpg", "jpeg", "png", "webp"];
-  if (!allowedExts.includes(ext)) {
-    showPhoto("err", "Не удалось загрузить фото. Проверьте формат файла (JPG, PNG, WebP) и размер (до 10 МБ).");
-    return;
-  }
-  if (file.size > 10 * 1024 * 1024) {
-    showPhoto("err", "Не удалось загрузить фото. Проверьте формат файла (JPG, PNG, WebP) и размер (до 10 МБ).");
-    return;
-  }
-
-  // Показать локальное превью сразу при выборе (до загрузки)
-  const reader = new FileReader();
-  reader.onload = ev => {
-    const preview = document.getElementById("photo-preview");
-    preview.src = ev.target.result;
-    preview.style.display = "block";
-    document.getElementById("photo-drop-text").style.display = "none";
-  };
-  reader.readAsDataURL(file);
-
-  if (!currentProduct) {
-    showPhoto("err", "Ошибка: товар не выбран.");
-    return;
-  }
-
-  showPhoto("info", "Загружаем фото...");
-
-  // Отправить файл на сервер через FormData → /photo
-  const fd = new FormData();
-  fd.append("photo", file, file.name);
-  fd.append("key", currentProduct.name); // нормализация на сервере (D-05)
-
-  try {
-    const r = await fetch(`/${TOKEN}/photo`, { method: "POST", body: fd });
-    const d = await r.json();
-    if (d && d.ok) {
-      showPhoto("ok", d.message || "Фото сохранено.");
-      // Обновить превью по URL из Cloudinary (окончательный URL)
-      if (d.url) {
-        const preview = document.getElementById("photo-preview");
-        preview.src = d.url;
-        preview.style.display = "block";
-      }
-      // Обновить image_url товара в локальном состоянии
-      currentProduct.image_url = d.url || currentProduct.image_url;
-      const idx = allProducts.findIndex(p => p.name === currentProduct.name);
-      if (idx >= 0) allProducts[idx].image_url = currentProduct.image_url;
-      // Показать кнопку «Сбросить фото»
-      document.getElementById("btn-reset-photo").style.display = "";
-    } else {
-      showPhoto("err", (d && d.message) || "Не удалось загрузить фото. Проверьте формат файла (JPG, PNG, WebP) и размер (до 10 МБ).");
-      // Убрать превью при ошибке загрузки
-      document.getElementById("photo-preview").style.display = "none";
-      document.getElementById("photo-drop-text").style.display = "";
-    }
-  } catch (e) {
-    showPhoto("err", "Ошибка соединения. Попробуйте ещё раз.");
-    document.getElementById("photo-preview").style.display = "none";
-    document.getElementById("photo-drop-text").style.display = "";
-  }
-}
-
-// Сброс фото — пишет пустую photo-правку (привязка удаляется при следующем обновлении)
-async function resetPhoto() {
-  if (!currentProduct) return;
-  showPhoto("info", "Сбрасываем привязку фото...");
-  const fd = new FormData();
-  // Отправляем специальный файл-заглушку — серверная валидация не пройдёт,
-  // поэтому сброс выполняется через /save с пустым значением
-  const d = await apiCall(`/${TOKEN}/save`, {
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ key: currentProduct.name, type: "photo", value: "" }),
-  });
-  if (d && d.ok) {
-    showPhoto("ok", "Привязка фото сброшена.");
-    document.getElementById("photo-preview").style.display = "none";
-    document.getElementById("photo-drop-text").style.display = "";
-    document.getElementById("btn-reset-photo").style.display = "none";
-    currentProduct.image_url = "";
-  } else {
-    showPhoto("err", (d && d.message) || "Не удалось сбросить фото.");
-  }
-}
-
-/* ── Расширение showEditScreen: заполнять зону фото ── */
-// Переопределяем после объявления оригинальной функции — обёртка не нужна,
-// просто патчим вызов: при открытии экрана правки показываем текущее фото.
-const _origShowEditScreen = showEditScreen;
-// eslint-disable-next-line no-global-assign
-window.showEditScreen = function(product) {
-  _origShowEditScreen(product);
-
-  // Сбросить состояние зоны загрузки фото
-  const preview = document.getElementById("photo-preview");
-  const dropText = document.getElementById("photo-drop-text");
-  const statusPhoto = document.getElementById("status-photo");
-  const btnReset = document.getElementById("btn-reset-photo");
-
-  statusPhoto.className = "status";
-  statusPhoto.textContent = "";
-
-  if (product.image_url) {
-    // Показать текущее фото товара
-    preview.src = product.image_url;
-    preview.style.display = "block";
-    dropText.style.display = "none";
-    btnReset.style.display = "";
-  } else {
-    // Нет фото — показать приглашение загрузить
-    preview.src = "";
-    preview.style.display = "none";
-    dropText.style.display = "";
-    btnReset.style.display = "none";
-  }
-};
-// Восстановить привязку к кнопке после переопределения
-showEditScreen = window.showEditScreen;
 
 /* ── Инициализация ── */
+updateViewButtons();
 loadProducts();
 </script>
 </body>
