@@ -815,9 +815,9 @@ async function apiCall(url, opts) {
 
 /* ── Фильтрация и поиск ── */
 
-// Карточка «требует внимания» если: новинка ИЛИ нет группы ИЛИ нет фото
+// Карточка «требует внимания» если: нет группы ИЛИ нет фото (is_new НЕ учитываем)
 function needsAttention(p) {
-  return p.is_new || !p.group || !p.image_url;
+  return !p.group || !p.image_url;
 }
 
 // Вернуть подмножество товаров под текущий фильтр и поиск
@@ -826,7 +826,7 @@ function filteredProducts() {
   return allProducts.filter(p => {
     let matchFilter;
     if (activeFilter === "attention")     matchFilter = needsAttention(p);
-    else if (activeFilter === "new")      matchFilter = !!p.is_new;
+    else if (activeFilter === "new")      matchFilter = (p.badge === "новинка");
     else if (activeFilter === "nogroup")  matchFilter = !p.group;
     else if (activeFilter === "nophoto")  matchFilter = !p.image_url;
     else                                  matchFilter = true; // "all"
@@ -886,14 +886,15 @@ function buildCard(p, i) {
     : `<svg class="ph-empty" width="40" height="40" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v13.5a1.5 1.5 0 001.5 1.5z"/></svg>`;
 
   // ── Бейджи и подписи ──
+  // Метку «новинка»/«хит» показывает ТОЛЬКО кнопка NEW/Хит своим зелёным
+  // состоянием (по p.badge). Текстовый бейдж метки на карточке НЕ рисуем,
+  // чтобы не было дублирования. Здесь — только индикатор «требует внимания».
   let badges = "";
   if (!p.group || !p.image_url) badges += '<span class="badge-attn">&#9888;</span>';
-  if (p.is_new)                 badges += '<span class="badge-new">Новинка</span>';
 
   const hints = [];
   if (!p.group)     hints.push("Без группы");
   if (!p.image_url) hints.push("Без фото");
-  if (p.is_new)     hints.push("Новинка");
   const hintsHtml = hints.length
     ? `<div class="pcard-hints">${esc(hints.join(" · "))}</div>` : "";
 
