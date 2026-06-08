@@ -728,9 +728,12 @@ function showEditScreen(product) {
   document.getElementById("status-edit").textContent = "";
   document.getElementById("btn-save").disabled = true;
 
-  // Переключить экран
+  // Переключить экран.
+  // ВАЖНО: для #screen-edit ставим именно "block", а НЕ "" — пустая строка
+  // убрала бы локальный стиль, и снова сработало бы правило CSS «#screen-edit{display:none}»,
+  // из-за чего экран правки оставался спрятанным (баг «белый экран»).
   document.getElementById("screen-list").style.display = "none";
-  document.getElementById("screen-edit").style.display = "";
+  document.getElementById("screen-edit").style.display = "block";
 
   // Активировать кнопку «Сохранить правку» при любом изменении полей (план 02, UI-SPEC)
   function checkChanged() {
