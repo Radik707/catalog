@@ -6,7 +6,9 @@ export interface Product {
   category: string;
   group: string;
   supplier: string;
-  badge?: string;
-  imageUrl?: string;
-  description?: string;
+  badge?: string;        // колонка G — бейдж (хит / новинка / акция)
+  imageUrl?: string;     // колонка H — URL фото в Cloudinary
+  description?: string;  // колонка I — описание товара
+  subgroup?: string;     // колонка J — «Подгруппа» (двухуровневая навигация)
+  section?: string;      // колонка K — «Раздел» (верхний уровень навигации)
 }
