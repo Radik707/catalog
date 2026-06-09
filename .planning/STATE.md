@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Двухуровневая навигация каталога
 status: planning
-last_updated: "2026-06-09T15:30:00.000Z"
-last_activity: 2026-06-09
+last_updated: "2026-06-09T15:58:25.608Z"
+last_activity: 2026-06-09 — дорожная карта v1.1 создана, этапы 5–7
 progress:
   total_phases: 7
   completed_phases: 4
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_plans: 11
+  completed_plans: 11
+  percent: 57
 ---
 
 # Состояние проекта
