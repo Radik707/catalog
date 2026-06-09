@@ -1,4 +1,5 @@
 import { Product } from "./types";
+import { getCategoryIndex } from "./structure";
 
 const SHEETS_ID = process.env.GOOGLE_SHEETS_ID;
 const API_KEY = process.env.GOOGLE_API_KEY;
@@ -27,7 +28,7 @@ export async function getProducts(): Promise<Product[]> {
   const data = await res.json();
   const rows: string[][] = data.values || [];
 
-  return rows.map((row, index) => ({
+  const products: Product[] = rows.map((row, index) => ({
     id: String(index + 1),
     name: row[0] || "",
     price: parseFloat(row[1]) || 0,
@@ -38,7 +39,34 @@ export async function getProducts(): Promise<Product[]> {
     badge: row[6] || undefined,
     imageUrl: row[7] || undefined,
     description: row[8] || undefined,
-    subgroup: row[9] || undefined,   // J — «Подгруппа»
-    section: row[10] || undefined,   // K — «Раздел»
+    subgroup: row[9] || undefined, // J — «Подгруппа»
+    section: row[10] || undefined, // K — «Раздел»
   }));
+
+  // Запасной механизм: пока в таблице нет колонки «Раздел» (у всех товаров пусто),
+  // выводим раздел/подгруппу из structure_map.json по категории и сортируем по
+  // структуре — так же, как это делает upload.py. Когда боевая перезаливка
+  // заполнит колонки J/K, этот блок сам отключится (раздел перестанет быть пустым).
+  const idx = getCategoryIndex();
+  if (idx.size > 0 && products.every((p) => !p.section)) {
+    const FALLBACK = {
+      section: "Прочее",
+      subgroup: "Прочее",
+      sort: [9999, 9999, 9999] as [number, number, number],
+    };
+    const sortKey = new Map<string, [number, number, number]>();
+    for (const p of products) {
+      const e = idx.get(p.category) ?? FALLBACK;
+      p.section = e.section;
+      p.subgroup = e.subgroup;
+      sortKey.set(p.id, e.sort);
+    }
+    products.sort((a, b) => {
+      const sa = sortKey.get(a.id)!;
+      const sb = sortKey.get(b.id)!;
+      return sa[0] - sb[0] || sa[1] - sb[1] || sa[2] - sb[2];
+    });
+  }
+
+  return products;
 }

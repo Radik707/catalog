@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { getProducts } from "@/lib/sheets";
 import CatalogView from "@/components/CatalogView";
+import { NavMode } from "@/components/NavProvider";
 
 // Кэш на 5 минут — данные обновляются раз в день, не нужен постоянный перечитка
 export const revalidate = 300;
@@ -10,7 +11,6 @@ export default async function CatalogPage({
   searchParams,
 }: {
   params: { secret: string };
-  // category убран — навигация теперь через scroll-to-anchor, не через URL
   searchParams: { filter?: string };
 }) {
   // Проверка секретной ссылки — не прошёл, показываем 404
@@ -18,20 +18,15 @@ export default async function CatalogPage({
     notFound();
   }
 
-  const allProducts = await getProducts();
+  const products = await getProducts();
 
-  // Фильтр по бейджу для вкладок «Хит» и «Новинка» в шапке
-  let products = allProducts;
-  if (searchParams.filter === "hit") {
-    products = allProducts.filter((p) => p.badge === "хит");
-  } else if (searchParams.filter === "new") {
-    products = allProducts.filter((p) => p.badge === "новинка");
-  }
+  // Начальный режим из ссылки ?filter=hit|new (для внешних ссылок); по умолчанию — каталог
+  const initialMode: NavMode =
+    searchParams.filter === "hit"
+      ? "hit"
+      : searchParams.filter === "new"
+      ? "new"
+      : "catalog";
 
-  // Флаг активного фильтра — переключает витрину в плоский список (D-06)
-  const isFiltered =
-    searchParams.filter === "hit" || searchParams.filter === "new";
-
-  // initialCategory убран — групп-фильтр заменён якорной навигацией
-  return <CatalogView products={products} isFiltered={isFiltered} />;
+  return <CatalogView products={products} initialMode={initialMode} />;
 }
