@@ -586,7 +586,9 @@ PAGE = r"""<!doctype html>
      задаёт квадратная трансформация Cloudinary (см. редактор подгонки). */
   .pcard-photo { width: 100%; background: #fff; display: flex; align-items: center;
                  justify-content: center; overflow: hidden; }
-  .pcard-photo img { width: 100%; height: 100%; object-fit: cover; }
+  /* Фото показываем ЦЕЛИКОМ (contain), не обрезаем; квадратная рамка остаётся,
+     пустое место заполняет белый фон рамки. */
+  .pcard-photo img { width: 100%; height: 100%; object-fit: contain; }
   .pcard-photo .ph-empty { color: #d1d5db; }
 
   /* Сетка: фото — квадрат во всю ширину колонки.
@@ -747,10 +749,11 @@ PAGE = r"""<!doctype html>
      Внутри обычный <img> с трансформацией Cloudinary (object-fit: cover). */
   .pe-frame {
     position: relative; width: 100%; aspect-ratio: 1 / 1;
-    background: #f3f4f6; border: 2px solid #2563eb; border-radius: 10px;
+    background: #fff; border: 2px solid #2563eb; border-radius: 10px;
     overflow: hidden;
   }
-  .pe-frame img { display: block; width: 100%; height: 100%; object-fit: cover; }
+  /* Превью — точная копия карточки: фото целиком (contain) на белом фоне. */
+  .pe-frame img { display: block; width: 100%; height: 100%; object-fit: contain; }
 
   /* Контролы редактора */
   .pe-controls { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
@@ -847,11 +850,12 @@ PAGE = r"""<!doctype html>
         <button type="button" class="pe-btn" id="pe-rot-left" title="Повернуть влево">↺</button>
         <button type="button" class="pe-btn" id="pe-rot-right" title="Повернуть вправо">↻</button>
       </div>
-      <!-- Зум: кнопки − / + и слайдер (1.0–3.0) -->
+      <!-- Зум: центрированный ползунок (центр=0 — оригинал; вправо приближает,
+           влево отдаляет). Кнопки − / + сдвигают на ∓8. -->
       <div class="pe-row">
         <span class="pe-label">Зум</span>
         <button type="button" class="pe-btn" id="pe-zoom-out" title="Отдалить">−</button>
-        <input type="range" class="pe-zoom" id="pe-zoom" min="1" max="3" step="0.05" value="1">
+        <input type="range" class="pe-zoom" id="pe-zoom" min="-100" max="100" step="1" value="0">
         <button type="button" class="pe-btn" id="pe-zoom-in" title="Приблизить">+</button>
       </div>
       <!-- Действия -->
@@ -1252,12 +1256,21 @@ async function uploadPhoto(file, p, card, cardStatus) {
    Только ванильный JS, без библиотек (D-03).
    ────────────────────────────────────────────────────────────────── */
 
-// Границы зума и шаги (зум 1.0–3.0)
-const PE_ZOOM_MIN = 1.0;
-const PE_ZOOM_MAX = 3.0;
-const PE_ZOOM_STEP = 0.05;
-// Размер итогового квадрата для c_fill (px)
+// Ползунок зума центрирован: позиция -100..100, центр 0 = оригинал (zoom 1.0).
+// Маппинг позиции v в фактический zoom: zoom = 3^(v/100)
+//   v=0   → 1.0   (центр, оригинал)
+//   v=100 → 3.0   (максимальное приближение)
+//   v=-100→ ~0.333 (максимальное отдаление)
+const PE_POS_MIN = -100;     // крайнее левое положение ползунка (отдалить)
+const PE_POS_MAX = 100;      // крайнее правое положение ползунка (приблизить)
+const PE_POS_STEP = 8;       // шаг кнопок − / + по позиции ползунка
+// Размер итогового квадрата для c_fill / c_pad (px)
 const PE_FILL = 800;
+
+// Позиция ползунка (-100..100) → фактический зум
+function pePosToZoom(pos) {
+  return Math.pow(3, pos / 100);
+}
 
 // Текущее состояние редактора подгонки
 const peState = {
@@ -1266,7 +1279,8 @@ const peState = {
   cardStatus: null, // функция статуса на карточке
   baseUrl: "",      // чистый базовый URL Cloudinary (без наших трансформаций)
   rotation: 0,      // поворот в градусах: 0 / 90 / 180 / 270
-  zoom: 1,          // зум 1.0–3.0
+  zoom: 1,          // фактический зум (3^(zoomPos/100)); 1.0 = оригинал
+  zoomPos: 0,       // позиция ползунка -100..100 (0 = центр = оригинал)
 };
 
 /* Убрать ранее добавленную НАМИ трансформацию из URL.
@@ -1284,6 +1298,8 @@ function peStripTransform(url) {
     /^a_\d+\//,                 // поворот a_<число>/
     /^c_crop,[^/]*\//,          // кроп c_crop,.../
     /^c_fill,[^/]*\//,          // заполнение c_fill,.../
+    /^c_fit,[^/]*\//,           // вписывание c_fit,.../  (зум-аут)
+    /^c_pad,[^/]*\//,           // паддинг c_pad,.../      (зум-аут / поворот)
   ];
   let changed = true;
   while (changed) {
@@ -1296,21 +1312,42 @@ function peStripTransform(url) {
 }
 
 /* Собрать трансформированный URL из чистого базового + текущего зума/поворота.
-   deg ∈ {0,90,180,270}; f = round(1/zoom, 3), ограничено 0.2..1.0.
-   Трансформация = (deg>0 ? a_<deg>/ : '') + c_crop,g_center,w_f,h_f/
-                   + c_fill,g_center,w_800,h_800/
-   и вставляется СРАЗУ после /upload/. */
+   deg ∈ {0,90,180,270}; zoom — фактический зум (1.0 = оригинал).
+   Три режима:
+   - зум-ин (zoom > 1.02): вырезаем центральную часть c_crop (доля f=1/zoom),
+     затем растягиваем до 800×800 — фото «приближается».
+   - зум-аут (zoom < 0.98): вписываем фото целиком (c_fit) в меньший квадрат,
+     затем добиваем белым паддингом до 800×800 — фото «отдаляется».
+   - нейтраль (0.98..1.02): без зума. Если есть поворот — квадратим c_pad на белом;
+     если поворота нет — трансформации НЕТ вовсе (вернём базовый URL = реальная картинка).
+   Это чинит баг «цветной квадрат»: при zoom≈1 мы больше НЕ пишем c_crop,w_1. */
 function peBuildUrl(baseUrl, deg, zoom) {
   const marker = "/upload/";
   const at = baseUrl.indexOf(marker);
   if (at < 0) return baseUrl;
-  let f = Math.round((1 / zoom) * 1000) / 1000;   // round до 3 знаков
-  if (f > 1.0) f = 1.0;
-  if (f < 0.2) f = 0.2;
+
   let t = "";
   if (deg > 0) t += "a_" + deg + "/";
-  t += "c_crop,g_center,w_" + f + ",h_" + f + "/";
-  t += "c_fill,g_center,w_" + PE_FILL + ",h_" + PE_FILL + "/";
+
+  if (zoom > 1.02) {
+    // Зум-ин: вырезаем центральную долю и растягиваем до квадрата.
+    let f = Math.round((1 / zoom) * 1000) / 1000;   // доля 0..1, 3 знака
+    if (f > 0.95) f = 0.95;
+    if (f < 0.2) f = 0.2;
+    t += "c_crop,g_center,w_" + String(f) + ",h_" + String(f) + "/";
+    t += "c_fill,g_center,w_" + PE_FILL + ",h_" + PE_FILL + "/";
+  } else if (zoom < 0.98) {
+    // Зум-аут: фото целиком, уменьшенное, на белом паддинге.
+    const s = Math.round(zoom * PE_FILL);           // сторона вписанного фото, px
+    t += "c_fit,w_" + s + ",h_" + s + "/";
+    t += "c_pad,g_center,w_" + PE_FILL + ",h_" + PE_FILL + ",b_white/";
+  } else if (deg > 0) {
+    // Нейтральный зум, но есть поворот — квадратим результат на белом фоне.
+    t += "c_pad,g_center,w_" + PE_FILL + ",h_" + PE_FILL + ",b_white/";
+  }
+
+  // Ничего не накрутили (zoom≈1, deg==0) — отдаём оригинальный URL как есть.
+  if (t === "") return baseUrl;
   return baseUrl.slice(0, at + marker.length) + t + baseUrl.slice(at + marker.length);
 }
 
@@ -1334,10 +1371,11 @@ function openPhotoEditor(p, card, cardStatus) {
   // не наслаивались при повторном открытии. Зум/поворот — с нуля.
   peState.baseUrl = peStripTransform(p.image_url);
   peState.rotation = 0;
-  peState.zoom = 1;
+  peState.zoomPos = 0;     // ползунок в центр
+  peState.zoom = 1;        // фактический зум = оригинал
 
   document.getElementById("pe-name").textContent = p.display_name || p.name;
-  document.getElementById("pe-zoom").value = 1;
+  document.getElementById("pe-zoom").value = 0;     // центр
   document.getElementById("pe-save").disabled = false;
 
   const modal = document.getElementById("photo-editor");
@@ -1360,14 +1398,12 @@ function peRotate(delta) {
   peRefreshPreview();
 }
 
-// Установить зум (с ограничением и округлением до шага)
-function peSetZoom(val) {
-  let z = Math.max(PE_ZOOM_MIN, Math.min(PE_ZOOM_MAX, val));
-  // округлить до шага 0.05, чтобы значения были «круглыми»
-  z = Math.round(z / PE_ZOOM_STEP) * PE_ZOOM_STEP;
-  z = Math.round(z * 1000) / 1000;
-  peState.zoom = z;
-  document.getElementById("pe-zoom").value = z;
+// Установить зум по ПОЗИЦИИ ползунка (-100..100). 0 = центр = оригинал.
+function peSetZoomPos(pos) {
+  let p = Math.max(PE_POS_MIN, Math.min(PE_POS_MAX, Math.round(pos)));
+  peState.zoomPos = p;
+  peState.zoom = pePosToZoom(p);     // фактический зум 3^(p/100)
+  document.getElementById("pe-zoom").value = p;
   peRefreshPreview();
 }
 
@@ -1411,9 +1447,10 @@ async function peSaveAndUpload() {
 function initPhotoEditor() {
   document.getElementById("pe-rot-left").addEventListener("click", () => peRotate(-90));
   document.getElementById("pe-rot-right").addEventListener("click", () => peRotate(90));
-  document.getElementById("pe-zoom-out").addEventListener("click", () => peSetZoom(peState.zoom - PE_ZOOM_STEP));
-  document.getElementById("pe-zoom-in").addEventListener("click", () => peSetZoom(peState.zoom + PE_ZOOM_STEP));
-  document.getElementById("pe-zoom").addEventListener("input", e => peSetZoom(parseFloat(e.target.value)));
+  // − влево (отдалить): позиция −8; + вправо (приблизить): позиция +8
+  document.getElementById("pe-zoom-out").addEventListener("click", () => peSetZoomPos(peState.zoomPos - PE_POS_STEP));
+  document.getElementById("pe-zoom-in").addEventListener("click", () => peSetZoomPos(peState.zoomPos + PE_POS_STEP));
+  document.getElementById("pe-zoom").addEventListener("input", e => peSetZoomPos(parseInt(e.target.value, 10)));
   document.getElementById("pe-cancel").addEventListener("click", closePhotoEditor);
   document.getElementById("pe-save").addEventListener("click", peSaveAndUpload);
 
