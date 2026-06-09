@@ -956,6 +956,29 @@ def main():
     new_for_memory = apply_edit_memory(all_products, edit_memory)
     log.info("Товаров без правок (новые для памяти): %d", new_for_memory)
 
+    # [НОВОЕ, этап 5] Загрузить карту структуры и проставить Подгруппа/Раздел
+    # Вызов ПОСЛЕ apply_edit_memory, ПЕРЕД products_to_rows (позиция из D-04/D-05)
+    structure_map = load_structure_map()
+    if structure_map:
+        category_index = build_category_index(structure_map)
+        all_products = apply_structure_mapping(all_products, category_index)
+        # Сортировать товары по структуре: раздел → подгруппа → категория (D-05)
+        # _sort_key проставлен apply_structure_mapping(); товары без структуры уходят в конец
+        all_products.sort(key=lambda p: p.get("_sort_key", (9999, 9999, 9999)))
+        log.info("Товары отсортированы по двухуровневой структуре (%d разделов)", len(structure_map))
+        # D-12: сводка непокрытых — собраны, подсчитаны и залогированы
+        uncovered = [p for p in all_products if p.get("display_section") == "Прочее"]
+        if uncovered:
+            uncovered_cats = sorted({p["source_category"] for p in uncovered})
+            log.warning(
+                "D-12: %d товаров (%d кат.) не покрыты structure_map.json → «Прочее»",
+                len(uncovered), len(uncovered_cats),
+            )
+            for cat in uncovered_cats:
+                log.warning("  ! %s", cat)
+    else:
+        log.info("structure_map.json не загружен — поля Подгруппа/Раздел будут пустыми")
+
     # Подготовить строки для Google Sheet
     rows = products_to_rows(all_products, badges, photo_data, new_names, url_index)
 
@@ -970,13 +993,53 @@ def main():
 
     if args.dry_run:
         log.info("--dry-run: запись в Google Sheet пропущена")
-        # Вывести первые 5 строк как пример
-        print("\nПример данных (первые 5 товаров):")
-        print("-" * 100)
-        for row in rows[:6]:  # заголовок + 5 товаров
-            print(" | ".join(str(x) for x in row))
-        print("-" * 100)
-        print(f"Всего строк (без заголовка): {len(rows) - 1}")
+
+        # D-13: человекочитаемый предпросмотр структуры (раздел → подгруппа → категории + счётчики)
+        # Печатается ТОЛЬКО когда structure_map загружен, иначе — старый вывод первых 5 строк
+        if structure_map:
+            print("\n" + "=" * 70)
+            print("ПРЕДПРОСМОТР ДВУХУРОВНЕВОЙ СТРУКТУРЫ (для сверки владельцем)")
+            print("=" * 70)
+            # Собрать счётчики товаров по (раздел, подгруппа)
+            counters: dict = {}
+            for p in all_products:
+                key = (p.get("display_section", "Прочее"), p.get("display_subgroup", "Прочее"))
+                counters[key] = counters.get(key, 0) + 1
+            for section, subgroups in structure_map.items():
+                total_section = sum(counters.get((section, sg), 0) for sg in subgroups)
+                print(f"\n[{section}]  — итого: {total_section} товаров")
+                for subgroup, categories in subgroups.items():
+                    count = counters.get((section, subgroup), 0)
+                    print(f"  {subgroup}  ({count} товаров)")
+                    for cat in categories:
+                        # Подсчитать товары этой категории среди реальных данных
+                        cat_count = sum(
+                            1 for p in all_products
+                            if p["source_category"] == cat
+                        )
+                        if cat_count:
+                            print(f"    · {cat}: {cat_count}")
+            # Показать блок «Прочее» при наличии непокрытых категорий (D-12)
+            uncovered_count = counters.get(("Прочее", "Прочее"), 0)
+            if uncovered_count:
+                print(f"\n[Прочее]  — {uncovered_count} товаров (не покрыты structure_map.json)")
+                uncovered_cats = sorted({
+                    p["source_category"] for p in all_products
+                    if p.get("display_section") == "Прочее"
+                })
+                for cat in uncovered_cats:
+                    cnt = sum(1 for p in all_products if p["source_category"] == cat)
+                    print(f"    · {cat}: {cnt}")
+            print("=" * 70)
+            print(f"\nВсего товаров: {len(all_products)}")
+        else:
+            # Старый dry-run вывод — когда structure_map не загружен
+            print("\nПример данных (первые 5 товаров):")
+            print("-" * 100)
+            for row in rows[:6]:  # заголовок + 5 товаров
+                print(" | ".join(str(x) for x in row))
+            print("-" * 100)
+            print(f"Всего строк (без заголовка): {len(rows) - 1}")
     else:
         upload_to_google_sheet(rows, num_files=len(xlsx_files))
 
