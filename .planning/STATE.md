@@ -1,15 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: Phase 04 executing — plan 04-03 done, 1 plan remaining (04-04 deploy via sysadmin)
-last_updated: "2026-06-07T18:00:00Z"
+milestone: v1.1
+milestone_name: Двухуровневая навигация каталога
+status: planning
+last_updated: "2026-06-09T15:01:55.483Z"
+last_activity: 2026-06-09
 progress:
-  total_phases: 4
-  completed_phases: 3
-  total_plans: 11
-  completed_plans: 10
-  percent: 82
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Состояние проекта
@@ -110,3 +111,10 @@ progress:
 Последняя сессия: 2026-06-07
 Остановились на: План 04-03 выполнен. Следующий: 04-04 (деплой через субагента sysadmin — установка cloudinary, перезапуск службы, боевая проверка фото с телефона).
 Файл продолжения: .planning/phases/04-1/04-04-PLAN.md
+
+## Current Position
+
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-06-09 — Milestone v1.1 started
