@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Двухуровневая навигация каталога
-status: ready_to_plan
-last_updated: 2026-06-09T17:33:50.431Z
+status: planning
+last_updated: "2026-06-09T18:17:49.613Z"
 last_activity: 2026-06-09
 progress:
   total_phases: 7
@@ -11,7 +11,6 @@ progress:
   total_plans: 13
   completed_plans: 13
   percent: 71
-stopped_at: Phase 05 complete (2/2) — ready to discuss Phase 6
 ---
 
 # Состояние проекта
