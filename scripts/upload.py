@@ -149,7 +149,9 @@ def apply_structure_mapping(
 
     unmapped = set()
     for product in products:
-        cat = product["source_category"]
+        # .get с fallback — мягкая деградация вместо KeyError, если у товара
+        # вдруг нет поля source_category (соответствует обещанию D-12) (WR-02).
+        cat = product.get("source_category", "")
         entry = category_index.get(cat)
         if entry is None:
             unmapped.add(cat)
@@ -855,8 +857,10 @@ def upload_to_google_sheet(rows: list[list], num_files: int) -> None:
         worksheet.clear()
     except gspread.exceptions.WorksheetNotFound:
         log.info("Лист '%s' не найден — создаю...", sheet_name)
+        # Ширину берём из заголовка: колонок стало 11 (добавлены «Подгруппа»/«Раздел»),
+        # жёсткое cols=9 урезало бы два новых столбца на свежесозданном листе (WR-01).
         worksheet = spreadsheet.add_worksheet(
-            title=sheet_name, rows=len(rows) + 10, cols=9
+            title=sheet_name, rows=len(rows) + 10, cols=len(rows[0]) if rows else 11
         )
 
     # --- Записать данные пакетно ---
