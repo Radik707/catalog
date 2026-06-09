@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Двухуровневая навигация каталога
-status: planning
-last_updated: "2026-06-09T15:58:25.608Z"
-last_activity: 2026-06-09 — дорожная карта v1.1 создана, этапы 5–7
+status: executing
+last_updated: "2026-06-09T16:16:54.727Z"
+last_activity: 2026-06-09 -- Phase 05 planning complete
 progress:
   total_phases: 7
   completed_phases: 4
-  total_plans: 11
+  total_plans: 13
   completed_plans: 11
   percent: 57
 ---
@@ -125,5 +125,5 @@ progress:
 
 Phase: 5 (Структура данных двухуровневой навигации) — контекст собран, готов к планированию
 Plan: —
-Status: Context gathered — ready for phase planning
-Last activity: 2026-06-09 — собран контекст этапа 5 (05-CONTEXT.md)
+Status: Ready to execute
+Last activity: 2026-06-09 -- Phase 05 planning complete
