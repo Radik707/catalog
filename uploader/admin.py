@@ -746,14 +746,24 @@ PAGE = r"""<!doctype html>
               overflow-wrap: break-word; word-break: break-word; }
 
   /* Квадратная рамка-превью 1:1 — точная копия рамки карточки.
-     Внутри обычный <img> с трансформацией Cloudinary (object-fit: cover). */
+     Внутри <img> с ЖИВЫМ CSS-transform (pan/zoom). Cloudinary-кроп
+     собирается только при сохранении — превью плавное, без перезагрузок. */
   .pe-frame {
     position: relative; width: 100%; aspect-ratio: 1 / 1;
     background: #fff; border: 2px solid #2563eb; border-radius: 10px;
     overflow: hidden;
+    touch-action: none;              /* свой drag пальцем, без скролла страницы */
+    cursor: grab;
   }
-  /* Превью — точная копия карточки: фото целиком (contain) на белом фоне. */
-  .pe-frame img { display: block; width: 100%; height: 100%; object-fit: contain; }
+  .pe-frame.pe-dragging { cursor: grabbing; }
+  /* Превью позиционируется абсолютно; размеры/смещение задаёт JS.
+     object-fit НЕ используем — масштаб «contain» считаем сами в пикселях. */
+  .pe-frame img {
+    position: absolute; left: 0; top: 0;
+    transform-origin: center center;
+    user-select: none; -webkit-user-drag: none; pointer-events: none;
+    max-width: none; max-height: none;
+  }
 
   /* Контролы редактора */
   .pe-controls { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
@@ -1281,6 +1291,20 @@ const peState = {
   rotation: 0,      // поворот в градусах: 0 / 90 / 180 / 270
   zoom: 1,          // фактический зум (3^(zoomPos/100)); 1.0 = оригинал
   zoomPos: 0,       // позиция ползунка -100..100 (0 = центр = оригинал)
+  // ── Геометрия живого превью ──
+  F: 0,             // сторона квадратной рамки (px, clientWidth при открытии)
+  W: 0,             // naturalWidth ПОВЁРНУТОЙ картинки превью (px)
+  H: 0,             // naturalHeight ПОВЁРНУТОЙ картинки превью (px)
+  c: 1,             // базовый масштаб «contain» = min(F/W, F/H)
+  panX: 0,          // сдвиг кадра по X (px экрана)
+  panY: 0,          // сдвиг кадра по Y (px экрана)
+  // ── Состояние перетаскивания ──
+  dragging: false,  // идёт ли drag прямо сейчас
+  dragId: null,     // pointerId активного пальца/мыши
+  dragStartX: 0,    // экранные координаты старта drag
+  dragStartY: 0,
+  panStartX: 0,     // pan на момент старта drag
+  panStartY: 0,
 };
 
 /* Убрать ранее добавленную НАМИ трансформацию из URL.
@@ -1311,54 +1335,113 @@ function peStripTransform(url) {
   return head + rest;
 }
 
-/* Собрать трансформированный URL из чистого базового + текущего зума/поворота.
-   deg ∈ {0,90,180,270}; zoom — фактический зум (1.0 = оригинал).
-   Три режима:
-   - зум-ин (zoom > 1.02): вырезаем центральную часть c_crop (доля f=1/zoom),
-     затем растягиваем до 800×800 — фото «приближается».
-   - зум-аут (zoom < 0.98): вписываем фото целиком (c_fit) в меньший квадрат,
-     затем добиваем белым паддингом до 800×800 — фото «отдаляется».
-   - нейтраль (0.98..1.02): без зума. Если есть поворот — квадратим c_pad на белом;
-     если поворота нет — трансформации НЕТ вовсе (вернём базовый URL = реальная картинка).
-   Это чинит баг «цветной квадрат»: при zoom≈1 мы больше НЕ пишем c_crop,w_1. */
-function peBuildUrl(baseUrl, deg, zoom) {
+/* Вставить готовую строку трансформаций сразу после `/upload/` в чистый base. */
+function peInsertTransform(baseUrl, t) {
   const marker = "/upload/";
   const at = baseUrl.indexOf(marker);
-  if (at < 0) return baseUrl;
-
-  let t = "";
-  if (deg > 0) t += "a_" + deg + "/";
-
-  if (zoom > 1.02) {
-    // Зум-ин: вырезаем центральную долю и растягиваем до квадрата.
-    let f = Math.round((1 / zoom) * 1000) / 1000;   // доля 0..1, 3 знака
-    if (f > 0.95) f = 0.95;
-    if (f < 0.2) f = 0.2;
-    t += "c_crop,g_center,w_" + String(f) + ",h_" + String(f) + "/";
-    t += "c_fill,g_center,w_" + PE_FILL + ",h_" + PE_FILL + "/";
-  } else if (zoom < 0.98) {
-    // Зум-аут: фото целиком, уменьшенное, на белом паддинге.
-    const s = Math.round(zoom * PE_FILL);           // сторона вписанного фото, px
-    t += "c_fit,w_" + s + ",h_" + s + "/";
-    t += "c_pad,g_center,w_" + PE_FILL + ",h_" + PE_FILL + ",b_white/";
-  } else if (deg > 0) {
-    // Нейтральный зум, но есть поворот — квадратим результат на белом фоне.
-    t += "c_pad,g_center,w_" + PE_FILL + ",h_" + PE_FILL + ",b_white/";
-  }
-
-  // Ничего не накрутили (zoom≈1, deg==0) — отдаём оригинальный URL как есть.
-  if (t === "") return baseUrl;
+  if (at < 0 || t === "") return baseUrl;
   return baseUrl.slice(0, at + marker.length) + t + baseUrl.slice(at + marker.length);
 }
 
-// Текущий URL превью (по состоянию редактора)
-function peCurrentUrl() {
-  return peBuildUrl(peState.baseUrl, peState.rotation, peState.zoom);
+/* «Повёрнутый базовый» URL — для ЖИВОГО превью (только поворот, без кропа).
+   deg=0 → чистый base. Загруженная картинка уже имеет повёрнутые W/H,
+   поэтому контейн-масштаб считаем по её naturalWidth/Height. */
+function peRotatedBaseUrl(baseUrl, deg) {
+  if (deg > 0) return peInsertTransform(baseUrl, "a_" + deg + "/");
+  return baseUrl;
 }
 
-// Перерисовать превью (живое применение трансформации)
-function peRefreshPreview() {
-  document.getElementById("pe-preview").src = peCurrentUrl();
+/* Собрать ТОЧНЫЙ кроп Cloudinary при сохранении.
+   Координаты x0,y0 и сторона S — целые ПИКСЕЛИ повёрнутой картинки
+   (W,H), чтобы Cloudinary не принял их за доли.
+   Геометрия совпадает с живым превью: F,c,z,panX,panY.
+   - z≥1 и квадрат помещается → c_crop,x_,y_,w_,h_ + c_fill до 800.
+   - z<1 (отдаление) ИЛИ S больше картинки → c_fit + c_pad на белом.
+   - нейтраль (deg=0, z≈1, pan≈0) → чистый base (без трансформаций). */
+function peBuildSaveUrl() {
+  const base = peState.baseUrl;
+  const deg  = peState.rotation;
+  const z    = peState.zoom;
+  const F = peState.F, c = peState.c, W = peState.W, H = peState.H;
+  const panX = peState.panX, panY = peState.panY;
+  const rot = deg > 0 ? ("a_" + deg + "/") : "";
+
+  // Нейтраль: ничего не трогали — отдаём реальную картинку.
+  if (deg === 0 &&
+      Math.abs(z - 1) < 0.02 &&
+      Math.abs(panX) < 0.5 && Math.abs(panY) < 0.5) {
+    return base;
+  }
+
+  // Геометрия защищена: если рамку не успели измерить — отдаём поворот.
+  if (!(F > 0 && c > 0 && W > 0 && H > 0)) {
+    return peInsertTransform(base, rot);
+  }
+
+  if (z >= 1) {
+    // Сторона квадрата кропа в пикселях повёрнутой картинки.
+    let S = Math.round(F / (c * z));
+    if (S < 1) S = 1;
+    if (S <= Math.min(W, H)) {
+      // x0,y0 — левый/верхний угол кропа в пикселях; pan сдвигает кадр.
+      let x0 = Math.round(W / 2 - F / (2 * c * z) - panX / (c * z));
+      let y0 = Math.round(H / 2 - F / (2 * c * z) - panY / (c * z));
+      x0 = Math.max(0, Math.min(x0, W - S));
+      y0 = Math.max(0, Math.min(y0, H - S));
+      const t = rot
+        + "c_crop,x_" + x0 + ",y_" + y0 + ",w_" + S + ",h_" + S + "/"
+        + "c_fill,g_center,w_" + PE_FILL + ",h_" + PE_FILL + "/";
+      return peInsertTransform(base, t);
+    }
+    // S больше картинки — падаем в ветку «целиком на белом» ниже.
+  }
+
+  // Зум-аут / кроп не помещается: фото целиком, уменьшенное, на белом паддинге.
+  const s = Math.max(1, Math.round(z * PE_FILL));
+  const t = rot
+    + "c_fit,w_" + s + ",h_" + s + "/"
+    + "c_pad,g_center,w_" + PE_FILL + ",h_" + PE_FILL + ",b_white/";
+  return peInsertTransform(base, t);
+}
+
+/* Применить геометрию (размер/смещение/трансформ) к <img> превью.
+   width/height/left/top задают базовый «contain», а translate+scale —
+   живой pan/zoom поверх него. */
+function peApplyPreviewTransform() {
+  const img = document.getElementById("pe-preview");
+  const F = peState.F, c = peState.c, W = peState.W, H = peState.H;
+  if (!(F > 0 && c > 0 && W > 0 && H > 0)) return;
+  const w = W * c, h = H * c;
+  img.style.width  = w + "px";
+  img.style.height = h + "px";
+  img.style.left = (F - w) / 2 + "px";
+  img.style.top  = (F - h) / 2 + "px";
+  img.style.transform =
+    "translate(" + peState.panX + "px," + peState.panY + "px) scale(" + peState.zoom + ")";
+}
+
+/* Только трансформ (быстрый путь для drag/zoom — без пересчёта размеров). */
+function peUpdateTransformOnly() {
+  const img = document.getElementById("pe-preview");
+  img.style.transform =
+    "translate(" + peState.panX + "px," + peState.panY + "px) scale(" + peState.zoom + ")";
+}
+
+/* Загрузить «повёрнутый базовый» src и после load пересчитать геометрию.
+   Вызывается при открытии и при смене поворота. resetPan — обнулить сдвиг. */
+function peLoadPreview(resetPan) {
+  const img = document.getElementById("pe-preview");
+  const frame = document.getElementById("pe-frame");
+  peState.F = frame.clientWidth;            // сторона рамки (квадрат F×F)
+  if (resetPan) { peState.panX = 0; peState.panY = 0; }
+  img.onload = () => {
+    // naturalWidth/Height уже учитывают поворот a_<deg>.
+    peState.W = img.naturalWidth;
+    peState.H = img.naturalHeight;
+    peState.c = Math.min(peState.F / peState.W, peState.F / peState.H);
+    peApplyPreviewTransform();
+  };
+  img.src = peRotatedBaseUrl(peState.baseUrl, peState.rotation);
 }
 
 // Открыть редактор для товара p
@@ -1373,6 +1456,8 @@ function openPhotoEditor(p, card, cardStatus) {
   peState.rotation = 0;
   peState.zoomPos = 0;     // ползунок в центр
   peState.zoom = 1;        // фактический зум = оригинал
+  peState.panX = 0;        // сдвиг кадра — с нуля
+  peState.panY = 0;
 
   document.getElementById("pe-name").textContent = p.display_name || p.name;
   document.getElementById("pe-zoom").value = 0;     // центр
@@ -1382,7 +1467,8 @@ function openPhotoEditor(p, card, cardStatus) {
   modal.classList.add("open");
   modal.setAttribute("aria-hidden", "false");
 
-  peRefreshPreview();
+  // Загружаем живое превью (рамку уже видно → clientWidth корректный).
+  peLoadPreview(true);
 }
 
 function closePhotoEditor() {
@@ -1392,19 +1478,21 @@ function closePhotoEditor() {
   peState.product = null;
 }
 
-// Поворот на ±90°
+// Поворот на ±90°: меняем src на «повёрнутый базовый», сбрасываем pan,
+// зум сохраняем; после load пересчитаем W,H,c и размеры.
 function peRotate(delta) {
   peState.rotation = (peState.rotation + delta + 360) % 360;
-  peRefreshPreview();
+  peLoadPreview(true);
 }
 
 // Установить зум по ПОЗИЦИИ ползунка (-100..100). 0 = центр = оригинал.
+// Меняет scale(z) в живом transform — без перезагрузки картинки.
 function peSetZoomPos(pos) {
   let p = Math.max(PE_POS_MIN, Math.min(PE_POS_MAX, Math.round(pos)));
   peState.zoomPos = p;
   peState.zoom = pePosToZoom(p);     // фактический зум 3^(p/100)
   document.getElementById("pe-zoom").value = p;
-  peRefreshPreview();
+  peUpdateTransformOnly();
 }
 
 // Сохранить подгонку: записать готовый URL через /save (type=photo)
@@ -1414,7 +1502,7 @@ async function peSaveAndUpload() {
   const saveBtn = document.getElementById("pe-save");
   saveBtn.disabled = true;
 
-  const url = peCurrentUrl();
+  const url = peBuildSaveUrl();      // живой pan/zoom → точный кроп Cloudinary
   if (peState.cardStatus) peState.cardStatus("", "Сохраняем...");
 
   const d = await apiCall(`/${TOKEN}/save`, {
@@ -1453,6 +1541,42 @@ function initPhotoEditor() {
   document.getElementById("pe-zoom").addEventListener("input", e => peSetZoomPos(parseInt(e.target.value, 10)));
   document.getElementById("pe-cancel").addEventListener("click", closePhotoEditor);
   document.getElementById("pe-save").addEventListener("click", peSaveAndUpload);
+
+  // ── Перетаскивание кадра (pan) мышью и пальцем через Pointer Events ──
+  // Один указатель = сдвиг. setPointerCapture удерживает события за рамкой.
+  const frame = document.getElementById("pe-frame");
+
+  frame.addEventListener("pointerdown", e => {
+    if (peState.dragging) return;
+    peState.dragging = true;
+    peState.dragId = e.pointerId;
+    peState.dragStartX = e.clientX;
+    peState.dragStartY = e.clientY;
+    peState.panStartX = peState.panX;
+    peState.panStartY = peState.panY;
+    frame.classList.add("pe-dragging");
+    try { frame.setPointerCapture(e.pointerId); } catch (_) {}
+    e.preventDefault();
+  });
+
+  frame.addEventListener("pointermove", e => {
+    if (!peState.dragging || e.pointerId !== peState.dragId) return;
+    // Сдвиг pan на дельту указателя (в пикселях экрана).
+    peState.panX = peState.panStartX + (e.clientX - peState.dragStartX);
+    peState.panY = peState.panStartY + (e.clientY - peState.dragStartY);
+    peUpdateTransformOnly();
+    e.preventDefault();
+  });
+
+  const peEndDrag = e => {
+    if (!peState.dragging || e.pointerId !== peState.dragId) return;
+    peState.dragging = false;
+    peState.dragId = null;
+    frame.classList.remove("pe-dragging");
+    try { frame.releasePointerCapture(e.pointerId); } catch (_) {}
+  };
+  frame.addEventListener("pointerup", peEndDrag);
+  frame.addEventListener("pointercancel", peEndDrag);
 
   // Закрытие по тапу вне диалога (по фону)
   document.getElementById("photo-editor").addEventListener("click", e => {
