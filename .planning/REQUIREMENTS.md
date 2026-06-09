@@ -67,12 +67,26 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (заполняется при создании дорожной карты) | — | — |
+| STRUCT-01 | Этап 5 | Pending |
+| STRUCT-02 | Этап 5 | Pending |
+| STRUCT-03 | Этап 5 | Pending |
+| STRUCT-04 | Этап 5 | Pending |
+| STRUCT-05 | Этап 5 | Pending |
+| REGRP-01 | Этап 5 | Pending |
+| REGRP-02 | Этап 5 | Pending |
+| REGRP-03 | Этап 5 | Pending |
+| NAV-01 | Этап 6 | Pending |
+| NAV-02 | Этап 6 | Pending |
+| NAV-03 | Этап 6 | Pending |
+| NAV-04 | Этап 6 | Pending |
+| NAV-05 | Этап 6 | Pending |
+| ADM-06 | Этап 7 | Pending |
+| ADM-07 | Этап 7 | Pending |
 
 **Coverage:**
 - v1.1 requirements: 15 total
-- Mapped to phases: 0/15 (заполнит роадмаппер)
+- Mapped to phases: 15/15 ✓
 
 ---
 *Requirements defined: 2026-06-09*
-*Last updated: 2026-06-09 — старт вехи v1.1*
+*Last updated: 2026-06-09 — дорожная карта v1.1 создана (этапы 5–7)*
