@@ -701,6 +701,74 @@ PAGE = r"""<!doctype html>
   /* Статус-строка карточки */
   .view-grid.density-m .pcard-status,
   .view-grid.density-s .pcard-status { font-size: 11px; }
+
+  /* ──────────────────────────────────────────────────────────────────
+     РЕДАКТОР ФОТО (поворот / масштаб / кадрирование)
+     Маленькая кнопка-карандаш поверх фото открывает модалку с canvas.
+     Только ванильный JS — без сторонних библиотек (D-03).
+     ────────────────────────────────────────────────────────────────── */
+
+  /* Контейнер фото — относительное позиционирование для кнопки-карандаша */
+  .pcard-photo { position: relative; }
+  /* Кнопка «✏️» в углу фото — тач-цель не меньше 40px */
+  .pcard-edit-photo {
+    position: absolute; top: 4px; right: 4px;
+    width: 40px; height: 40px; min-width: 40px;
+    display: flex; align-items: center; justify-content: center;
+    border: 0; border-radius: 8px; cursor: pointer;
+    background: rgba(255,255,255,0.85); color: #374151; font-size: 18px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.18); padding: 0; line-height: 1;
+  }
+  .pcard-edit-photo:hover { background: #fff; }
+  /* На мелкой сетке кнопка чуть компактнее, но остаётся нажимаемой */
+  .view-grid.density-s .pcard-edit-photo { width: 34px; height: 34px; min-width: 34px; font-size: 15px; }
+
+  /* Затемнение-фон модалки редактора */
+  #photo-editor {
+    position: fixed; inset: 0; z-index: 2000; display: none;
+    background: rgba(0,0,0,0.6);
+    align-items: center; justify-content: center; padding: 12px;
+  }
+  #photo-editor.open { display: flex; }
+
+  /* Карточка модалки — не вылезает за экран, скроллится при нехватке высоты */
+  .pe-dialog {
+    background: #fff; border-radius: 14px; width: 100%; max-width: 460px;
+    max-height: 96vh; overflow-y: auto; padding: 16px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+  }
+  .pe-title { font-size: 16px; font-weight: 600; color: #111827; margin: 0 0 4px; }
+  .pe-sub   { font-size: 13px; color: #6b7280; margin: 0 0 12px;
+              overflow-wrap: break-word; word-break: break-word; }
+
+  /* Квадратная рамка-кадр 1:1 с canvas внутри */
+  .pe-frame {
+    position: relative; width: 100%; aspect-ratio: 1 / 1;
+    background: #f3f4f6; border: 2px solid #2563eb; border-radius: 10px;
+    overflow: hidden; touch-action: none; cursor: grab;
+  }
+  .pe-frame.dragging { cursor: grabbing; }
+  .pe-frame canvas { display: block; width: 100%; height: 100%; }
+
+  /* Контролы редактора */
+  .pe-controls { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+  .pe-row { display: flex; align-items: center; gap: 8px; }
+  /* Тач-дружественные кнопки ≥40px */
+  .pe-btn {
+    min-height: 44px; min-width: 44px; font-size: 16px; font-weight: 600;
+    border: 1px solid #d1d5db; border-radius: 8px; background: #fff;
+    color: #374151; cursor: pointer; padding: 0 12px;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .pe-btn:hover { background: #f3f4f6; }
+  .pe-label { font-size: 13px; color: #6b7280; min-width: 56px; }
+  .pe-zoom { flex: 1; height: 36px; }
+  /* Кнопки «Сохранить» / «Отмена» — на всю ширину строки */
+  .pe-actions { display: flex; gap: 10px; margin-top: 6px; }
+  .pe-actions .pe-btn { flex: 1; min-height: 48px; }
+  .pe-save   { background: #2563eb; color: #fff; border-color: #2563eb; }
+  .pe-save:hover { background: #1d4ed8; }
+  .pe-save:disabled { opacity: .6; cursor: default; }
 </style>
 </head>
 <body>
@@ -758,6 +826,40 @@ PAGE = r"""<!doctype html>
 
 <!-- Общий плавающий тост -->
 <div id="toast"></div>
+
+<!-- ── Модальное окно редактора фото (поворот / масштаб / кадрирование) ── -->
+<div id="photo-editor" aria-hidden="true">
+  <div class="pe-dialog" role="dialog" aria-modal="true">
+    <h2 class="pe-title">Кадрирование фото</h2>
+    <p class="pe-sub" id="pe-name"></p>
+
+    <!-- Квадратная рамка-кадр с canvas внутри -->
+    <div class="pe-frame" id="pe-frame">
+      <canvas id="pe-canvas"></canvas>
+    </div>
+
+    <div class="pe-controls">
+      <!-- Поворот -->
+      <div class="pe-row">
+        <span class="pe-label">Поворот</span>
+        <button type="button" class="pe-btn" id="pe-rot-left" title="Повернуть влево">↺</button>
+        <button type="button" class="pe-btn" id="pe-rot-right" title="Повернуть вправо">↻</button>
+      </div>
+      <!-- Масштаб: кнопки − / + и слайдер -->
+      <div class="pe-row">
+        <span class="pe-label">Масштаб</span>
+        <button type="button" class="pe-btn" id="pe-zoom-out" title="Отдалить">−</button>
+        <input type="range" class="pe-zoom" id="pe-zoom" min="100" max="400" value="100">
+        <button type="button" class="pe-btn" id="pe-zoom-in" title="Приблизить">+</button>
+      </div>
+      <!-- Действия -->
+      <div class="pe-actions">
+        <button type="button" class="pe-btn" id="pe-cancel">Отмена</button>
+        <button type="button" class="pe-btn pe-save" id="pe-save">Сохранить</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script>
 /* ── Константы и состояние ── */
@@ -890,6 +992,10 @@ function buildCard(p, i) {
     ? `<img src="${esc(p.image_url)}" alt="${esc(p.name)}" loading="lazy" decoding="async">`
     : `<svg class="ph-empty" width="40" height="40" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v13.5a1.5 1.5 0 001.5 1.5z"/></svg>`;
 
+  // Кнопка «✏️» для кадрирования — показываем только если у товара уже есть фото
+  const editPhotoBtn = p.image_url
+    ? `<button class="pcard-edit-photo" type="button" title="Кадрировать фото">&#9998;</button>` : "";
+
   // ── Бейджи и подписи ──
   // Метку «новинка»/«хит» показывает ТОЛЬКО кнопка NEW/Хит своим зелёным
   // состоянием (по p.badge). Текстовый бейдж метки на карточке НЕ рисуем,
@@ -923,7 +1029,7 @@ function buildCard(p, i) {
   const hitActive = (p.badge === "хит") ? " active" : "";
 
   card.innerHTML = `
-    <div class="pcard-photo">${photoHtml}</div>
+    <div class="pcard-photo">${photoHtml}${editPhotoBtn}</div>
     <div class="pcard-body">
       <div class="pcard-badges">${badges}</div>
       ${hintsHtml}
@@ -962,6 +1068,7 @@ function buildCard(p, i) {
   groupSel.addEventListener("change", async () => {
     const value = groupSel.value;
     if (!value) return; // «Выберите группу...» — ничего не делаем
+    saveScrollPos();    // место = эта карточка
     cardStatus("", "Сохраняем...");
     const d = await apiCall(`/${TOKEN}/save`, {
       headers: { "Content-Type": "application/json" },
@@ -994,6 +1101,7 @@ function buildCard(p, i) {
     // Тап по активной снимает метку (""), по неактивной — ставит её
     const newBadge = (p.badge === targetBadge) ? "" : targetBadge;
 
+    saveScrollPos();   // место = эта карточка
     // Оптимистично: сразу обновить состояние и перекрасить
     p.badge = newBadge;
     syncProduct(p);
@@ -1031,6 +1139,15 @@ function buildCard(p, i) {
     if (f) uploadPhoto(f, p, card, cardStatus);
     e.target.value = ""; // сброс — чтобы можно было выбрать тот же файл повторно
   });
+
+  // Кнопка «✏️» кадрирования (есть только если у товара есть фото)
+  const editPhotoEl = card.querySelector(".pcard-edit-photo");
+  if (editPhotoEl) {
+    editPhotoEl.addEventListener("click", () => {
+      saveScrollPos();               // запомнить место = последняя активная карточка
+      openPhotoEditor(p, card, cardStatus);
+    });
+  }
 
   return card;
 }
@@ -1124,6 +1241,374 @@ async function uploadPhoto(file, p, card, cardStatus) {
   }
 }
 
+/* ──────────────────────────────────────────────────────────────────
+   РЕДАКТОР ФОТО (поворот / масштаб / кадрирование → сохранить)
+   Загружаем текущее фото товара в <canvas>, даём владельцу повернуть,
+   приблизить и подвинуть, затем вырезаем видимую область рамки 1:1
+   в quadrat 800×800 и отправляем как JPEG на существующий /photo.
+   Только ванильный JS, без библиотек (D-03).
+   ────────────────────────────────────────────────────────────────── */
+
+// Размер итогового экспортируемого квадрата (px)
+const PE_OUTPUT_SIZE = 800;
+
+// Текущее состояние редактора
+const peState = {
+  product: null,      // товар, который редактируем
+  card: null,         // DOM-карточка (для обновления превью)
+  cardStatus: null,   // функция статуса на карточке
+  img: null,          // загруженное Image
+  rotation: 0,        // поворот в градусах (0/90/180/270)
+  scale: 1,           // масштаб (1 = вписать по рамке)
+  baseScale: 1,       // масштаб «вписать целиком» при текущем повороте
+  offsetX: 0,         // смещение по X (в px рамки)
+  offsetY: 0,         // смещение по Y (в px рамки)
+  dragging: false,
+  lastX: 0, lastY: 0,
+  pinchDist: 0,       // расстояние между пальцами при пинч-зуме
+};
+
+// Открыть редактор для товара p
+function openPhotoEditor(p, card, cardStatus) {
+  if (!p.image_url) return;
+  peState.product = p;
+  peState.card = card;
+  peState.cardStatus = cardStatus;
+  peState.rotation = 0;
+  peState.scale = 1;
+  peState.offsetX = 0;
+  peState.offsetY = 0;
+
+  document.getElementById("pe-name").textContent = p.display_name || p.name;
+  document.getElementById("pe-zoom").value = 100;
+  document.getElementById("pe-save").disabled = false;
+
+  const modal = document.getElementById("photo-editor");
+  modal.classList.add("open");
+  modal.setAttribute("aria-hidden", "false");
+
+  // Загружаем изображение с crossOrigin — иначе canvas «запачкается» и toBlob упадёт.
+  // Cloudinary отдаёт CORS-заголовки, поэтому anonymous работает.
+  const img = new Image();
+  img.crossOrigin = "anonymous";
+  img.onload = () => {
+    peState.img = img;
+    peFitCanvasToFrame();   // подогнать размер canvas под рамку
+    peResetView();          // вписать изображение целиком
+    peDraw();
+  };
+  img.onerror = () => {
+    toast("err", "Не удалось открыть фото для редактирования.");
+    closePhotoEditor();
+  };
+  // Добавляем cache-buster не нужен — но добавим параметр на случай CORS-кэша без заголовков
+  img.src = p.image_url;
+}
+
+function closePhotoEditor() {
+  const modal = document.getElementById("photo-editor");
+  modal.classList.remove("open");
+  modal.setAttribute("aria-hidden", "true");
+  peState.img = null;
+  peState.product = null;
+}
+
+// Подогнать пиксельный размер canvas под фактический размер рамки на экране
+function peFitCanvasToFrame() {
+  const frame = document.getElementById("pe-frame");
+  const canvas = document.getElementById("pe-canvas");
+  const rect = frame.getBoundingClientRect();
+  // Учитываем devicePixelRatio для резкости на ретине
+  const dpr = window.devicePixelRatio || 1;
+  const size = Math.round(rect.width);   // рамка квадратная
+  canvas.width = Math.round(size * dpr);
+  canvas.height = Math.round(size * dpr);
+  peState._dpr = dpr;
+  peState._frameSize = size;
+}
+
+// Размеры изображения с учётом поворота (поменять местами при 90/270)
+function peRotatedDims() {
+  const img = peState.img;
+  if (peState.rotation === 90 || peState.rotation === 270) {
+    return { w: img.height, h: img.width };
+  }
+  return { w: img.width, h: img.height };
+}
+
+// Вписать изображение целиком в рамку (cover-режим: заполнить рамку),
+// вычислить baseScale, сбросить смещение в центр
+function peResetView() {
+  const { w, h } = peRotatedDims();
+  const frame = peState._frameSize || 1;
+  // cover: масштабируем так, чтобы изображение покрыло рамку (мин. поля)
+  peState.baseScale = Math.max(frame / w, frame / h);
+  peState.scale = 1;
+  peState.offsetX = 0;
+  peState.offsetY = 0;
+  document.getElementById("pe-zoom").value = 100;
+}
+
+// Отрисовать текущее состояние в canvas
+function peDraw() {
+  const canvas = document.getElementById("pe-canvas");
+  const ctx = canvas.getContext("2d");
+  const dpr = peState._dpr || 1;
+  const frame = peState._frameSize || 1;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  if (!peState.img) return;
+
+  const eff = peState.baseScale * peState.scale; // итоговый масштаб исходных px → px рамки
+
+  ctx.save();
+  // Работаем в координатах рамки, домножая на dpr
+  ctx.scale(dpr, dpr);
+  // Центр рамки + пользовательское смещение
+  ctx.translate(frame / 2 + peState.offsetX, frame / 2 + peState.offsetY);
+  ctx.rotate(peState.rotation * Math.PI / 180);
+  ctx.scale(eff, eff);
+  // Рисуем изображение центрированным относительно своего центра
+  ctx.drawImage(peState.img, -peState.img.width / 2, -peState.img.height / 2);
+  ctx.restore();
+}
+
+// Поворот на ±90°
+function peRotate(delta) {
+  peState.rotation = (peState.rotation + delta + 360) % 360;
+  // При повороте пересчитываем baseScale (меняются габариты), сохраняя текущий зум
+  const { w, h } = peRotatedDims();
+  const frame = peState._frameSize || 1;
+  peState.baseScale = Math.max(frame / w, frame / h);
+  peState.offsetX = 0;
+  peState.offsetY = 0;
+  peDraw();
+}
+
+// Применить значение слайдера зума (100..400 → 1..4)
+function peSetZoom(val) {
+  peState.scale = Math.max(1, Math.min(4, val / 100));
+  document.getElementById("pe-zoom").value = Math.round(peState.scale * 100);
+  peDraw();
+}
+
+// Экспорт видимой области рамки в Blob (JPEG) и отправка на /photo
+async function peSaveAndUpload() {
+  const p = peState.product;
+  if (!p || !peState.img) return;
+  const saveBtn = document.getElementById("pe-save");
+  saveBtn.disabled = true;
+
+  // Рисуем результат в отдельный квадратный canvas PE_OUTPUT_SIZE×PE_OUTPUT_SIZE.
+  // Масштабируем все величины из координат рамки в координаты вывода.
+  const out = document.createElement("canvas");
+  out.width = PE_OUTPUT_SIZE;
+  out.height = PE_OUTPUT_SIZE;
+  const octx = out.getContext("2d");
+  octx.fillStyle = "#ffffff";
+  octx.fillRect(0, 0, PE_OUTPUT_SIZE, PE_OUTPUT_SIZE);
+
+  const frame = peState._frameSize || 1;
+  const k = PE_OUTPUT_SIZE / frame;                 // коэффициент рамка → вывод
+  const eff = peState.baseScale * peState.scale;
+
+  octx.save();
+  octx.translate(PE_OUTPUT_SIZE / 2 + peState.offsetX * k, PE_OUTPUT_SIZE / 2 + peState.offsetY * k);
+  octx.rotate(peState.rotation * Math.PI / 180);
+  octx.scale(eff * k, eff * k);
+  octx.drawImage(peState.img, -peState.img.width / 2, -peState.img.height / 2);
+  octx.restore();
+
+  if (peState.cardStatus) peState.cardStatus("", "Сохраняем фото...");
+
+  // toBlob может упасть, если canvas «запачкан» (tainted) при недоступном CORS
+  let blob;
+  try {
+    blob = await new Promise((resolve, reject) => {
+      out.toBlob(b => b ? resolve(b) : reject(new Error("toBlob null")), "image/jpeg", 0.9);
+    });
+  } catch (e) {
+    saveBtn.disabled = false;
+    toast("err", "Не удалось сохранить кадр. Попробуйте загрузить фото заново.");
+    if (peState.cardStatus) peState.cardStatus("err", "Ошибка кадрирования");
+    return;
+  }
+
+  // Отправляем через существующий endpoint /photo (как обычная загрузка)
+  const fd = new FormData();
+  fd.append("photo", blob, "edit.jpg");
+  fd.append("key", p.name);   // нормализация ключа на сервере (D-05)
+
+  try {
+    const r = await fetch(`/${TOKEN}/photo`, { method: "POST", body: fd });
+    const d = await r.json();
+    if (d && d.ok) {
+      p.image_url = d.url || p.image_url;
+      syncProduct(p);
+      // Обновить превью на карточке (cache-buster, чтобы браузер не показал старое)
+      const card = peState.card;
+      if (card) {
+        const bust = (p.image_url.indexOf("?") >= 0 ? "&" : "?") + "v=" + Date.now();
+        const photoBox = card.querySelector(".pcard-photo");
+        const editBtn = photoBox.querySelector(".pcard-edit-photo");
+        photoBox.innerHTML = `<img src="${esc(p.image_url + bust)}" alt="${esc(p.name)}" decoding="async">`;
+        if (editBtn) photoBox.appendChild(editBtn);
+      }
+      if (peState.cardStatus) peState.cardStatus("ok", "Фото обновлено ✓");
+      toast("ok", "Фото обновлено ✓");
+      closePhotoEditor();
+    } else {
+      saveBtn.disabled = false;
+      if (peState.cardStatus) peState.cardStatus("err", "Ошибка загрузки");
+      toast("err", (d && d.message) || "Не удалось обновить фото. Попробуйте ещё раз.");
+    }
+  } catch (e) {
+    saveBtn.disabled = false;
+    if (peState.cardStatus) peState.cardStatus("err", "Ошибка соединения");
+    toast("err", "Ошибка соединения. Попробуйте ещё раз.");
+  }
+}
+
+/* ── Привязка контролов редактора (один раз при загрузке страницы) ── */
+function initPhotoEditor() {
+  document.getElementById("pe-rot-left").addEventListener("click", () => peRotate(-90));
+  document.getElementById("pe-rot-right").addEventListener("click", () => peRotate(90));
+  document.getElementById("pe-zoom-out").addEventListener("click", () => peSetZoom(peState.scale * 100 - 25));
+  document.getElementById("pe-zoom-in").addEventListener("click", () => peSetZoom(peState.scale * 100 + 25));
+  document.getElementById("pe-zoom").addEventListener("input", e => peSetZoom(parseFloat(e.target.value)));
+  document.getElementById("pe-cancel").addEventListener("click", closePhotoEditor);
+  document.getElementById("pe-save").addEventListener("click", peSaveAndUpload);
+
+  // Закрытие по тапу вне диалога (по фону)
+  document.getElementById("photo-editor").addEventListener("click", e => {
+    if (e.target.id === "photo-editor") closePhotoEditor();
+  });
+
+  // ── Перетаскивание (pan) мышью и одним пальцем + пинч-зум двумя пальцами ──
+  const frame = document.getElementById("pe-frame");
+
+  // Общая функция начала перетаскивания
+  function panStart(x, y) {
+    peState.dragging = true;
+    peState.lastX = x;
+    peState.lastY = y;
+    frame.classList.add("dragging");
+  }
+  function panMove(x, y) {
+    if (!peState.dragging) return;
+    peState.offsetX += (x - peState.lastX);
+    peState.offsetY += (y - peState.lastY);
+    peState.lastX = x;
+    peState.lastY = y;
+    peDraw();
+  }
+  function panEnd() {
+    peState.dragging = false;
+    frame.classList.remove("dragging");
+  }
+
+  // Мышь
+  frame.addEventListener("mousedown", e => { panStart(e.clientX, e.clientY); });
+  window.addEventListener("mousemove", e => { panMove(e.clientX, e.clientY); });
+  window.addEventListener("mouseup", panEnd);
+
+  // Тач: один палец — pan, два пальца — пинч-зум
+  frame.addEventListener("touchstart", e => {
+    if (e.touches.length === 1) {
+      panStart(e.touches[0].clientX, e.touches[0].clientY);
+    } else if (e.touches.length === 2) {
+      peState.dragging = false;
+      peState.pinchDist = peTouchDist(e.touches);
+    }
+    e.preventDefault();
+  }, { passive: false });
+
+  frame.addEventListener("touchmove", e => {
+    if (e.touches.length === 1 && peState.dragging) {
+      panMove(e.touches[0].clientX, e.touches[0].clientY);
+    } else if (e.touches.length === 2 && peState.pinchDist > 0) {
+      const dist = peTouchDist(e.touches);
+      const ratio = dist / peState.pinchDist;
+      peSetZoom(peState.scale * 100 * ratio);
+      peState.pinchDist = dist;
+    }
+    e.preventDefault();
+  }, { passive: false });
+
+  frame.addEventListener("touchend", e => {
+    if (e.touches.length === 0) { panEnd(); peState.pinchDist = 0; }
+    else if (e.touches.length === 1) { peState.pinchDist = 0; }
+  });
+
+  // Колесо мыши — зум в редакторе
+  frame.addEventListener("wheel", e => {
+    e.preventDefault();
+    peSetZoom(peState.scale * 100 + (e.deltaY < 0 ? 15 : -15));
+  }, { passive: false });
+
+  // Закрытие по Esc
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && document.getElementById("photo-editor").classList.contains("open")) {
+      closePhotoEditor();
+    }
+  });
+}
+
+// Расстояние между двумя касаниями (для пинч-зума)
+function peTouchDist(touches) {
+  const dx = touches[0].clientX - touches[1].clientX;
+  const dy = touches[0].clientY - touches[1].clientY;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+/* ──────────────────────────────────────────────────────────────────
+   ВОЗВРАТ НА ТО ЖЕ МЕСТО (позиция прокрутки + фильтр)
+   Сохраняем scrollY (debounce ~300мс) и активный фильтр в localStorage,
+   восстанавливаем после первого render в loadProducts.
+   ────────────────────────────────────────────────────────────────── */
+
+// Сохранить текущую позицию прокрутки (вызывается и из debounce, и из действий)
+function saveScrollPos() {
+  try { localStorage.setItem("admin_scroll", String(window.scrollY)); } catch (e) {}
+}
+
+// Сохранить активный фильтр
+function saveFilter() {
+  try { localStorage.setItem("admin_last_filter", activeFilter); } catch (e) {}
+}
+
+// Восстановить фильтр из localStorage (переопределяет стартовый «Все», только если сохранён)
+function restoreFilter() {
+  let saved = null;
+  try { saved = localStorage.getItem("admin_last_filter"); } catch (e) {}
+  if (!saved) return;
+  // Проверяем, что такая вкладка существует
+  const tab = document.querySelector(`.filter-tab[data-filter="${saved}"]`);
+  if (!tab) return;
+  document.querySelectorAll(".filter-tab").forEach(t => t.classList.remove("active"));
+  tab.classList.add("active");
+  activeFilter = saved;
+}
+
+// Восстановить позицию прокрутки (после отрисовки карточек)
+function restoreScrollPos() {
+  let y = null;
+  try { y = localStorage.getItem("admin_scroll"); } catch (e) {}
+  if (y === null) return;
+  const val = parseInt(y, 10);
+  if (!isNaN(val)) window.scrollTo(0, val);
+}
+
+// Слушатель прокрутки с debounce ~300мс
+let scrollTimer = null;
+window.addEventListener("scroll", () => {
+  clearTimeout(scrollTimer);
+  scrollTimer = setTimeout(saveScrollPos, 300);
+});
+
 /* ── Загрузка товаров ── */
 async function loadProducts() {
   toast("info", "Загружаем список товаров...");
@@ -1131,8 +1616,13 @@ async function loadProducts() {
     const r = await fetch(`/${TOKEN}/products`);
     const d = await r.json();
     allProducts = d.products || [];
+    // Восстановить сохранённый фильтр ДО первого render (если сохранён)
+    restoreFilter();
     render();
     document.getElementById("toast").style.display = "none";
+    // Прокрутить к сохранённой позиции ПОСЛЕ отрисовки (когда высота уже верная).
+    // requestAnimationFrame — дать браузеру применить layout перед scrollTo.
+    requestAnimationFrame(() => requestAnimationFrame(restoreScrollPos));
   } catch (e) {
     toast("err", "Не удалось загрузить товары. Проверьте соединение.");
   }
@@ -1164,6 +1654,8 @@ document.getElementById("filter-tabs").addEventListener("click", e => {
   document.querySelectorAll(".filter-tab").forEach(t => t.classList.remove("active"));
   tab.classList.add("active");
   activeFilter = tab.dataset.filter;
+  saveFilter();        // запомнить выбранный фильтр для возврата на место
+  saveScrollPos();
   render();
 });
 
@@ -1221,6 +1713,7 @@ document.getElementById("search-input").addEventListener("input", () => {
 /* ── Инициализация ── */
 updateViewButtons();
 updateDensityUI();
+initPhotoEditor();   // привязать контролы редактора фото один раз
 loadProducts();
 </script>
 </body>
