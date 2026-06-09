@@ -592,7 +592,10 @@ def _resolve_photo_override(ref: str, url_index: dict[str, str]) -> str:
     а сайт ждёт полный https-URL. Логика резолва:
       - если значение уже начинается с http → вернуть как есть (это готовый URL);
       - иначе искать в url_index по значению целиком, затем по basename (имя файла);
-      - если нигде не нашлось → вернуть пустую строку (вызывающий код сделает fallback).
+      - если не нашлось, но ссылка содержит папку — собрать URL Cloudinary напрямую
+        (панель грузит фото с public_id="presenter/<имя>", но НЕ пишет photo_urls.json,
+        поэтому в url_index такого файла нет; URL Cloudinary детерминирован);
+      - если совсем ничего → пустая строка (вызывающий код сделает fallback).
     """
     if not ref:
         return ""
@@ -603,6 +606,12 @@ def _resolve_photo_override(ref: str, url_index: dict[str, str]) -> str:
     basename = ref.replace("\\", "/").split("/")[-1]
     if basename in url_index:
         return url_index[basename]
+    # Последний резерв — реконструкция URL Cloudinary из ссылки-référence.
+    # Так разворачиваются фото, загруженные через админ-панель (presenter/<имя>),
+    # которых нет в photo_urls.json. Проверено: такой URL отдаёт картинку (200).
+    cloud = os.environ.get("CLOUDINARY_CLOUD_NAME", "")
+    if cloud and "/" in ref:
+        return f"https://res.cloudinary.com/{cloud}/image/upload/{ref}"
     return ""
 
 

@@ -329,14 +329,20 @@ def rollback_catalog() -> tuple[bool, str]:
                   f"({rows} товаров). Сайт вернётся к ней за минуту.")
 
 
-def run_upload() -> tuple[bool, str, int | None]:
-    """Запустить upload.py на папке входящих. Вернуть (успех, текст_ошибки, число_товаров)."""
+def run_upload(source_dir: "Path | None" = None) -> tuple[bool, str, int | None]:
+    """Запустить upload.py на папке прайсов. Вернуть (успех, текст_ошибки, число_товаров).
+
+    source_dir по умолчанию = INCOMING_DIR (очередь оператора). Админ-панель
+    («Применить сейчас») передаёт LAST_BATCH_DIR — пересборка из архива последней
+    партии, т.к. очередь после загрузки очищается (иначе сборка падала на пустой папке).
+    """
     if not UPLOAD_SCRIPT.exists():
         return False, f"Скрипт не найден: {UPLOAD_SCRIPT}", None
 
-    log.info("Запуск upload.py на папке %s", INCOMING_DIR)
+    src = source_dir if source_dir is not None else INCOMING_DIR
+    log.info("Запуск upload.py на папке %s", src)
     try:
-        rc, output = _run_py(UPLOAD_SCRIPT, "--path", str(INCOMING_DIR))
+        rc, output = _run_py(UPLOAD_SCRIPT, "--path", str(src))
     except subprocess.TimeoutExpired:
         return False, "Обновление прервано по таймауту.", None
 

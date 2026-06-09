@@ -372,13 +372,16 @@ def admin_photo(token: str):
         url = cld_result["url"]
 
         # --- Записать привязку photo в «Правки» через sheet_helper ---
+        # Пишем ПОЛНЫЙ URL Cloudinary (а не короткую ссылку presenter/<имя>): при
+        # пересборке он уходит в каталог как есть. Короткие ссылки от старых загрузок
+        # upload.py всё равно развернёт (реконструкция в _resolve_photo_override).
         try:
             rc2, output2 = _run_py(
                 SHEET_HELPER,
                 "append_edit",
                 "--key", key,
                 "--type", "photo",
-                "--value", ref,
+                "--value", url,
             )
         except subprocess.TimeoutExpired:
             log.warning("admin /photo: таймаут записи привязки в «Правки»")
@@ -457,7 +460,9 @@ def admin_apply(token: str):
     def _apply_async():
         """Фоновая пересборка каталога. Замок освобождается в finally."""
         try:
-            ok, err, count = run_upload()
+            # Пересборка из АРХИВА последней партии (LAST_BATCH_DIR), а не из очереди
+            # оператора (она пустеет после загрузки) — иначе сборка падает на пустой папке.
+            ok, err, count = run_upload(LAST_BATCH_DIR)
             if ok:
                 log.info("admin /apply: каталог успешно пересобран, %s товаров", count)
             else:
