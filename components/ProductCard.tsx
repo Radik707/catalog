@@ -140,7 +140,7 @@ export default function ProductCard({
                     src={product.imageUrl}
                     alt={product.name}
                     fill
-                    className="object-cover"
+                    className="object-contain"
                   />
                 ) : (
                   <PhotoPlaceholder iconSize={placeholderIcon} />
@@ -286,7 +286,7 @@ export default function ProductCard({
                   alt={product.name}
                   width={56}
                   height={56}
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-contain"
                 />
               ) : (
                 <PhotoPlaceholder />
