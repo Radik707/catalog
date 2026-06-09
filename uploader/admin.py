@@ -649,8 +649,30 @@ PAGE = r"""<!doctype html>
   .pcard-status.ok  { color: #065f46; }
   .pcard-status.err { color: #991b1b; }
 
-  /* Кнопка «Применить сейчас» */
-  .btn-apply { min-height: 48px; font-size: 16px; font-weight: 600; }
+  /* ── Липкая верхняя полоска ──
+     Закреплена сверху (sticky) и всегда видна при прокрутке списка. */
+  .sticky-bar {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: #fff;
+    box-shadow: 0 2px 6px rgba(0,0,0,.06);
+    /* растянуть на всю ширину контейнера, компенсируя его боковые padding */
+    margin-left: -12px;
+    margin-right: -12px;
+    padding: 10px 12px;
+  }
+  .sticky-bar-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;          /* на телефоне переносится без поломки */
+    gap: 10px;
+  }
+  .sticky-bar-title h1 { font-size: 18px; }
+
+  /* Кнопка «Применить сейчас» — компактная, но тач-цель ≥40px */
+  .btn-apply { min-height: 40px; font-size: 15px; font-weight: 600; padding: 6px 18px; flex-shrink: 0; }
 
   /* ──────────────────────────────────────────────────────────────────
      ПРОПОРЦИОНАЛЬНОЕ МАСШТАБИРОВАНИЕ КАРТОЧЕК ПО УРОВНЯМ ПЛОТНОСТИ
@@ -789,10 +811,21 @@ PAGE = r"""<!doctype html>
 <body>
 <div class="container py-3" style="max-width:1200px">
 
-  <!-- ── Шапка ── -->
-  <div class="mb-3">
-    <h1 class="h3 mb-0">Вкусный Дом — Панель управления</h1>
-    <p class="text-muted mb-0" style="font-size:14px">Товары и правки</p>
+  <!-- ── Липкая верхняя полоска: заголовок + «Применить сейчас» ──
+       position: sticky → остаётся на виду при прокрутке списка товаров,
+       чтобы кнопку «Применить сейчас» можно было нажать в любой момент. -->
+  <div class="sticky-bar mb-3">
+    <div class="sticky-bar-inner">
+      <div class="sticky-bar-title">
+        <h1 class="h5 mb-0">Вкусный Дом — Панель управления</h1>
+        <p class="text-muted mb-0" style="font-size:13px">Товары и правки</p>
+      </div>
+      <!-- Кнопка «Применить сейчас» — компактная, тач-цель ≥40px,
+           id и onclick сохранены (функция applyNow не менялась). -->
+      <button id="btn-apply" class="btn btn-primary btn-apply" onclick="applyNow()">
+        Применить сейчас
+      </button>
+    </div>
   </div>
 
   <!-- Поиск по названию -->
@@ -828,14 +861,7 @@ PAGE = r"""<!doctype html>
   <div id="products" class="view-grid"></div>
 
   <!-- Статусный баннер «Применить сейчас» -->
-  <div id="status" class="status"></div>
-
-  <!-- Кнопка «Применить сейчас» -->
-  <div class="mt-4 mb-5">
-    <button id="btn-apply" class="btn btn-primary w-100 btn-apply" onclick="applyNow()">
-      Применить сейчас
-    </button>
-  </div>
+  <div id="status" class="status mb-5"></div>
 
 </div><!-- /container -->
 
@@ -1240,12 +1266,16 @@ async function uploadPhoto(file, p, card, cardStatus) {
     if (d && d.ok) {
       p.image_url = d.url || p.image_url;
       syncProduct(p);
-      // Обновить превью на карточке
-      const photoBox = card.querySelector(".pcard-photo");
-      photoBox.innerHTML = `<img src="${esc(p.image_url)}" alt="${esc(p.name)}">`;
-      // После загрузки кнопка превращается в «Заменить» (с учётом плотности)
-      card.querySelector(".pcard-photo-btn").textContent = photoButtonLabel(true);
-      cardStatus("ok", "Фото сохранено ✓");
+      // Перерисовываем ТОЛЬКО эту карточку (не весь список — чтобы не сбить
+      // прокрутку и состояние). Новая карточка строится через buildCard, поэтому
+      // у неё сразу появляется кнопка ✎ «Кадрировать» и обновлённое фото,
+      // а также рабочие обработчики (фото/название/метки/редактор).
+      const idx = Number(card.dataset.idx);
+      const newCard = buildCard(p, idx);
+      card.replaceWith(newCard);
+      // Статус показываем уже на новой карточке (у неё свой замкнутый cardStatus).
+      const newStatusEl = newCard.querySelector(".pcard-status");
+      if (newStatusEl) { newStatusEl.className = "pcard-status ok"; newStatusEl.textContent = "Фото сохранено ✓"; }
       toast("ok", "Фото сохранено ✓");
     } else {
       cardStatus("err", "Ошибка загрузки");
