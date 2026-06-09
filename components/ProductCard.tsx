@@ -97,7 +97,8 @@ export default function ProductCard({
     const sizes = presentationSizes ?? DEFAULT_PRESENTATION_SIZES;
 
     // Размеры элементов под режим. В презентации берём из пресета плотности.
-    const photoH = isPresentation ? sizes.photoH : "h-32";
+    // Фото — КВАДРАТ (aspect-square), как в админ-панели: подгонка фото в панели
+    // (квадратный кроп через Cloudinary) совпадает с показом в каталоге.
     const bodyPad = isPresentation ? sizes.bodyPad : "px-2 pt-1.5 pb-2 gap-1.5";
     const nameCls = isPresentation ? sizes.nameCls : "text-xs";
     const priceCls = isPresentation ? sizes.priceCls : "text-sm";
@@ -124,7 +125,7 @@ export default function ProductCard({
                 просмотрщик; если фото нет — клик уходит наверх и переворачивает карточку. */}
             {showPhotos && (
               <div
-                className={`relative bg-white ${photoH}`}
+                className="relative bg-white w-full aspect-square"
                 onClick={
                   product.imageUrl
                     ? (e) => {
@@ -139,7 +140,7 @@ export default function ProductCard({
                     src={product.imageUrl}
                     alt={product.name}
                     fill
-                    className="object-contain p-1"
+                    className="object-cover"
                   />
                 ) : (
                   <PhotoPlaceholder iconSize={placeholderIcon} />
@@ -285,7 +286,7 @@ export default function ProductCard({
                   alt={product.name}
                   width={56}
                   height={56}
-                  className="w-full h-full object-contain"
+                  className="w-full h-full object-cover"
                 />
               ) : (
                 <PhotoPlaceholder />
