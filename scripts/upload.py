@@ -89,6 +89,76 @@ def load_category_map() -> dict:
         return json.load(f)
 
 
+def load_structure_map() -> dict:
+    """Загрузить карту двухуровневой структуры из structure_map.json.
+
+    Формат: { "Раздел": { "Подгруппа": ["КатегорияА", "КатегорияБ", ...] } }
+    При отсутствии файла возвращает пустой словарь — скрипт работает без ошибок.
+    """
+    map_path = SCRIPT_DIR / "structure_map.json"
+    if not map_path.exists():
+        log.warning("Файл structure_map.json не найден: %s — поля Подгруппа/Раздел не будут заполнены", map_path)
+        return {}
+    with open(map_path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def build_category_index(structure_map: dict) -> dict:
+    """Построить обратный индекс категорий для быстрого поиска раздела/подгруппы.
+
+    Возвращает: { "НазваниеКатегории": (раздел, подгруппа, idx_раздела, idx_подгруппы, idx_кат) }
+    Порядковые индексы используются для сортировки товаров по структуре (D-05).
+    """
+    index = {}
+    for sec_idx, (section, subgroups) in enumerate(structure_map.items()):
+        for sub_idx, (subgroup, categories) in enumerate(subgroups.items()):
+            for cat_idx, category in enumerate(categories):
+                index[category] = (section, subgroup, sec_idx, sub_idx, cat_idx)
+    return index
+
+
+def apply_structure_mapping(
+    products: list[dict],
+    category_index: dict,
+) -> list[dict]:
+    """Добавить поля display_subgroup и display_section из карты structure_map.json.
+
+    Каждый товар получает:
+      - p["display_subgroup"] — подгруппа (второй уровень навигации)
+      - p["display_section"]  — раздел (первый уровень навигации)
+      - p["_sort_key"]        — кортеж (idx_раздела, idx_подгруппы, idx_кат) для сортировки (D-05)
+
+    Категории, не найденные в карте, попадают в fallback «Прочее»/«Прочее»
+    с предупреждением в лог — ничего не теряется молча (D-12).
+    Поле display_group (колонка «Группа») остаётся нетронутым (D-04).
+    """
+    FALLBACK_SECTION  = "Прочее"
+    FALLBACK_SUBGROUP = "Прочее"
+    FALLBACK_SORT     = (9999, 9999, 9999)
+
+    unmapped = set()
+    for product in products:
+        cat = product["source_category"]
+        entry = category_index.get(cat)
+        if entry is None:
+            unmapped.add(cat)
+            product["display_section"]  = FALLBACK_SECTION
+            product["display_subgroup"] = FALLBACK_SUBGROUP
+            product["_sort_key"]        = FALLBACK_SORT
+        else:
+            section, subgroup, sec_idx, sub_idx, cat_idx = entry
+            product["display_section"]  = section
+            product["display_subgroup"] = subgroup
+            product["_sort_key"]        = (sec_idx, sub_idx, cat_idx)
+
+    if unmapped:
+        log.warning("Категории без структурного маппинга (попадут в «Прочее»):")
+        for cat in sorted(unmapped):
+            log.warning("  ! %s", cat)
+
+    return products
+
+
 def strip_category_prefix(name: str) -> str:
     """Убрать префикс 'а' у категорий вида 'аКока-Кола' → 'Кока-Кола'.
 
@@ -642,7 +712,13 @@ def products_to_rows(
     if url_index is None:
         url_index = {}
     new_names = new_names or set()
-    header = ["Наименование", "Цена", "Остаток", "Категория", "Группа", "Поставщик", "Badge", "ImageUrl", "Description"]
+    header = [
+        "Наименование", "Цена", "Остаток", "Категория",
+        "Группа",           # старое поле — не трогаем (D-04, витрина переключится на этапе 6)
+        "Поставщик", "Badge", "ImageUrl", "Description",
+        "Подгруппа",        # новое поле этапа 5 (второй уровень навигации)
+        "Раздел",           # новое поле этапа 5 (первый уровень навигации)
+    ]
     rows = [header]
     for p in products:
         # Приоритет: ручная правка метки владельца → авто-новинка → авто-метка из badges.json
@@ -668,11 +744,13 @@ def products_to_rows(
             p["price"],
             p["stock"],
             p["source_category"],
-            p["display_group"],
+            p["display_group"],                   # старое поле — нетронуто (D-04)
             p["supplier_file"],
             badge,
             image_url,
             description,
+            p.get("display_subgroup", ""),        # новое поле — подгруппа (этап 5)
+            p.get("display_section", ""),         # новое поле — раздел (этап 5)
         ])
     return rows
 
