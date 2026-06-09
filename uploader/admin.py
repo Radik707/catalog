@@ -1335,6 +1335,11 @@ const peState = {
   dragStartY: 0,
   panStartX: 0,     // pan на момент старта drag
   panStartY: 0,
+  // ── Состояние мультитач/пинча ──
+  pointers: new Map(), // активные указатели: pointerId -> {x, y}
+  pinching: false,     // идёт ли сейчас жест пинча (2 пальца)
+  pinchD0: 0,          // стартовая дистанция между двумя пальцами (px)
+  pinchZ0: 1,          // зум на момент начала пинча
 };
 
 /* Убрать ранее добавленную НАМИ трансформацию из URL.
@@ -1525,6 +1530,27 @@ function peSetZoomPos(pos) {
   peUpdateTransformOnly();
 }
 
+// Установить зум по ФАКТИЧЕСКОМУ значению (для пинча двумя пальцами).
+// Зажимаем зум в [0.34, 3], синхронизируем позицию ползунка (-100..100)
+// и значение слайдера, обновляем живой transform. Пишем в peState.zoom,
+// чтобы сохранение (peBuildSaveUrl) учло пинч-зум.
+function peSetZoom(z) {
+  const zc = Math.max(0.34, Math.min(3, z));      // зажать фактический зум
+  peState.zoom = zc;
+  // Обратное преобразование zoom → позиция ползунка: pos = 100*log3(z)
+  let pos = Math.round(100 * Math.log(zc) / Math.log(3));
+  pos = Math.max(PE_POS_MIN, Math.min(PE_POS_MAX, pos));
+  peState.zoomPos = pos;
+  document.getElementById("pe-zoom").value = pos;
+  peUpdateTransformOnly();
+}
+
+// Дистанция между двумя точками указателей (px экрана).
+function pePointerDist(a, b) {
+  const dx = a.x - b.x, dy = a.y - b.y;
+  return Math.hypot(dx, dy);
+}
+
 // Сохранить подгонку: записать готовый URL через /save (type=photo)
 async function peSaveAndUpload() {
   const p = peState.product;
@@ -1572,41 +1598,104 @@ function initPhotoEditor() {
   document.getElementById("pe-cancel").addEventListener("click", closePhotoEditor);
   document.getElementById("pe-save").addEventListener("click", peSaveAndUpload);
 
-  // ── Перетаскивание кадра (pan) мышью и пальцем через Pointer Events ──
-  // Один указатель = сдвиг. setPointerCapture удерживает события за рамкой.
+  // ── Перетаскивание (pan) и пинч-зум через Pointer Events ──
+  // Ведём реестр активных указателей (peState.pointers): один палец = pan,
+  // два пальца = пинч-зум (приближать/отдалять щипком). touch-action:none
+  // на .pe-frame не даёт жесту скроллить страницу.
   const frame = document.getElementById("pe-frame");
 
-  frame.addEventListener("pointerdown", e => {
-    if (peState.dragging) return;
+  // Начать pan по ОДНОМУ оставшемуся/первому указателю с текущей позиции
+  // (без рывка). Используется на pointerdown и при выходе из пинча.
+  function peStartPanFrom(id) {
+    const pt = peState.pointers.get(id);
+    if (!pt) return;
     peState.dragging = true;
-    peState.dragId = e.pointerId;
-    peState.dragStartX = e.clientX;
-    peState.dragStartY = e.clientY;
+    peState.dragId = id;
+    peState.dragStartX = pt.x;
+    peState.dragStartY = pt.y;
     peState.panStartX = peState.panX;
     peState.panStartY = peState.panY;
-    frame.classList.add("pe-dragging");
+  }
+
+  // Начать пинч: запомнить стартовую дистанцию между двумя пальцами и зум.
+  function peStartPinch() {
+    const ids = Array.from(peState.pointers.keys());
+    const a = peState.pointers.get(ids[0]);
+    const b = peState.pointers.get(ids[1]);
+    peState.pinching = true;
+    peState.dragging = false;        // pan на время пинча приостановлен
+    peState.dragId = null;
+    peState.pinchD0 = Math.max(1, pePointerDist(a, b));
+    peState.pinchZ0 = peState.zoom;
+  }
+
+  frame.addEventListener("pointerdown", e => {
+    // Регистрируем указатель и захватываем его на рамке.
+    peState.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     try { frame.setPointerCapture(e.pointerId); } catch (_) {}
+    frame.classList.add("pe-dragging");
+
+    const n = peState.pointers.size;
+    if (n === 1) {
+      // Один палец/мышь — обычный pan.
+      peStartPanFrom(e.pointerId);
+    } else if (n === 2) {
+      // Появился второй палец — переходим в режим пинча.
+      peStartPinch();
+    }
+    // 3+ указателей игнорируем (продолжаем текущий жест).
     e.preventDefault();
   });
 
   frame.addEventListener("pointermove", e => {
-    if (!peState.dragging || e.pointerId !== peState.dragId) return;
-    // Сдвиг pan на дельту указателя (в пикселях экрана).
-    peState.panX = peState.panStartX + (e.clientX - peState.dragStartX);
-    peState.panY = peState.panStartY + (e.clientY - peState.dragStartY);
-    peUpdateTransformOnly();
-    e.preventDefault();
+    const pt = peState.pointers.get(e.pointerId);
+    if (!pt) return;                 // не наш указатель
+    pt.x = e.clientX;                // обновляем позицию в реестре
+    pt.y = e.clientY;
+
+    if (peState.pinching && peState.pointers.size >= 2) {
+      // ── Пинч: новый зум = z0 * (текущая дистанция / стартовая) ──
+      const ids = Array.from(peState.pointers.keys());
+      const a = peState.pointers.get(ids[0]);
+      const b = peState.pointers.get(ids[1]);
+      const d = pePointerDist(a, b);
+      peSetZoom(peState.pinchZ0 * (d / peState.pinchD0));
+      e.preventDefault();
+      return;
+    }
+
+    if (peState.dragging && e.pointerId === peState.dragId) {
+      // ── Pan: сдвиг кадра на дельту указателя (px экрана) ──
+      peState.panX = peState.panStartX + (e.clientX - peState.dragStartX);
+      peState.panY = peState.panStartY + (e.clientY - peState.dragStartY);
+      peUpdateTransformOnly();
+      e.preventDefault();
+    }
   });
 
-  const peEndDrag = e => {
-    if (!peState.dragging || e.pointerId !== peState.dragId) return;
-    peState.dragging = false;
-    peState.dragId = null;
-    frame.classList.remove("pe-dragging");
+  const peEndPointer = e => {
+    if (!peState.pointers.has(e.pointerId)) return;
+    peState.pointers.delete(e.pointerId);   // убрать из реестра (не «залипает»)
     try { frame.releasePointerCapture(e.pointerId); } catch (_) {}
+
+    const n = peState.pointers.size;
+    if (n >= 2) {
+      // Всё ещё мультитач — перезапускаем пинч с оставшихся двух пальцев.
+      peStartPinch();
+    } else if (n === 1) {
+      // Вышли из пинча в pan: продолжаем сдвиг с оставшегося пальца без рывка.
+      peState.pinching = false;
+      peStartPanFrom(Array.from(peState.pointers.keys())[0]);
+    } else {
+      // Указателей не осталось — полный сброс жеста.
+      peState.pinching = false;
+      peState.dragging = false;
+      peState.dragId = null;
+      frame.classList.remove("pe-dragging");
+    }
   };
-  frame.addEventListener("pointerup", peEndDrag);
-  frame.addEventListener("pointercancel", peEndDrag);
+  frame.addEventListener("pointerup", peEndPointer);
+  frame.addEventListener("pointercancel", peEndPointer);
 
   // Закрытие по тапу вне диалога (по фону)
   document.getElementById("photo-editor").addEventListener("click", e => {
