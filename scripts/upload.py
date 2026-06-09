@@ -33,6 +33,17 @@ from pathlib import Path
 
 import openpyxl
 
+# --- Кодировка вывода консоли ---
+# Консоль Windows по умолчанию работает в cp1252 и не умеет печатать кириллицу
+# через print()/логи — это роняло предпросмотр --dry-run с UnicodeEncodeError.
+# Переключаем stdout/stderr на UTF-8 (по образцу фикса в sheet_helper.py).
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        # Поток не TextIOWrapper (перенаправлен/обёрнут) — пропускаем без ошибки
+        pass
+
 # --- Настройка логирования ---
 logging.basicConfig(
     level=logging.INFO,
