@@ -3,10 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Скрытие товаров и десктоп-вид
 status: in_progress
-current_phase: 8
-current_plan: —
-last_updated: "2026-06-10"
-last_activity: 2026-06-10
+last_updated: "2026-06-10T17:48:13.536Z"
 progress:
   total_phases: 2
   completed_phases: 0
@@ -34,6 +31,7 @@ progress:
 Прогресс: [░░░░░░░░░░] 0% (веха v1.2 начата)
 
 **Этапы вехи:**
+
 - [ ] Этап 8: Скрытие товаров «глазиком» — HIDE-01..05
 - [ ] Этап 9: Десктопный вид витрины — DESK-01..04
 
@@ -43,6 +41,7 @@ progress:
 2. После этапа 8 — `/gsd:plan-phase 9` десктопный вид
 
 **Детали архитектуры этапа 8 (уже проработаны в BACKLOG.md):**
+
 - Новый тип правки `скрыт` в трёх белых списках (`sheet_helper.py`, `upload.py`, `admin.py`)
 - Колонка «Скрыт» (L) в конец строки Sheet — паттерн expand-contract
 - `lib/sheets.ts`: диапазон A2:L, фильтр скрытых на сервере
