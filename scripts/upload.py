@@ -722,6 +722,31 @@ def get_photo_description(name: str, photo_data: dict[str, dict[str, str]]) -> s
     return entry.get("description", "") if entry else ""
 
 
+_CLOUD_NAME_CACHE: str | None = None
+
+
+def _cloud_name(url_index: dict[str, str]) -> str:
+    """Имя облака Cloudinary для сборки прямых ссылок.
+
+    Берём из переменной CLOUDINARY_CLOUD_NAME, а если её нет в окружении (так бывает
+    на сервере при запуске upload.py из загрузчика) — ВЫВОДИМ из любого готового URL
+    в photo_urls.json (там все ссылки одного облака). Так резолв коротких ссылок
+    («presenter/файл.jpg») не зависит от наличия переменной окружения. Результат кэшируется.
+    """
+    global _CLOUD_NAME_CACHE
+    if _CLOUD_NAME_CACHE is not None:
+        return _CLOUD_NAME_CACHE
+    cloud = os.environ.get("CLOUDINARY_CLOUD_NAME", "")
+    if not cloud:
+        for u in url_index.values():
+            m = re.search(r"res\.cloudinary\.com/([^/]+)/", u)
+            if m:
+                cloud = m.group(1)
+                break
+    _CLOUD_NAME_CACHE = cloud
+    return cloud
+
+
 def _resolve_photo_override(ref: str, url_index: dict[str, str]) -> str:
     """Превратить фото-référence из правки владельца в полный URL Cloudinary.
 
@@ -746,7 +771,7 @@ def _resolve_photo_override(ref: str, url_index: dict[str, str]) -> str:
     # Последний резерв — реконструкция URL Cloudinary из ссылки-référence.
     # Так разворачиваются фото, загруженные через админ-панель (presenter/<имя>),
     # которых нет в photo_urls.json. Проверено: такой URL отдаёт картинку (200).
-    cloud = os.environ.get("CLOUDINARY_CLOUD_NAME", "")
+    cloud = _cloud_name(url_index)
     if cloud and "/" in ref:
         return f"https://res.cloudinary.com/{cloud}/image/upload/{ref}"
     return ""
