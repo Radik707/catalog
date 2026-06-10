@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.1
-milestone_name: Двухуровневая навигация каталога
-status: Awaiting next milestone
-last_updated: "2026-06-10T16:22:43.173Z"
-last_activity: 2026-06-10 — Milestone v1.1 completed and archived
+milestone: v1.2
+milestone_name: Скрытие товаров и десктоп-вид
+status: planning
+last_updated: "2026-06-10T17:01:25.667Z"
+last_activity: 2026-06-10
 progress:
-  total_phases: 7
-  completed_phases: 7
-  total_plans: 16
-  completed_plans: 16
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Состояние проекта
@@ -151,10 +151,10 @@ progress:
 
 ## Current Position
 
-Phase: Milestone v1.1 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-06-10 — Milestone v1.1 completed and archived
+Status: Defining requirements
+Last activity: 2026-06-10 — Milestone v1.2 started
 
 ## Operator Next Steps
 
