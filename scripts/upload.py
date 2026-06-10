@@ -172,6 +172,55 @@ def apply_structure_mapping(
     return products
 
 
+def build_subgroup_index(structure_map: dict) -> dict:
+    """Построить индекс подгрупп для разворота ручных правок типа «подгруппа» (этап 7).
+
+    Возвращает: { "НазваниеПодгруппы": (раздел, sec_idx, sub_idx) }
+    sec_idx/sub_idx — порядковые позиции раздела и подгруппы в карте (для сортировки).
+
+    Если одна подгруппа встречается в нескольких разделах — берётся ПЕРВОЕ вхождение
+    (последующие игнорируются), чтобы индекс был детерминирован.
+    """
+    index: dict = {}
+    for sec_idx, (section, subgroups) in enumerate(structure_map.items()):
+        for sub_idx, subgroup in enumerate(subgroups.keys()):
+            if subgroup not in index:
+                index[subgroup] = (section, sec_idx, sub_idx)
+    return index
+
+
+def apply_subgroup_overrides(products: list[dict], subgroup_index: dict) -> int:
+    """Наложить ручные правки подгруппы владельца (тип «подгруппа», этап 7).
+
+    Для каждого товара с p["subgroup_override"], значение которого ЕСТЬ в карте структуры,
+    переписывает поля навигации:
+      - p["display_subgroup"] = выбранная подгруппа
+      - p["display_section"]  = раздел этой подгруппы (из карты)
+      - p["_sort_key"]        = (sec_idx, sub_idx, 0) — товар встаёт в начало подгруппы
+
+    Подгруппы из правки, которых НЕТ в карте, логируются предупреждением и пропускаются
+    (товар остаётся с авто-маппингом из apply_structure_mapping). Возвращает число применённых правок.
+    """
+    applied = 0
+    for p in products:
+        override = p.get("subgroup_override")
+        if not override:
+            continue
+        entry = subgroup_index.get(override)
+        if entry is None:
+            log.warning(
+                "Ручная правка подгруппы «%s» для товара «%s» не найдена в structure_map.json — пропущена",
+                override, p.get("name", ""),
+            )
+            continue
+        section, sec_idx, sub_idx = entry
+        p["display_subgroup"] = override
+        p["display_section"] = section
+        p["_sort_key"] = (sec_idx, sub_idx, 0)
+        applied += 1
+    return applied
+
+
 def strip_category_prefix(name: str) -> str:
     """Убрать префикс 'а' у категорий вида 'аКока-Кола' → 'Кока-Кола'.
 
@@ -548,6 +597,11 @@ def apply_edit_memory(
             # Пустая строка — явное снятие метки («без метки»), её тоже сохраняем.
             if "badge" in edit:
                 p["badge_override"] = edit["badge"]
+            # Правка подгруппы (этап 7): владелец вручную переносит товар в подгруппу
+            # двухуровневой структуры. Значение разворачивается в раздел/подгруппу/_sort_key
+            # позже — в apply_subgroup_overrides() (после apply_structure_mapping).
+            if "подгруппа" in edit:
+                p["subgroup_override"] = edit["подгруппа"]
         else:
             new_for_memory += 1
     return new_for_memory
@@ -977,6 +1031,12 @@ def main():
     if structure_map:
         category_index = build_category_index(structure_map)
         all_products = apply_structure_mapping(all_products, category_index)
+        # [НОВОЕ, этап 7] Наложить ручные правки подгруппы поверх авто-маппинга по категории.
+        # Вызов ПОСЛЕ apply_structure_mapping (правка владельца побеждает) и ПЕРЕД сортировкой —
+        # чтобы переписанный _sort_key подхватился сортировкой ниже.
+        subgroup_index = build_subgroup_index(structure_map)
+        applied_subgroups = apply_subgroup_overrides(all_products, subgroup_index)
+        log.info("применено ручных правок подгруппы: %d", applied_subgroups)
         # Сортировать товары по структуре: раздел → подгруппа → категория (D-05)
         # _sort_key проставлен apply_structure_mapping(); товары без структуры уходят в конец
         all_products.sort(key=lambda p: p.get("_sort_key", (9999, 9999, 9999)))

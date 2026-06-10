@@ -37,7 +37,8 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
 
 # --- Допустимые типы правок (белый список — защита памяти правок от мусора) ---
-ALLOWED_TYPES = {"group", "photo", "description", "name", "badge"}
+# «подгруппа» (этап 7) — перенос товара по двухуровневой структуре Раздел→Подгруппа.
+ALLOWED_TYPES = {"group", "photo", "description", "name", "badge", "подгруппа"}
 
 
 def load_env() -> None:
@@ -191,7 +192,7 @@ def load_edit_values() -> dict:
 
 
 def load_products() -> list:
-    """Прочитать лист «Товары» → список товаров с полями {name, group, image_url, is_new, badge}.
+    """Прочитать лист «Товары» → список товаров с полями {name, group, image_url, is_new, badge, subgroup, section}.
 
     is_new=True если нормализованное имя товара ОТСУТСТВУЕТ в памяти «Правки» (MEM-03):
     владелец ещё не «касался» этого товара через панель.
@@ -222,6 +223,9 @@ def load_products() -> list:
     grp_i = header.index("Группа") if "Группа" in header else None
     img_i = header.index("ImageUrl") if "ImageUrl" in header else None
     badge_i = header.index("Badge") if "Badge" in header else None
+    # Подгруппа и Раздел (этап 7) — опциональны, как Группа/ImageUrl
+    subgroup_i = header.index("Подгруппа") if "Подгруппа" in header else None
+    section_i = header.index("Раздел") if "Раздел" in header else None
 
     # --- Загрузить значения «Правки» (ключи для is_new + значения для ожидающей метки) ---
     edit_values = load_edit_values()
@@ -243,6 +247,10 @@ def load_products() -> list:
         # Метка из листа «Товары» (пустая строка если нет)
         badge = str(row[badge_i]).strip() if badge_i is not None and len(row) > badge_i else ""
 
+        # Подгруппа и раздел из листа «Товары» (пустая строка если нет) — этап 7
+        subgroup = str(row[subgroup_i]).strip() if subgroup_i is not None and len(row) > subgroup_i else ""
+        section = str(row[section_i]).strip() if section_i is not None and len(row) > section_i else ""
+
         key = normalize_name(raw_name)
         # Товар «новинка для панели» — если его нет в памяти «Правки»
         is_new = key not in edit_values
@@ -252,12 +260,21 @@ def load_products() -> list:
         if key in edit_values and "badge" in edit_values[key]:
             badge = edit_values[key]["badge"]
 
+        # Ожидающая правка подгруппы перебивает значение из листа «Товары»
+        # (как для метки) — чтобы карточка показывала уже выбранную, но ещё не
+        # применённую подгруппу. Раздел при этом не пишем: панель восстановит его
+        # по карте структуры (STRUCTURE) на основе выбранной подгруппы.
+        if key in edit_values and "подгруппа" in edit_values[key]:
+            subgroup = edit_values[key]["подгруппа"]
+
         products.append({
             "name": raw_name,
             "group": group,
             "image_url": image_url,
             "is_new": is_new,
             "badge": badge,
+            "subgroup": subgroup,
+            "section": section,
         })
 
     log.info("Загружено товаров: %d", len(products))

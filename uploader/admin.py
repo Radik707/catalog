@@ -55,6 +55,31 @@ def load_env() -> None:
 # Загрузить переменные при импорте модуля
 load_env()
 
+
+def _load_structure() -> dict:
+    """Загрузить карту структуры из scripts/structure_map.json → { "Раздел": ["Подгруппа", ...] }.
+
+    В панели нужны только имена разделов и подгрупп (без списка категорий) и в порядке карты —
+    они наполняют две зависимые выпадашки на карточке товара (этап 7).
+    Graceful-fallback: при любой ошибке (нет файла / битый JSON) → пустой dict,
+    карточка просто покажет пустые списки, панель не падает.
+    """
+    structure_path = SCRIPT_DIR.parent / "scripts" / "structure_map.json"
+    try:
+        with open(structure_path, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+        # Оставляем только имена подгрупп (ключи), порядок сохраняется (dict упорядочен)
+        return {section: list(subgroups.keys()) for section, subgroups in raw.items()}
+    except Exception as e:  # noqa: BLE001
+        log.warning("Не удалось загрузить structure_map.json: %s — выпадашки структуры будут пустыми", e)
+        return {}
+
+
+# Карта структуры Раздел→[Подгруппы] и её JSON для внедрения в страницу (этап 7)
+STRUCTURE = _load_structure()
+# ensure_ascii=False — кириллица читаемо ложится в JS-литерал (страница в UTF-8)
+STRUCTURE_JSON = json.dumps(STRUCTURE, ensure_ascii=False)
+
 # --- Отдельный секрет панели администратора (независимо от APP_SECRET — D-02) ---
 ADMIN_SECRET = os.environ.get("ADMIN_SECRET", "")
 
@@ -142,7 +167,7 @@ def _run_py(script: Path, *args) -> tuple:
 def admin_index(token: str):
     """Главная страница панели — отдать одностраничный HTML."""
     check_admin(token)
-    return PAGE.replace("__TOKEN__", token)
+    return PAGE.replace("__TOKEN__", token).replace("__STRUCTURE__", STRUCTURE_JSON)
 
 
 @admin_bp.get("/<token>/products")
@@ -199,8 +224,8 @@ def admin_save(token: str):
     if not key:
         return jsonify(ok=False, message="Не удалось сохранить правку. Ключ товара не указан."), 400
 
-    # Белый список типов правок: group + name + photo + badge (метка «новинка»/«хит», T-04-02)
-    SAVE_ALLOWED_TYPES = {"group", "name", "photo", "badge"}
+    # Белый список типов правок: group + name + photo + badge + подгруппа (этап 7, T-04-02)
+    SAVE_ALLOWED_TYPES = {"group", "name", "photo", "badge", "подгруппа"}
     if edit_type not in SAVE_ALLOWED_TYPES:
         return jsonify(
             ok=False,
@@ -625,7 +650,9 @@ PAGE = r"""<!doctype html>
   /* Select группы — крупный, удобный для пальца.
      padding-right оставляет место под стрелку списка, чтобы длинные значения
      (напр. «Конфеты и печенье») не налезали на стрелку. */
-  .pcard-group { width: 100%; font-size: 14px; min-height: 44px; padding-right: 26px; }
+  .pcard-group,
+  .pcard-section,
+  .pcard-subgroup { width: 100%; font-size: 14px; min-height: 44px; padding-right: 26px; }
 
   /* ── Кнопки-переключатели меток «NEW» / «Хит» ── */
   .pcard-badges-toggle { display: flex; gap: 6px; }
@@ -712,9 +739,15 @@ PAGE = r"""<!doctype html>
 
   /* Выпадающий список группы — остаётся кликабельным на всех уровнях.
      padding-right под стрелку увеличен, чтобы текст значения не перекрывался стрелкой. */
-  .view-grid.density-l .pcard-group { font-size: 14px; min-height: 44px; padding-right: 26px; }
-  .view-grid.density-m .pcard-group { font-size: 11.5px; min-height: 32px; padding: 3px 22px 3px 6px; }
-  .view-grid.density-s .pcard-group { font-size: 11px;   min-height: 28px; padding: 2px 20px 2px 5px; }
+  .view-grid.density-l .pcard-group,
+  .view-grid.density-l .pcard-section,
+  .view-grid.density-l .pcard-subgroup { font-size: 14px; min-height: 44px; padding-right: 26px; }
+  .view-grid.density-m .pcard-group,
+  .view-grid.density-m .pcard-section,
+  .view-grid.density-m .pcard-subgroup { font-size: 11.5px; min-height: 32px; padding: 3px 22px 3px 6px; }
+  .view-grid.density-s .pcard-group,
+  .view-grid.density-s .pcard-section,
+  .view-grid.density-s .pcard-subgroup { font-size: 11px;   min-height: 28px; padding: 2px 20px 2px 5px; }
 
   /* Кнопка фото — высота не ниже 30px (тач-цель сохраняется) */
   .view-grid.density-l .pcard-photo-btn { min-height: 44px; font-size: 14px; }
@@ -925,6 +958,18 @@ const GROUPS = [
   "Другое"
 ];
 
+// Карта двухуровневой структуры: { "Раздел": ["Подгруппа1", ...] } (этап 7).
+// Внедряется сервером из scripts/structure_map.json (json.dumps, ensure_ascii=False).
+// Наполняет две зависимые выпадашки «Раздел» / «Подгруппа» на карточке товара.
+const STRUCTURE = __STRUCTURE__;
+// Обратный индекс: подгруппа → раздел (для предвыбора раздела по сохранённой подгруппе).
+const SUBGROUP_TO_SECTION = {};
+Object.keys(STRUCTURE).forEach(sec => {
+  (STRUCTURE[sec] || []).forEach(sg => {
+    if (!(sg in SUBGROUP_TO_SECTION)) SUBGROUP_TO_SECTION[sg] = sec;
+  });
+});
+
 /* ── Утилиты ── */
 
 // Экранирование для безопасной вставки в innerHTML — защита от XSS (T-04-05)
@@ -1054,11 +1099,24 @@ function buildCard(p, i) {
   // ── Отображаемое имя ──
   const shownName = p.display_name || p.name;
 
-  // ── Выпадающий список группы ──
-  let groupOpts = '<option value="">Выберите группу...</option>';
-  GROUPS.forEach(g => {
-    const sel = (p.group === g) ? " selected" : "";
-    groupOpts += `<option${sel}>${esc(g)}</option>`;
+  // ── Зависимые выпадашки «Раздел» → «Подгруппа» (этап 7) ──
+  // Раздел предвыбираем по p.section; если он пуст, но подгруппа известна —
+  // восстанавливаем раздел по обратному индексу SUBGROUP_TO_SECTION.
+  const sections = Object.keys(STRUCTURE);
+  let curSection = p.section || (p.subgroup ? SUBGROUP_TO_SECTION[p.subgroup] : "") || "";
+
+  // Опции раздела
+  let sectionOpts = '<option value="">Выберите раздел...</option>';
+  sections.forEach(s => {
+    const sel = (curSection === s) ? " selected" : "";
+    sectionOpts += `<option${sel}>${esc(s)}</option>`;
+  });
+
+  // Опции подгруппы текущего раздела (если раздел выбран)
+  let subgroupOpts = '<option value="">Выберите подгруппу...</option>';
+  (STRUCTURE[curSection] || []).forEach(sg => {
+    const sel = (p.subgroup === sg) ? " selected" : "";
+    subgroupOpts += `<option${sel}>${esc(sg)}</option>`;
   });
 
   // ── Кнопка фото ──
@@ -1085,7 +1143,8 @@ function buildCard(p, i) {
         <button class="badge-toggle badge-toggle-hit${hitActive}" type="button"
                 data-badge="хит">Хит</button>
       </div>
-      <select class="form-select pcard-group">${groupOpts}</select>
+      <select class="form-select pcard-section">${sectionOpts}</select>
+      <select class="form-select pcard-subgroup">${subgroupOpts}</select>
       <button class="btn btn-outline-secondary pcard-photo-btn" type="button">${photoBtnLabel}</button>
       <input type="file" id="${fileId}" accept="image/*">
       <div class="pcard-status"></div>
@@ -1105,22 +1164,43 @@ function buildCard(p, i) {
     startNameEdit(card, p, cardStatus);
   });
 
-  // Автосохранение группы при изменении (без кнопки, без перехода)
-  const groupSel = card.querySelector(".pcard-group");
-  groupSel.addEventListener("change", async () => {
-    const value = groupSel.value;
-    if (!value) return; // «Выберите группу...» — ничего не делаем
+  // ── Зависимые выпадашки «Раздел» → «Подгруппа» (этап 7) ──
+  const sectionSel = card.querySelector(".pcard-section");
+  const subgroupSel = card.querySelector(".pcard-subgroup");
+
+  // Перезаполнить список подгрупп под выбранный раздел.
+  // selected — какую подгруппу предвыбрать (или "" чтобы сбросить на плейсхолдер).
+  function fillSubgroups(section, selected) {
+    let opts = '<option value="">Выберите подгруппу...</option>';
+    (STRUCTURE[section] || []).forEach(sg => {
+      const sel = (selected === sg) ? " selected" : "";
+      opts += `<option${sel}>${esc(sg)}</option>`;
+    });
+    subgroupSel.innerHTML = opts;
+  }
+
+  // Смена РАЗДЕЛА: только пересобираем список подгрупп (подгруппа сбрасывается).
+  // Правка НЕ отправляется — товар переносится лишь при выборе конкретной подгруппы.
+  sectionSel.addEventListener("change", () => {
+    fillSubgroups(sectionSel.value, "");
+  });
+
+  // Смена ПОДГРУППЫ: отправляем правку type="подгруппа", оптимистично обновляем товар.
+  subgroupSel.addEventListener("change", async () => {
+    const value = subgroupSel.value;
+    if (!value) return; // «Выберите подгруппу...» — ничего не делаем
     saveScrollPos();    // место = эта карточка
     cardStatus("", "Сохраняем...");
     const d = await apiCall(`/${TOKEN}/save`, {
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key: p.name, type: "group", value: value }),
+      body: JSON.stringify({ key: p.name, type: "подгруппа", value: value }),
     });
     if (d && d.ok) {
-      p.group = value;
+      p.subgroup = value;
+      p.section = sectionSel.value;   // раздел = текущий выбранный
       syncProduct(p);
       cardStatus("ok", "Сохранено ✓");
-      toast("ok", "Группа сохранена ✓");
+      toast("ok", "Подгруппа сохранена ✓");
     } else {
       cardStatus("err", "Не сохранено");
       toast("err", (d && d.message) || "Не удалось сохранить. Попробуйте ещё раз.");
