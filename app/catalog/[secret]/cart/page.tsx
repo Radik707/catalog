@@ -46,8 +46,14 @@ export default function CartPage({
   return (
     <div className="flex flex-col min-h-[calc(100vh-48px)]">
       {/* Заголовок страницы */}
-      <div className="px-4 py-3 border-b border-gray-100 bg-white flex items-center justify-between">
-        <h2 className="font-semibold text-gray-900">
+      <div className="px-4 py-3 border-b border-gray-100 bg-white flex items-center justify-between gap-2">
+        <a
+          href={`/catalog/${params.secret}`}
+          className="text-blue-600 text-sm font-medium active:opacity-70 flex-shrink-0"
+        >
+          ← Каталог
+        </a>
+        <h2 className="font-semibold text-gray-900 flex-1 text-center">
           {items.length} {pluralItems(items.length)}
         </h2>
         <button

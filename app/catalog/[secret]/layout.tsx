@@ -27,7 +27,7 @@ export default async function CatalogLayout({
         {/* Синяя шапка: переключатель режима + иконки разделов слева, шестерёнка/корзина справа */}
         <header className="sticky top-0 z-50 bg-blue-600 shadow-sm">
           <div className="flex items-center justify-between px-2 h-12 gap-2">
-            <CatalogNav navData={navData} />
+            <CatalogNav navData={navData} secret={params.secret} />
             <div className="flex items-center gap-1 shrink-0">
               <SettingsButton />
               <CartIcon secret={params.secret} />

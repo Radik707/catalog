@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { useNav, NavMode } from "./NavProvider";
 import { SectionNav } from "@/lib/nav";
 
@@ -14,14 +15,25 @@ const MODE_LABELS: Record<NavMode, string> = {
 // Навигация в синей шапке:
 // 1) сворачивающийся переключатель режима (Каталог/Хит/Новинка),
 // 2) иконки разделов с подписями (только в режиме «Каталог»).
-export default function CatalogNav({ navData }: { navData: SectionNav[] }) {
+export default function CatalogNav({ navData, secret }: { navData: SectionNav[]; secret: string }) {
   const { mode, section, setMode, selectSection } = useNav();
   // Развёрнут ли список режимов (выезжает вбок по тапу на кнопку режима)
   const [expanded, setExpanded] = useState(false);
+  const pathname = usePathname();
+  const router = useRouter();
+  const catalogPath = `/catalog/${secret}`;
+
+  // Если мы не на странице каталога (например, в корзине) — вернуться в каталог.
+  // Состояние навигации (NavProvider) живёт в общем layout и переживёт переход,
+  // поэтому выбранный режим/раздел применится уже на витрине.
+  const goCatalogIfNeeded = () => {
+    if (pathname !== catalogPath) router.push(catalogPath);
+  };
 
   const pickMode = (m: NavMode) => {
     setMode(m);
     setExpanded(false);
+    goCatalogIfNeeded();
   };
 
   return (
@@ -61,7 +73,10 @@ export default function CatalogNav({ navData }: { navData: SectionNav[] }) {
             return (
               <button
                 key={s.section}
-                onClick={() => selectSection(active ? null : s.section)}
+                onClick={() => {
+                  selectSection(active ? null : s.section);
+                  goCatalogIfNeeded();
+                }}
                 className={`shrink-0 flex flex-col items-center justify-center px-1.5 py-0.5 rounded leading-none transition-colors ${
                   active ? "bg-white text-blue-600" : "text-white active:bg-blue-500"
                 }`}
