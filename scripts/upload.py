@@ -499,8 +499,8 @@ def load_edit_memory() -> dict[str, dict[str, str]]:
         log.warning("Вкладка «Правки»: ожидаются колонки 'Товар', 'Тип', 'Значение' — пропускаем")
         return {}
 
-    # Допустимые типы правок (Этап 3: группа + фото + описание; Этап 4-02: название D-05; метка badge)
-    ALLOWED_TYPES = {"group", "photo", "description", "name", "badge"}
+    # Допустимые типы правок (Этап 3: группа + фото + описание; Этап 4-02: название D-05; метка badge; Этап 7: подгруппа)
+    ALLOWED_TYPES = {"group", "photo", "description", "name", "badge", "подгруппа"}
 
     # --- Сборка словаря памяти ---
     mapping: dict[str, dict[str, str]] = {}
