@@ -4,6 +4,9 @@ created: 2026-06-09
 source: 05-REVIEW.md (CR-01)
 severity: blocking-for-phase-6
 resolves_phase: 6
+status: deferred
+deferred_at: 2026-06-10
+deferred_reason: "Латентно (боевые файлы старого формата). Фикс блокируется уточнением формата 1С + продуктовым решением о подгруппе по умолчанию. Перенесён в техдолг следующей вехи (.planning/BACKLOG.md)."
 ---
 
 # CR-01: новый формат 1С не получает раздел/подгруппу
