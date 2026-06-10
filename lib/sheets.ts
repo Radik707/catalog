@@ -1,5 +1,5 @@
 import { Product } from "./types";
-import { getCategoryIndex } from "./structure";
+import { getCategoryIndex, PRODUCT_CATEGORY_OVERRIDES } from "./structure";
 
 const SHEETS_ID = process.env.GOOGLE_SHEETS_ID;
 const API_KEY = process.env.GOOGLE_API_KEY;
@@ -49,6 +49,16 @@ export async function getProducts(): Promise<Product[]> {
   // заполнит колонки J/K, этот блок сам отключится (раздел перестанет быть пустым).
   const idx = getCategoryIndex();
   if (idx.size > 0 && products.every((p) => !p.section)) {
+    // Точечные правки ошибочной категории отдельных товаров (до раскладки)
+    for (const p of products) {
+      for (const ov of PRODUCT_CATEGORY_OVERRIDES) {
+        if (p.name.includes(ov.match)) {
+          p.category = ov.category;
+          break;
+        }
+      }
+    }
+
     const FALLBACK = {
       section: "Прочее",
       subgroup: "Прочее",
