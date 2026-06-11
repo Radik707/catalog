@@ -224,17 +224,17 @@ def admin_save(token: str):
     if not key:
         return jsonify(ok=False, message="Не удалось сохранить правку. Ключ товара не указан."), 400
 
-    # Белый список типов правок: group + name + photo + badge + подгруппа (этап 7, T-04-02)
-    SAVE_ALLOWED_TYPES = {"group", "name", "photo", "badge", "подгруппа"}
+    # Белый список типов правок: group + name + photo + badge + подгруппа (этап 7) + скрыт (этап 8, T-08-05)
+    SAVE_ALLOWED_TYPES = {"group", "name", "photo", "badge", "подгруппа", "скрыт"}
     if edit_type not in SAVE_ALLOWED_TYPES:
         return jsonify(
             ok=False,
             message="Не удалось сохранить правку. Неподдерживаемый тип правки.",
         ), 400
 
-    # Значение обязательно для group и name; для photo и badge допустимо пустое
-    # (photo — сброс привязки; badge — снятие метки «без метки»)
-    if not value and edit_type not in ("photo", "badge"):
+    # Значение обязательно для group и name; для photo, badge и скрыт допустимо пустое
+    # (photo — сброс привязки; badge — снятие метки; скрыт — снятие скрытия, value="")
+    if not value and edit_type not in ("photo", "badge", "скрыт"):
         return jsonify(ok=False, message="Не удалось сохранить правку. Значение не указано."), 400
 
     # --- Нормализация ключа на сервере (D-05) ---
