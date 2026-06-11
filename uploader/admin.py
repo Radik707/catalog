@@ -782,6 +782,28 @@ PAGE = r"""<!doctype html>
   /* На мелкой сетке кнопка чуть компактнее, но остаётся нажимаемой */
   .view-grid.density-s .pcard-edit-photo { width: 34px; height: 34px; min-width: 34px; font-size: 15px; }
 
+  /* Кнопка-глазик «👁» в левом верхнем углу фото (этап 8, скрытие).
+     Размещена слева — карандаш кадрирования занимает right:4px (D-04).
+     Зона нажатия 44px — увеличена относительно карандаша (D-05). */
+  .pcard-eye {
+    position: absolute; top: 4px; left: 4px;
+    width: 44px; height: 44px; min-width: 44px;
+    display: flex; align-items: center; justify-content: center;
+    border: 0; border-radius: 8px; cursor: pointer;
+    background: rgba(255,255,255,0.85); color: #374151; font-size: 20px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.18); padding: 0; line-height: 1;
+  }
+  .pcard-eye:hover { background: #fff; }
+  /* Компактный вариант для плотности «Мелко» — пропорционально образцу карандаша */
+  .view-grid.density-s .pcard-eye { width: 36px; height: 36px; min-width: 36px; font-size: 16px; }
+
+  /* Скрытая карточка тускнеет (D-01): остаётся интерактивной — NO pointer-events:none */
+  .pcard.hidden { opacity: 0.45; }
+
+  /* Чип «скрыт» — по образцу .badge-attn (D-02) */
+  .badge-hidden { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1;
+                  font-weight: 600; padding: 2px 8px; border-radius: 6px; font-size: 13px; }
+
   /* Затемнение-фон модалки редактора */
   #photo-editor {
     position: fixed; inset: 0; z-index: 2000; display: none;
@@ -874,6 +896,7 @@ PAGE = r"""<!doctype html>
       <button class="filter-tab" data-filter="new">Новинки</button>
       <button class="filter-tab" data-filter="nogroup">Без группы</button>
       <button class="filter-tab" data-filter="nophoto">Без фото</button>
+      <button class="filter-tab" data-filter="hidden">Скрытые</button>
       <button class="filter-tab active" data-filter="all">Все</button>
     </div>
     <div class="d-flex align-items-center flex-wrap gap-2">
@@ -1023,6 +1046,9 @@ function filteredProducts() {
     else if (activeFilter === "new")      matchFilter = (p.badge === "новинка");
     else if (activeFilter === "nogroup")  matchFilter = !p.group;
     else if (activeFilter === "nophoto")  matchFilter = !p.image_url;
+    // Фильтр «Скрытые» (этап 8, D-08/D-09): только скрытые товары; совместно с поиском
+    else if (activeFilter === "hidden")   matchFilter = !!p.hidden;
+    // «Все» (по умолчанию): показываем ВСЕ товары, скрытые — тусклыми (D-08, class .pcard.hidden)
     else                                  matchFilter = true; // "all"
 
     const matchSearch = (query === "" || (p.name || "").toLowerCase().includes(query));
@@ -1068,7 +1094,8 @@ function render() {
 // Построить одну карточку товара
 function buildCard(p, i) {
   const card = document.createElement("div");
-  card.className = "pcard";
+  // Скрытый товар получает класс hidden → тускнеет (D-01, .pcard.hidden)
+  card.className = p.hidden ? "pcard hidden" : "pcard";
   card.dataset.idx = i;
 
   // Уникальный id input файла — чтобы карточки не путались
@@ -1083,12 +1110,20 @@ function buildCard(p, i) {
   const editPhotoBtn = p.image_url
     ? `<button class="pcard-edit-photo" type="button" title="Кадрировать фото">&#9998;</button>` : "";
 
+  // Кнопка-глазик (этап 8): открытый глаз → клик скрывает; закрытый → клик возвращает (D-03)
+  // Размещена в левом верхнем углу фото, чтобы не перекрывать карандаш справа (D-04)
+  const eyeGlyph = p.hidden ? "&#128584;" : "&#128065;";
+  const eyeTitle = p.hidden ? "Вернуть товар в каталог" : "Скрыть товар из каталога";
+  const eyeBtn = `<button class="pcard-eye" type="button" title="${eyeTitle}">${eyeGlyph}</button>`;
+
   // ── Бейджи и подписи ──
   // Метку «новинка»/«хит» показывает ТОЛЬКО кнопка NEW/Хит своим зелёным
   // состоянием (по p.badge). Текстовый бейдж метки на карточке НЕ рисуем,
-  // чтобы не было дублирования. Здесь — только индикатор «требует внимания».
+  // чтобы не было дублирования. Здесь — индикатор «требует внимания» + чип «скрыт».
   let badges = "";
   if (!p.group || !p.image_url) badges += '<span class="badge-attn">&#9888;</span>';
+  // Чип «скрыт» — виден пока товар скрыт, во всех режимах плотности и видов (D-02)
+  if (p.hidden) badges += '<span class="badge-hidden">скрыт</span>';
 
   const hints = [];
   if (!p.group)     hints.push("Без группы");
@@ -1129,7 +1164,7 @@ function buildCard(p, i) {
   const hitActive = (p.badge === "хит") ? " active" : "";
 
   card.innerHTML = `
-    <div class="pcard-photo">${photoHtml}${editPhotoBtn}</div>
+    <div class="pcard-photo">${photoHtml}${editPhotoBtn}${eyeBtn}</div>
     <div class="pcard-body">
       <div class="pcard-badges">${badges}</div>
       ${hintsHtml}
@@ -1269,6 +1304,77 @@ function buildCard(p, i) {
       saveScrollPos();               // запомнить место = последняя активная карточка
       openPhotoEditor(p, card, cardStatus);
     });
+  }
+
+  // ── Кнопка-глазик: оптимистичное скрытие/возврат товара (этап 8, SP-4) ──
+  // Строго по образцу toggleBadge: сохранить prev → применить → apiCall → откат при ошибке.
+  const eyeEl = card.querySelector(".pcard-eye");
+  if (eyeEl) {
+    eyeEl.addEventListener("click", async () => {
+      await toggleHidden();
+    });
+  }
+
+  // Оптимистичный переключатель скрытия (D-06: БЕЗ диалога подтверждения)
+  async function toggleHidden() {
+    const prev = p.hidden;                      // запомнить для отката при ошибке
+    const next = !p.hidden;
+
+    saveScrollPos();
+    // Оптимистично: сразу применить изменение
+    p.hidden = next;
+    syncProduct(p);
+    // Переключить класс карточки, глиф и title кнопки
+    card.classList.toggle("hidden", next);
+    eyeEl.innerHTML = next ? "&#128584;" : "&#128065;";
+    eyeEl.title     = next ? "Вернуть товар в каталог" : "Скрыть товар из каталога";
+    // Показать/скрыть чип «скрыт» в .pcard-badges
+    const badgesEl = card.querySelector(".pcard-badges");
+    const hiddenChip = badgesEl ? badgesEl.querySelector(".badge-hidden") : null;
+    if (next) {
+      if (badgesEl && !hiddenChip) {
+        const chip = document.createElement("span");
+        chip.className = "badge-hidden";
+        chip.textContent = "скрыт";
+        badgesEl.appendChild(chip);
+      }
+    } else {
+      if (hiddenChip) hiddenChip.remove();
+    }
+    eyeEl.disabled = true;
+    cardStatus("", "Сохраняем...");
+
+    const d = await apiCall(`/${TOKEN}/save`, {
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: p.name, type: "скрыт", value: next ? "1" : "" }),
+    });
+
+    eyeEl.disabled = false;
+    if (d && d.ok) {
+      cardStatus("ok", next ? "Товар скрыт ✓" : "Товар возвращён ✓");
+      toast("ok",  next ? "Товар скрыт из каталога ✓" : "Товар возвращён в каталог ✓");
+    } else {
+      // Откат к прежнему состоянию
+      p.hidden = prev;
+      syncProduct(p);
+      card.classList.toggle("hidden", prev);
+      eyeEl.innerHTML = prev ? "&#128584;" : "&#128065;";
+      eyeEl.title     = prev ? "Вернуть товар в каталог" : "Скрыть товар из каталога";
+      // Откат чипа
+      const badgesEl2 = card.querySelector(".pcard-badges");
+      const chip2 = badgesEl2 ? badgesEl2.querySelector(".badge-hidden") : null;
+      if (prev) {
+        if (badgesEl2 && !chip2) {
+          const c = document.createElement("span");
+          c.className = "badge-hidden"; c.textContent = "скрыт";
+          badgesEl2.appendChild(c);
+        }
+      } else {
+        if (chip2) chip2.remove();
+      }
+      cardStatus("err", "Не сохранено");
+      toast("err", (d && d.message) || "Не удалось изменить видимость. Попробуйте ещё раз.");
+    }
   }
 
   return card;
