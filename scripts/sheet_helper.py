@@ -38,7 +38,8 @@ PROJECT_ROOT = SCRIPT_DIR.parent
 
 # --- Допустимые типы правок (белый список — защита памяти правок от мусора) ---
 # «подгруппа» (этап 7) — перенос товара по двухуровневой структуре Раздел→Подгруппа.
-ALLOWED_TYPES = {"group", "photo", "description", "name", "badge", "подгруппа"}
+# «скрыт» (этап 8) — скрытие товара с витрины; значение «1» = скрыт, «» = показан.
+ALLOWED_TYPES = {"group", "photo", "description", "name", "badge", "подгруппа", "скрыт"}
 
 
 def load_env() -> None:
@@ -226,6 +227,8 @@ def load_products() -> list:
     # Подгруппа и Раздел (этап 7) — опциональны, как Группа/ImageUrl
     subgroup_i = header.index("Подгруппа") if "Подгруппа" in header else None
     section_i = header.index("Раздел") if "Раздел" in header else None
+    # Скрыт (этап 8) — колонка L, добавлена в конец строки (expand-contract); опциональна
+    hidden_i = header.index("Скрыт") if "Скрыт" in header else None
 
     # --- Загрузить значения «Правки» (ключи для is_new + значения для ожидающей метки) ---
     edit_values = load_edit_values()
@@ -250,6 +253,8 @@ def load_products() -> list:
         # Подгруппа и раздел из листа «Товары» (пустая строка если нет) — этап 7
         subgroup = str(row[subgroup_i]).strip() if subgroup_i is not None and len(row) > subgroup_i else ""
         section = str(row[section_i]).strip() if section_i is not None and len(row) > section_i else ""
+        # Флаг скрытия из листа «Товары» (пустая строка если колонки/значения нет) — этап 8
+        hidden = str(row[hidden_i]).strip() if hidden_i is not None and len(row) > hidden_i else ""
 
         key = normalize_name(raw_name)
         # Товар «новинка для панели» — если его нет в памяти «Правки»
@@ -267,6 +272,12 @@ def load_products() -> list:
         if key in edit_values and "подгруппа" in edit_values[key]:
             subgroup = edit_values[key]["подгруппа"]
 
+        # Ожидающая правка скрытия перебивает значение из листа «Товары» — чтобы
+        # глазик в панели отражал уже сохранённый, но ещё не применённый флаг (этап 8).
+        # «1» = скрыт, «» = показан; не преобразовываем в bool — фронтенд сравнивает с «1».
+        if key in edit_values and "скрыт" in edit_values[key]:
+            hidden = edit_values[key]["скрыт"]
+
         products.append({
             "name": raw_name,
             "group": group,
@@ -275,6 +286,7 @@ def load_products() -> list:
             "badge": badge,
             "subgroup": subgroup,
             "section": section,
+            "hidden": hidden,       # флаг скрытия (этап 8): «1» = скрыт, «» = показан
         })
 
     log.info("Загружено товаров: %d", len(products))
