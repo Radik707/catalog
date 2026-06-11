@@ -17,7 +17,7 @@ export const PRESENTATION_PRESETS: Record<
 > = {
   "2x3": {
     label: "2×3",
-    cols: "grid-cols-2",
+    cols: "grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4", // десктоп: 3 и 4 колонки
     sizes: {
       photoH: "h-44 sm:h-72",
       bodyPad: "px-2 pt-1.5 pb-2 gap-1",
@@ -30,7 +30,7 @@ export const PRESENTATION_PRESETS: Record<
   },
   "3x4": {
     label: "3×4",
-    cols: "grid-cols-3",
+    cols: "grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5", // десктоп: 4 и 5 колонок
     sizes: {
       photoH: "h-28 sm:h-44",
       bodyPad: "px-1.5 pt-1 pb-1.5 gap-0.5",
@@ -43,7 +43,7 @@ export const PRESENTATION_PRESETS: Record<
   },
   "4x6": {
     label: "4×6",
-    cols: "grid-cols-4",
+    cols: "grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6", // десктоп: 5 и 6 колонок
     sizes: {
       photoH: "h-20 sm:h-32",
       bodyPad: "px-1 pt-1 pb-1 gap-0.5",

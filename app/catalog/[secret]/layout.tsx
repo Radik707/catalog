@@ -26,7 +26,8 @@ export default async function CatalogLayout({
       <NavProvider>
         {/* Синяя шапка: переключатель режима + иконки разделов слева, шестерёнка/корзина справа */}
         <header className="sticky top-0 z-50 bg-blue-600 shadow-sm">
-          <div className="flex items-center justify-between px-2 h-12 gap-2">
+          {/* Внутренний контейнер шапки ограничен max-w для центрирования на широких мониторах */}
+          <div className="flex items-center justify-between px-2 h-12 gap-2 max-w-screen-2xl mx-auto w-full">
             <CatalogNav navData={navData} secret={params.secret} />
             <div className="flex items-center gap-1 shrink-0">
               <SettingsButton />
@@ -41,7 +42,8 @@ export default async function CatalogLayout({
         {/* Выпадающая панель настроек (по кнопке-шестерёнке) */}
         <SettingsPanel />
 
-        <main>{children}</main>
+        {/* Контейнер витрины: ограничение ширины и центрирование на десктопе */}
+        <main className="max-w-screen-2xl mx-auto w-full">{children}</main>
         <TelegramButton />
       </NavProvider>
     </CatalogSettingsProvider>
