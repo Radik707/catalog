@@ -18,7 +18,10 @@ export async function getProducts(): Promise<Product[]> {
   const range = encodeURIComponent("Товары!A2:L");
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEETS_ID}/values/${range}?key=${API_KEY}`;
 
-  const res = await fetch(url, { next: { revalidate: 300 } }); // кеш 5 минут (ISR)
+  // Без кэша: изменения из админ-панели («Применить сейчас» — скрытие, фото, перенос)
+  // должны отражаться на витрине сразу, а не через 5 минут. Трафик B2B небольшой —
+  // постоянное чтение Google Sheets при заходе допустимо.
+  const res = await fetch(url, { cache: "no-store" });
 
   if (!res.ok) {
     console.error("Ошибка Google Sheets API:", res.status, await res.text());

@@ -3,8 +3,9 @@ import { getProducts } from "@/lib/sheets";
 import CatalogView from "@/components/CatalogView";
 import { NavMode } from "@/components/NavProvider";
 
-// Кэш на 5 минут — данные обновляются раз в день, не нужен постоянный перечитка
-export const revalidate = 300;
+// Динамический рендер без кэша: изменения из админ-панели («Применить сейчас» —
+// скрытие глазиком, смена фото, перенос) появляются на витрине сразу, без 5-минутной задержки.
+export const dynamic = "force-dynamic";
 
 export default async function CatalogPage({
   params,
