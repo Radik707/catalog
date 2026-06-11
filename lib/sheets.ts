@@ -79,5 +79,8 @@ export async function getProducts(): Promise<Product[]> {
     });
   }
 
-  return products;
+  // Фильтрация скрытых товаров на сервере (HIDE-05):
+  // скрытые не попадают в ответ /api/products и не отправляются в браузер.
+  // Применяется ПОСЛЕ fallback-блока восстановления section и сортировки.
+  return products.filter((p) => !p.hidden);
 }
