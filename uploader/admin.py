@@ -1625,6 +1625,22 @@ function peBuildSaveUrl() {
   return peInsertTransform(base, t);
 }
 
+/* «Чистый кроп»: ограничить сдвиг (pan) так, чтобы фото ВСЕГДА полностью
+   закрывало квадратную рамку — уехать за край нельзя, белых полей по краям
+   не возникает. Границы сдвига совпадают с кропом при сохранении
+   (peBuildSaveUrl), поэтому «что видно в превью — то и сохранится».
+   Если при текущем зуме фото у́же/ниже рамки (ещё не закрывает её) —
+   соответствующая ось фиксируется по центру (maxX/maxY = 0). */
+function peClampPan() {
+  const F = peState.F, c = peState.c, z = peState.zoom, W = peState.W, H = peState.H;
+  if (!(F > 0 && c > 0 && W > 0 && H > 0)) return;
+  // Макс. сдвиг по оси = насколько увеличенное фото шире/выше рамки, делённое на 2.
+  const maxX = Math.max(0, (c * z * W - F) / 2);
+  const maxY = Math.max(0, (c * z * H - F) / 2);
+  peState.panX = Math.max(-maxX, Math.min(maxX, peState.panX));
+  peState.panY = Math.max(-maxY, Math.min(maxY, peState.panY));
+}
+
 /* Применить геометрию (размер/смещение/трансформ) к <img> превью.
    width/height/left/top задают базовый «contain», а translate+scale —
    живой pan/zoom поверх него. */
@@ -1637,6 +1653,7 @@ function peApplyPreviewTransform() {
   img.style.height = h + "px";
   img.style.left = (F - w) / 2 + "px";
   img.style.top  = (F - h) / 2 + "px";
+  peClampPan();                       // согласовать сдвиг с границами кропа (чистый кроп)
   img.style.transform =
     "translate(" + peState.panX + "px," + peState.panY + "px) scale(" + peState.zoom + ")";
 }
@@ -1644,6 +1661,7 @@ function peApplyPreviewTransform() {
 /* Только трансформ (быстрый путь для drag/zoom — без пересчёта размеров). */
 function peUpdateTransformOnly() {
   const img = document.getElementById("pe-preview");
+  peClampPan();                       // не выпускать фото за край рамки (чистый кроп)
   img.style.transform =
     "translate(" + peState.panX + "px," + peState.panY + "px) scale(" + peState.zoom + ")";
 }
