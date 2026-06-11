@@ -48,7 +48,7 @@ export default function CatalogNav({ navData, secret }: { navData: SectionNav[];
               className={`px-2.5 py-1 rounded text-sm font-medium whitespace-nowrap transition-colors ${
                 mode === m
                   ? "bg-white text-blue-600"
-                  : "bg-blue-500 text-white active:bg-blue-400"
+                  : "bg-blue-500 text-white active:bg-blue-400 hover:bg-blue-400"
               }`}
             >
               {MODE_LABELS[m]}
@@ -78,7 +78,7 @@ export default function CatalogNav({ navData, secret }: { navData: SectionNav[];
                   goCatalogIfNeeded();
                 }}
                 className={`shrink-0 flex flex-col items-center justify-center px-1.5 py-0.5 rounded leading-none transition-colors ${
-                  active ? "bg-white text-blue-600" : "text-white active:bg-blue-500"
+                  active ? "bg-white text-blue-600" : "text-white active:bg-blue-500 hover:bg-blue-500"
                 }`}
                 style={{ minWidth: 46 }}
                 title={s.section}

@@ -21,8 +21,8 @@ export default function SubgroupFlyout({ navData }: { navData: SectionNav[] }) {
           onClick={() => selectSubgroup(null)}
           className={`shrink-0 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
             subgroup === null
-              ? "bg-blue-600 text-white"
-              : "bg-gray-100 text-gray-600 active:bg-gray-200"
+              ? "bg-blue-600 text-white hover:bg-blue-700"
+              : "bg-gray-100 text-gray-600 active:bg-gray-200 hover:bg-gray-200"
           }`}
         >
           Все
@@ -33,8 +33,8 @@ export default function SubgroupFlyout({ navData }: { navData: SectionNav[] }) {
             onClick={() => selectSubgroup(sg)}
             className={`shrink-0 px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
               subgroup === sg
-                ? "bg-blue-600 text-white"
-                : "bg-gray-100 text-gray-600 active:bg-gray-200"
+                ? "bg-blue-600 text-white hover:bg-blue-700"
+                : "bg-gray-100 text-gray-600 active:bg-gray-200 hover:bg-gray-200"
             }`}
           >
             {sg}

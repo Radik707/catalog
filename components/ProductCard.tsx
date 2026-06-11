@@ -112,7 +112,7 @@ export default function ProductCard({
     return (
       <div
         style={{ perspective: "1000px" }}
-        className={`relative rounded-lg overflow-hidden border border-gray-100 shadow-sm${inStock ? "" : " opacity-60"}`}
+        className={`relative rounded-lg overflow-hidden border border-gray-100 shadow-sm hover:shadow-md transition-shadow duration-150${inStock ? "" : " opacity-60"}`}
       >
         <div style={flipStyle} className="relative">
           {/* ── ЛИЦЕВАЯ СТОРОНА (нормальный поток, задаёт высоту) ── */}
@@ -261,7 +261,7 @@ export default function ProductCard({
         {/* ── ЛИЦЕВАЯ СТОРОНА ── */}
         <div
           style={{ backfaceVisibility: "hidden" }}
-          className={`flex items-center gap-3 px-4 py-3${inStock ? " bg-white" : " bg-gray-50"}`}
+          className={`flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors duration-100${inStock ? " bg-white" : " bg-gray-50"}`}
         >
           {badgeStyle && (
             <span className={`absolute top-1.5 right-1.5 text-[10px] font-medium px-1.5 py-0.5 rounded ${badgeStyle}`}>
