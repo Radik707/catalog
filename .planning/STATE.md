@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Скрытие товаров и десктоп-вид
-status: Phase 09-1 plan 01 tasks 1-3 complete, awaiting human verify (checkpoint Task 4)
-last_updated: "2026-06-11T20:10:00.000Z"
+status: Phase 09 complete
+last_updated: "2026-06-11T17:50:55.012Z"
 progress:
   total_phases: 3
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 5
-  completed_plans: 4
-  percent: 40
+  completed_plans: 5
+  percent: 67
 ---
 
 # Состояние проекта
