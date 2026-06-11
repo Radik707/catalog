@@ -499,8 +499,8 @@ def load_edit_memory() -> dict[str, dict[str, str]]:
         log.warning("Вкладка «Правки»: ожидаются колонки 'Товар', 'Тип', 'Значение' — пропускаем")
         return {}
 
-    # Допустимые типы правок (Этап 3: группа + фото + описание; Этап 4-02: название D-05; метка badge; Этап 7: подгруппа)
-    ALLOWED_TYPES = {"group", "photo", "description", "name", "badge", "подгруппа"}
+    # Допустимые типы правок (Этап 3: группа + фото + описание; Этап 4-02: название D-05; метка badge; Этап 7: подгруппа; Этап 8: скрыт)
+    ALLOWED_TYPES = {"group", "photo", "description", "name", "badge", "подгруппа", "скрыт"}
 
     # --- Сборка словаря памяти ---
     mapping: dict[str, dict[str, str]] = {}
@@ -602,6 +602,11 @@ def apply_edit_memory(
             # позже — в apply_subgroup_overrides() (после apply_structure_mapping).
             if "подгруппа" in edit:
                 p["subgroup_override"] = edit["подгруппа"]
+            # Правка скрытия (этап 8): «1» = скрыт с витрины, «» = показан.
+            # Товар НЕ вырезается — остаётся в листе «Товары» с флагом (HIDE-02);
+            # фильтрация происходит на стороне Next.js (lib/sheets.ts).
+            if "скрыт" in edit:
+                p["hidden"] = edit["скрыт"]
         else:
             new_for_memory += 1
     return new_for_memory
@@ -810,6 +815,7 @@ def products_to_rows(
         "Поставщик", "Badge", "ImageUrl", "Description",
         "Подгруппа",        # новое поле этапа 5 (второй уровень навигации)
         "Раздел",           # новое поле этапа 5 (первый уровень навигации)
+        "Скрыт",            # новое поле этапа 8 (флаг скрытия с витрины; «1» = скрыт)
     ]
     rows = [header]
     for p in products:
@@ -843,6 +849,7 @@ def products_to_rows(
             description,
             p.get("display_subgroup", ""),        # новое поле — подгруппа (этап 5)
             p.get("display_section", ""),         # новое поле — раздел (этап 5)
+            p.get("hidden", ""),                  # новое поле — скрытие (этап 8); «1» = скрыт
         ])
     return rows
 
@@ -936,10 +943,10 @@ def upload_to_google_sheet(rows: list[list], num_files: int) -> None:
         worksheet.clear()
     except gspread.exceptions.WorksheetNotFound:
         log.info("Лист '%s' не найден — создаю...", sheet_name)
-        # Ширину берём из заголовка: колонок стало 11 (добавлены «Подгруппа»/«Раздел»),
-        # жёсткое cols=9 урезало бы два новых столбца на свежесозданном листе (WR-01).
+        # Ширину берём из заголовка: колонок стало 12 (добавлены «Подгруппа»/«Раздел»/«Скрыт»),
+        # жёсткое cols=9 урезало бы новые столбцы на свежесозданном листе (WR-01).
         worksheet = spreadsheet.add_worksheet(
-            title=sheet_name, rows=len(rows) + 10, cols=len(rows[0]) if rows else 11
+            title=sheet_name, rows=len(rows) + 10, cols=len(rows[0]) if rows else 12
         )
 
     # --- Записать данные пакетно ---
