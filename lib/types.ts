@@ -11,4 +11,5 @@ export interface Product {
   description?: string;  // колонка I — описание товара
   subgroup?: string;     // колонка J — «Подгруппа» (двухуровневая навигация)
   section?: string;      // колонка K — «Раздел» (верхний уровень навигации)
+  hidden?: boolean;      // колонка L — «Скрыт» (1 = скрыт с витрины)
 }

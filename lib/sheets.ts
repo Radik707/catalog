@@ -14,8 +14,8 @@ export async function getProducts(): Promise<Product[]> {
     return [];
   }
 
-  // Диапазон расширен до A2:K для чтения колонок «Подгруппа» (J) и «Раздел» (K)
-  const range = encodeURIComponent("Товары!A2:K");
+  // Диапазон расширен до A2:L для чтения колонок «Подгруппа» (J), «Раздел» (K) и «Скрыт» (L)
+  const range = encodeURIComponent("Товары!A2:L");
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEETS_ID}/values/${range}?key=${API_KEY}`;
 
   const res = await fetch(url, { next: { revalidate: 300 } }); // кеш 5 минут (ISR)
@@ -41,6 +41,7 @@ export async function getProducts(): Promise<Product[]> {
     description: row[8] || undefined,
     subgroup: row[9] || undefined, // J — «Подгруппа»
     section: row[10] || undefined, // K — «Раздел»
+    hidden: row[11] === "1",       // L — «Скрыт» (строго "1" = скрыт; undefined/иное = виден)
   }));
 
   // Запасной механизм: пока в таблице нет колонки «Раздел» (у всех товаров пусто),
