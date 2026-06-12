@@ -40,3 +40,7 @@ npm-debug.log*
 
 .vercel
 .playwright-mcp/
+
+# PWA: сгенерированные service worker файлы (собираются из app/sw.ts при build)
+public/sw.js
+public/swe-worker*.js
