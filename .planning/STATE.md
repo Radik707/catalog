@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Оффлайн-режим (PWA)
-status: verifying
-last_updated: "2026-06-12T13:36:25.779Z"
+status: ready_to_plan
+last_updated: 2026-06-12T15:23:29.491Z
 last_activity: 2026-06-12
 progress:
   total_phases: 7
@@ -11,6 +11,7 @@ progress:
   total_plans: 5
   completed_plans: 5
   percent: 29
+stopped_at: Phase 11 complete (3/3) — ready to discuss Phase 12
 ---
 
 # Состояние проекта
@@ -209,8 +210,8 @@ progress:
 
 ## Current Position
 
-Phase: 11 (indexeddb-usecatalogsync) — COMPLETE
-Plan: 3 of 3 (все планы выполнены)
-Status: Этап 11 завершён. OFF-01 + OFF-02 закрыты. Следующий: этап 12 (Офлайн-UX)
-Last activity: 2026-06-12 -- Plan 11-03 complete (CatalogView + page.tsx → useCatalogSync)
+Phase: 12
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-06-12
 Resume file: .planning/phases/11-indexeddb-usecatalogsync/11-03-SUMMARY.md
