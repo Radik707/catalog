@@ -2,16 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Оффлайн-режим (PWA)
-status: ready_to_plan
-last_updated: 2026-06-12T11:56:15.232Z
-last_activity: 2026-06-12 -- Plan 10-02 complete (Web App Manifest + иконки PWA, PWA-01 закрыт)
+status: planning
+last_updated: "2026-06-12T13:00:35.598Z"
+last_activity: 2026-06-12
 progress:
   total_phases: 7
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
   completed_plans: 2
-  percent: 0
-stopped_at: Phase 10 complete (2/2) — ready to discuss Phase 11
+  percent: 14
 ---
 
 # Состояние проекта
