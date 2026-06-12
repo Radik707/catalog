@@ -8,14 +8,17 @@ import ScrollToTop from "./ScrollToTop";
 import Lightbox from "./Lightbox";
 import { useCatalogSettings, PRESENTATION_PRESETS } from "./CatalogSettings";
 import { useNav, NavMode } from "./NavProvider";
+// Клиентский хук офлайн-синхронизации — источник данных при отсутствии пропа products
+import { useCatalogSync } from "@/lib/useCatalogSync";
 
 interface CatalogViewProps {
-  products: Product[];
+  // products теперь опциональный: при отсутствии данные берутся из useCatalogSync (офлайн-режим)
+  products?: Product[];
   // Начальный режим из URL (?filter=hit|new) — для внешних ссылок
   initialMode?: NavMode;
 }
 
-export default function CatalogView({ products, initialMode }: CatalogViewProps) {
+export default function CatalogView({ products: productsProp, initialMode }: CatalogViewProps) {
   // Настройки отображения (управляются шестерёнкой в шапке)
   const { viewMode, gridPreset, showPhotos, showPrices } = useCatalogSettings();
   // Состояние навигации (режим, раздел, подгруппа) — из общего контекста
@@ -24,11 +27,75 @@ export default function CatalogView({ products, initialMode }: CatalogViewProps)
   const [search, setSearch] = useState("");
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
+  // Хук синхронизации вызывается БЕЗУСЛОВНО (правило хуков — нельзя в ветке условия).
+  // Когда проп передан — данные хука игнорируются, используется проп.
+  const sync = useCatalogSync();
+
+  // Рабочий массив: проп имеет приоритет (обратная совместимость / тесты);
+  // при отсутствии пропа — данные приходят из IndexedDB через хук (офлайн-источник).
+  const products = productsProp ?? sync.products;
+
+  // Статус загрузки берём из хука только когда проп не передан.
+  // Когда проп передан — данные уже готовы, статус "ready".
+  const status = productsProp !== undefined ? "ready" : sync.status;
+
   // Однократно применяем режим из URL (например, ссылка ?filter=hit)
   useEffect(() => {
     if (initialMode && initialMode !== "catalog") setMode(initialMode);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ─── Состояние «первая загрузка» (D-02): скелетон-карточки ─────────────────
+  // IDB пуст, идёт fetch — показываем серые контуры в сетке витрины, не спиннер.
+  if (status === "loading") {
+    return (
+      <div className="min-h-screen flex flex-col">
+        {/* Строка поиска — отображаем, но неактивна пока нет данных */}
+        <SearchBar value="" onChange={() => {}} count={0} />
+        {/* Сетка скелетон-карточек: те же классы что у обычной сетки */}
+        <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 p-2">
+          {Array.from({ length: 12 }).map((_, i) => (
+            // Скелетон-карточка: имитирует пропорции реальной карточки с фото
+            <div key={i} className="bg-white rounded-lg overflow-hidden shadow-sm border border-gray-100">
+              {/* Блок-заглушка фото (квадратный, как у карточки) */}
+              <div className="aspect-square bg-gray-200 animate-pulse" />
+              <div className="p-2 space-y-2">
+                {/* Полоска-заглушка названия товара */}
+                <div className="h-3 bg-gray-200 rounded animate-pulse" />
+                <div className="h-3 bg-gray-200 rounded animate-pulse w-3/4" />
+                {/* Полоска-заглушка цены */}
+                <div className="h-4 bg-gray-200 rounded animate-pulse w-1/2 mt-1" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Состояние «офлайн без данных» (D-03): дружелюбная заглушка ────────────
+  // IDB пуст И нет сети — каталог ни разу не открывался онлайн.
+  // Как только сеть появится — хук подтянет данные сам (событие online), без кнопки.
+  if (status === "empty-offline") {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-6">
+        <div className="text-center max-w-xs">
+          {/* Иконка отсутствия сети — нейтральная, не тревожная */}
+          <div className="text-6xl mb-4">📵</div>
+          <h2 className="text-lg font-semibold text-gray-700 mb-2">
+            Каталог ещё не загружен
+          </h2>
+          <p className="text-sm text-gray-500 leading-relaxed">
+            Подключитесь к интернету один раз — и дальше каталог будет работать
+            даже без сети.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Готовое состояние (status === "ready"): обычный рендер каталога ────────
+  // Весь код ниже — исходная логика CatalogView без изменений.
 
   // Плоский список — при активном поиске ИЛИ в режимах Хит/Новинка
   const isFlat = Boolean(search.trim()) || mode !== "catalog";
