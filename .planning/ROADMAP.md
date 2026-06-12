@@ -71,12 +71,14 @@
 **Планы:** 4 plans
 
 Plans:
+
 - [x] 08-01-PLAN.md — Память правок + upload.py: тип `скрыт` в белых списках, колонка «Скрыт» (L), разворот в p['hidden'] (HIDE-04) ✅ 2026-06-11
 - [x] 08-02-PLAN.md — Витрина: Product.hidden, диапазон A2:L, фильтр скрытых на сервере (HIDE-05) ✅ 2026-06-11
 - [x] 08-03-PLAN.md — Админ-панель: /save type=`скрыт`, кнопка-глазик, optimistic toggle, тусклая карточка + чип, фильтр видимости (HIDE-01..03) ✅ 2026-06-11
 - [x] 08-04-PLAN.md — Раздельный деплой (Vercel + сисадмин) + сквозная проверка цикла скрыть/вернуть (HIDE-01..05) ✅ 2026-06-11
 
 **Заметки по реализации** (из бэклога, проработан 2026-06-10):
+
 - Новый тип правки `скрыт` добавить в ТРИ белых списка: `sheet_helper.py`, `upload.py`, `admin.py`
 - Колонка «Скрыт» (L) добавляется В КОНЕЦ строки Sheet — паттерн expand-contract, не сдвигает существующие колонки
 - `lib/sheets.ts`: расширить диапазон до `A2:L`, фильтровать скрытые на сервере
@@ -100,6 +102,7 @@ Plans:
 **Планы:** 1 план
 
 Plans:
+
 - [x] 09-01-PLAN.md — Десктоп-адаптация витрины: брейкпоинты сетки xl/2xl, контейнер max-w-screen-2xl, hover-состояния карточек и навигации (DESK-01..04)
 
 **UI hint:** yes
@@ -125,7 +128,12 @@ Plans:
 **Планы:** 2 plans
 
 Plans:
+**Wave 1**
+
 - [ ] 10-01-PLAN.md — Инфраструктура SW: @serwist/next + serwist + idb, app/sw.ts (precache + каркас стратегий), withSerwist + заголовки Vercel в next.config.mjs, .gitignore (PWA-01)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 10-02-PLAN.md — Идентичность PWA: иконки ВД, app/manifest.ts (standalone, start_url из CATALOG_SECRET), PWA/iOS-метаданные в layout.tsx (PWA-01)
 
 **UI hint:** yes
