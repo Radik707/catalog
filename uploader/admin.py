@@ -947,7 +947,7 @@ PAGE = r"""<!doctype html>
       <div class="pe-row">
         <span class="pe-label">Зум</span>
         <button type="button" class="pe-btn" id="pe-zoom-out" title="Отдалить">−</button>
-        <input type="range" class="pe-zoom" id="pe-zoom" min="-100" max="100" step="1" value="0">
+        <input type="range" class="pe-zoom" id="pe-zoom" min="0" max="100" step="1" value="0">
         <button type="button" class="pe-btn" id="pe-zoom-in" title="Приблизить">+</button>
       </div>
       <!-- Действия -->
@@ -1482,12 +1482,12 @@ async function uploadPhoto(file, p, card, cardStatus) {
    Только ванильный JS, без библиотек (D-03).
    ────────────────────────────────────────────────────────────────── */
 
-// Ползунок зума центрирован: позиция -100..100, центр 0 = оригинал (zoom 1.0).
+// Ползунок зума: позиция 0..100, 0 = «заполнение» (фото закрывает квадрат), 100 = макс. приближение.
 // Маппинг позиции v в фактический zoom: zoom = 3^(v/100)
-//   v=0   → 1.0   (центр, оригинал)
+//   v=0   → 1.0   (фото целиком закрывает рамку — чистый кроп без белых полей)
 //   v=100 → 3.0   (максимальное приближение)
-//   v=-100→ ~0.333 (максимальное отдаление)
-const PE_POS_MIN = -100;     // крайнее левое положение ползунка (отдалить)
+// Зум-аут ниже 1.0 запрещён: иначе у несимметричных фото снова появились бы белые поля.
+const PE_POS_MIN = 0;        // крайнее левое положение ползунка = заполнение рамки (zoom 1.0)
 const PE_POS_MAX = 100;      // крайнее правое положение ползунка (приблизить)
 const PE_POS_STEP = 8;       // шаг кнопок − / + по позиции ползунка
 // Размер итогового квадрата для c_fill / c_pad (px)
@@ -1587,8 +1587,12 @@ function peBuildSaveUrl() {
   const panX = peState.panX, panY = peState.panY;
   const rot = deg > 0 ? ("a_" + deg + "/") : "";
 
-  // Нейтраль: ничего не трогали — отдаём реальную картинку.
-  if (deg === 0 &&
+  // Нейтраль: у КВАДРАТНОГО фото «заполнение» при зуме 1 = картинка целиком,
+  // поэтому если ничего не трогали — отдаём пристинный оригинал (без перекодирования).
+  // У несимметричного фото зум 1 = уже кроп по центру (заполнение рамки),
+  // поэтому нейтраль к нему НЕ применяем — сохраняем именно то, что видно в превью.
+  const isSquare = Math.abs(W - H) <= 0.01 * Math.max(W, H);
+  if (deg === 0 && isSquare &&
       Math.abs(z - 1) < 0.02 &&
       Math.abs(panX) < 0.5 && Math.abs(panY) < 0.5) {
     return base;
@@ -1677,7 +1681,11 @@ function peLoadPreview(resetPan) {
     // naturalWidth/Height уже учитывают поворот a_<deg>.
     peState.W = img.naturalWidth;
     peState.H = img.naturalHeight;
-    peState.c = Math.min(peState.F / peState.W, peState.F / peState.H);
+    // «Чистый кроп»: базовый масштаб = «cover» (max), чтобы фото уже при зуме 1
+    // полностью закрывало квадрат даже у несимметричных снимков. Иначе кроп
+    // не применялся до порога пропорций и сохранялась картинка целиком —
+    // на карточке это выглядело как «вернулось к прошлой версии».
+    peState.c = Math.max(peState.F / peState.W, peState.F / peState.H);
     peApplyPreviewTransform();
   };
   img.src = peRotatedBaseUrl(peState.baseUrl, peState.rotation);
@@ -1739,7 +1747,7 @@ function peSetZoomPos(pos) {
 // и значение слайдера, обновляем живой transform. Пишем в peState.zoom,
 // чтобы сохранение (peBuildSaveUrl) учло пинч-зум.
 function peSetZoom(z) {
-  const zc = Math.max(0.34, Math.min(3, z));      // зажать фактический зум
+  const zc = Math.max(1, Math.min(3, z));         // зажать зум: не ниже «заполнения» (1.0), не выше 3×
   peState.zoom = zc;
   // Обратное преобразование zoom → позиция ползунка: pos = 100*log3(z)
   let pos = Math.round(100 * Math.log(zc) / Math.log(3));
