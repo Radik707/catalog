@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Оффлайн-режим (PWA)
-status: executing
-last_updated: "2026-06-12T14:00:00.000Z"
+status: verifying
+last_updated: "2026-06-12T13:36:25.779Z"
 last_activity: 2026-06-12
 progress:
   total_phases: 7
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 5
-  completed_plans: 4
-  percent: 20
+  completed_plans: 5
+  percent: 29
 ---
 
 # Состояние проекта
@@ -25,11 +25,11 @@ progress:
 ## Текущая позиция
 
 **Веха:** v1.3 «Оффлайн-режим (PWA)»
-**Этап:** 11 — «Слой данных (IndexedDB + useCatalogSync)» — план 01 ✅, план 02 ✅
-**План:** 02 выполнен (хук useCatalogSync: stale-while-revalidate, OFF-01 + OFF-03)
-**Статус:** Plan 11-02 complete. Следующий шаг: план 03 (витрина на офлайн-источник)
+**Этап:** 11 — «Слой данных (IndexedDB + useCatalogSync)» — план 01 ✅, план 02 ✅, план 03 ✅
+**План:** 03 выполнен (CatalogView на useCatalogSync, page.tsx без SSR-данных; OFF-01 + OFF-02 закрыты)
+**Статус:** Этап 11 ЗАВЕРШЁН. Следующий шаг: этап 12 (Офлайн-UX — индикаторы и корзина)
 
-Прогресс: [███░░░░░░░] 29% (4 плана из 7 фаз)
+Прогресс: [████░░░░░░] 36% (5 планов из 7 фаз)
 
 **Этапы вехи v1.3:**
 
@@ -141,11 +141,15 @@ progress:
 - [11-02] sync() через useCallback([]) — зависимостей нет, ссылка стабильна; useEffect([sync]) корректен
 - [11-02] Начальное isOnline=true на SSR, исправляется в useEffect — безопасно для Next.js гидратации
 - [11-02] persist() вызывается под двойным guard: persistCalledRef + navigator.storage?.persist (nullable)
+- [11-03] useCatalogSync() вызывается безусловно; productsProp ?? sync.products — проп в приоритете (обратная совместимость)
+- [11-03] status = productsProp !== undefined ? "ready" : sync.status — при переданном пропе хук не управляет состоянием
+- [11-03] Скелетон — 12 карточек с animate-pulse в сетке grid-cols-2..2xl:grid-cols-6 (D-02, не спиннер)
+- [11-03] Офлайн-заглушка без кнопки — хук сам подтянет данные по событию online (D-03, авто)
+- [11-03] page.tsx синхронный (убран async) — нет await после удаления getProducts()
 
 ### Ожидающие задачи
 
 - Замерить реальный средний размер WebP-фото из `scripts/photo_urls.json` перед финализацией `maxEntries` (этап 13)
-- Проверить контракт пропов CatalogView при интеграции `useCatalogSync` (этап 11)
 
 ### Блокеры / риски
 
@@ -188,7 +192,7 @@ progress:
 | 8 (Скрытие «глазиком») | 4/4 | — | — |
 | 9 (Десктопный вид) | 1/1 | — | — |
 | 10 (SW + Manifest) | 2/2 | ~45 мин | ~22 мин |
-| 11 (IndexedDB) | 1/3 | ~2 мин | ~2 мин |
+| 11 (IndexedDB) | 3/3 | ~17 мин | ~6 мин |
 | 12 (Офлайн-UX) | 0/? | — | — |
 | 13 (Синхронизация фото) | 0/? | — | — |
 | 14 (Install Prompt) | 0/? | — | — |
@@ -200,13 +204,13 @@ progress:
 ## Непрерывность сессий
 
 Последняя сессия: 2026-06-12
-Остановились на: Выполнен план 11-02 — создан хук useCatalogSync (stale-while-revalidate, persist(), авто-подтягивание по online). Следующий план: 11-03 (витрина на офлайн-источник).
-Следующий шаг: `/gsd-execute-phase 11` (план 03)
+Остановились на: Выполнен план 11-03 — CatalogView на useCatalogSync (скелетон D-02, заглушка D-03), page.tsx без SSR-данных. OFF-01 + OFF-02 закрыты. Этап 11 завершён.
+Следующий шаг: `/gsd-execute-phase 12` (Офлайн-UX — индикаторы синхронизации и офлайн-корзина)
 
 ## Current Position
 
-Phase: 11 (indexeddb-usecatalogsync) — EXECUTING
-Plan: 3 of 3
-Status: Plan 11-02 complete. Next: execute 11-03-PLAN.md (CatalogView на useCatalogSync + скелетон/заглушка)
-Last activity: 2026-06-12 -- Plan 11-02 complete (lib/useCatalogSync.ts)
-Resume file: .planning/phases/11-indexeddb-usecatalogsync/11-02-SUMMARY.md
+Phase: 11 (indexeddb-usecatalogsync) — COMPLETE
+Plan: 3 of 3 (все планы выполнены)
+Status: Этап 11 завершён. OFF-01 + OFF-02 закрыты. Следующий: этап 12 (Офлайн-UX)
+Last activity: 2026-06-12 -- Plan 11-03 complete (CatalogView + page.tsx → useCatalogSync)
+Resume file: .planning/phases/11-indexeddb-usecatalogsync/11-03-SUMMARY.md

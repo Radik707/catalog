@@ -169,7 +169,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2)*
 
-- [ ] 11-03-PLAN.md — Витрина на офлайн-источник: CatalogView из useCatalogSync + скелетон/заглушка, page.tsx без SSR-данных (OFF-01, OFF-02)
+- [x] 11-03-PLAN.md — Витрина на офлайн-источник: CatalogView из useCatalogSync + скелетон/заглушка, page.tsx без SSR-данных (OFF-01, OFF-02)
 
 ---
 
@@ -251,7 +251,7 @@ Plans:
 | 8. Скрытие товаров «глазиком» | v1.2 | 4/4 | Complete | 2026-06-11 |
 | 9. Десктопный вид витрины | v1.2 | 1/1 | Complete | 2026-06-11 |
 | 10. Фундамент SW и Manifest | v1.3 | 2/2 | Complete    | 2026-06-12 |
-| 11. Слой данных (IndexedDB) | v1.3 | 2/3 | In Progress|  |
+| 11. Слой данных (IndexedDB) | v1.3 | 3/3 | Complete   | 2026-06-12 |
 | 12. Офлайн-UX (индикаторы и корзина) | v1.3 | 0/? | Not started | - |
 | 13. Синхронизация фото | v1.3 | 0/? | Not started | - |
 | 14. Install Prompt | v1.3 | 0/? | Not started | - |
