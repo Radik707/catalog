@@ -1,6 +1,7 @@
 "use client";
 
 import { useCartContext } from "@/components/CartProvider";
+import { useOnlineStatus } from "@/lib/useOnlineStatus";
 
 const TELEGRAM_USERNAME = "ZhukOleh";
 
@@ -138,7 +139,11 @@ export default function CartPage({
 /* ---------- Кнопка Telegram ---------- */
 function TelegramButton() {
   const { items, totalPrice } = useCartContext();
+  // Хук состояния сети — true при наличии подключения, false в офлайне.
+  // Обновляется автоматически по событиям online/offline без перезагрузки страницы.
+  const isOnline = useOnlineStatus();
 
+  // Сборка текста заказа и открытие Telegram — без изменений
   const handleSend = () => {
     const lines = items.map(
       ({ product, quantity }) =>
@@ -156,12 +161,23 @@ function TelegramButton() {
   };
 
   return (
-    <button
-      onClick={handleSend}
-      className="w-full py-3.5 bg-blue-600 text-white font-semibold rounded-xl text-base active:bg-blue-700"
-    >
-      Отправить заказ в Telegram
-    </button>
+    // Обёртка для кнопки + подписи офлайн-статуса
+    <div className="flex flex-col gap-2">
+      <button
+        onClick={handleSend}
+        // Офлайн-блокировка (D-05): кнопка неактивна без сети
+        disabled={!isOnline}
+        className="w-full py-3.5 bg-blue-600 text-white font-semibold rounded-xl text-base active:bg-blue-700 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed"
+      >
+        Отправить заказ в Telegram
+      </button>
+      {/* Постоянная подпись при офлайне — текст по решению D-05 */}
+      {!isOnline && (
+        <p className="text-xs text-gray-500 text-center leading-snug">
+          Нет сети — заказ отправится, когда появится интернет. Корзина сохранена.
+        </p>
+      )}
+    </div>
   );
 }
 
