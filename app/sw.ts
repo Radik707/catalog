@@ -42,8 +42,11 @@ const serwist = new Serwist({
     // при наличии сети — всегда свежие данные; при офлайн — кэш.
     // Timeout 5 с, чтобы не ждать при плохой сети.
     // Офлайн-эффект проверяется на этапе 11 (IndexedDB).
+    // ВАЖНО: без якоря ^ — Serwist прогоняет regex по ПОЛНОМУ адресу (url.href,
+    // т.е. https://домен/api/products), а не по пути. С ^ совпадения не будет
+    // никогда (href начинается с https://, а не с /api). НЕ возвращать ^.
     {
-      matcher: /^\/api\/products/,
+      matcher: /\/api\/products/,
       handler: new NetworkFirst({
         networkTimeoutSeconds: 5,
         cacheName: "api-products",
