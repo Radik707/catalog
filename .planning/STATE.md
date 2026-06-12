@@ -1,15 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.2
-milestone_name: Скрытие товаров и десктоп-вид
-status: Phase 09 complete
-last_updated: "2026-06-11T17:50:55.012Z"
+milestone: v1.3
+milestone_name: Оффлайн-режим (PWA)
+status: planning
+last_updated: "2026-06-12T08:17:48.757Z"
+last_activity: 2026-06-12
 progress:
-  total_phases: 3
-  completed_phases: 2
-  total_plans: 5
-  completed_plans: 5
-  percent: 67
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Состояние проекта
@@ -167,3 +168,10 @@ progress:
 Последняя сессия: 2026-06-11
 Остановились на: 09-01 Tasks 1–3 complete (xl/2xl сетка, hover, build 0). Checkpoint Task 4 — visual verify.
 Следующий шаг: владелец запускает npm run dev, проверяет десктоп/мобиль в браузере, пишет «approved»
+
+## Current Position
+
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-06-12 — Milestone v1.3 started
