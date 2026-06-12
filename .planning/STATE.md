@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Оффлайн-режим (PWA)
-status: ready_to_plan
-last_updated: 2026-06-12T15:23:29.491Z
+status: planning
+last_updated: "2026-06-12T16:07:49.466Z"
 last_activity: 2026-06-12
 progress:
   total_phases: 7
@@ -11,7 +11,6 @@ progress:
   total_plans: 5
   completed_plans: 5
   percent: 29
-stopped_at: Phase 11 complete (3/3) — ready to discuss Phase 12
 ---
 
 # Состояние проекта
@@ -214,4 +213,4 @@ Phase: 12
 Plan: Not started
 Status: Ready to plan
 Last activity: 2026-06-12
-Resume file: .planning/phases/11-indexeddb-usecatalogsync/11-03-SUMMARY.md
+Resume file: .planning/phases/12-ux/12-CONTEXT.md
