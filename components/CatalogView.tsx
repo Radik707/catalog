@@ -45,60 +45,12 @@ export default function CatalogView({ products: productsProp, initialMode }: Cat
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ─── Состояние «первая загрузка» (D-02): скелетон-карточки ─────────────────
-  // IDB пуст, идёт fetch — показываем серые контуры в сетке витрины, не спиннер.
-  if (status === "loading") {
-    return (
-      <div className="min-h-screen flex flex-col">
-        {/* Строка поиска — отображаем, но неактивна пока нет данных */}
-        <SearchBar value="" onChange={() => {}} count={0} />
-        {/* Сетка скелетон-карточек: те же классы что у обычной сетки */}
-        <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 p-2">
-          {Array.from({ length: 12 }).map((_, i) => (
-            // Скелетон-карточка: имитирует пропорции реальной карточки с фото
-            <div key={i} className="bg-white rounded-lg overflow-hidden shadow-sm border border-gray-100">
-              {/* Блок-заглушка фото (квадратный, как у карточки) */}
-              <div className="aspect-square bg-gray-200 animate-pulse" />
-              <div className="p-2 space-y-2">
-                {/* Полоска-заглушка названия товара */}
-                <div className="h-3 bg-gray-200 rounded animate-pulse" />
-                <div className="h-3 bg-gray-200 rounded animate-pulse w-3/4" />
-                {/* Полоска-заглушка цены */}
-                <div className="h-4 bg-gray-200 rounded animate-pulse w-1/2 mt-1" />
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  // ─── Состояние «офлайн без данных» (D-03): дружелюбная заглушка ────────────
-  // IDB пуст И нет сети — каталог ни разу не открывался онлайн.
-  // Как только сеть появится — хук подтянет данные сам (событие online), без кнопки.
-  if (status === "empty-offline") {
-    return (
-      <div className="min-h-screen flex items-center justify-center px-6">
-        <div className="text-center max-w-xs">
-          {/* Иконка отсутствия сети — нейтральная, не тревожная */}
-          <div className="text-6xl mb-4">📵</div>
-          <h2 className="text-lg font-semibold text-gray-700 mb-2">
-            Каталог ещё не загружен
-          </h2>
-          <p className="text-sm text-gray-500 leading-relaxed">
-            Подключитесь к интернету один раз — и дальше каталог будет работать
-            даже без сети.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  // ─── Готовое состояние (status === "ready"): обычный рендер каталога ────────
-  // Весь код ниже — исходная логика CatalogView без изменений.
-
   // Плоский список — при активном поиске ИЛИ в режимах Хит/Новинка
   const isFlat = Boolean(search.trim()) || mode !== "catalog";
+
+  // ВАЖНО (правило хуков): все useMemo ниже вызываются БЕЗУСЛОВНО и ВЫШЕ любых
+  // ранних return по статусу. Иначе при переходе loading → ready число вызванных
+  // хуков меняется и React падает: "Rendered more hooks than during the previous render".
 
   // Плоско отфильтрованные товары: режим (бейдж) + поиск по названию
   const flatFiltered = useMemo(() => {
@@ -157,6 +109,58 @@ export default function CatalogView({ products: productsProp, initialMode }: Cat
     grouped.forEach((subMap) => subMap.forEach((items) => list.push(...items)));
     return list.filter((p) => p.imageUrl);
   }, [isFlat, flatFiltered, grouped]);
+
+  // ─── Состояние «первая загрузка» (D-02): скелетон-карточки ─────────────────
+  // IDB пуст, идёт fetch — показываем серые контуры в сетке витрины, не спиннер.
+  if (status === "loading") {
+    return (
+      <div className="min-h-screen flex flex-col">
+        {/* Строка поиска — отображаем, но неактивна пока нет данных */}
+        <SearchBar value="" onChange={() => {}} count={0} />
+        {/* Сетка скелетон-карточек: те же классы что у обычной сетки */}
+        <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 p-2">
+          {Array.from({ length: 12 }).map((_, i) => (
+            // Скелетон-карточка: имитирует пропорции реальной карточки с фото
+            <div key={i} className="bg-white rounded-lg overflow-hidden shadow-sm border border-gray-100">
+              {/* Блок-заглушка фото (квадратный, как у карточки) */}
+              <div className="aspect-square bg-gray-200 animate-pulse" />
+              <div className="p-2 space-y-2">
+                {/* Полоска-заглушка названия товара */}
+                <div className="h-3 bg-gray-200 rounded animate-pulse" />
+                <div className="h-3 bg-gray-200 rounded animate-pulse w-3/4" />
+                {/* Полоска-заглушка цены */}
+                <div className="h-4 bg-gray-200 rounded animate-pulse w-1/2 mt-1" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Состояние «офлайн без данных» (D-03): дружелюбная заглушка ────────────
+  // IDB пуст И нет сети — каталог ни разу не открывался онлайн.
+  // Как только сеть появится — хук подтянет данные сам (событие online), без кнопки.
+  if (status === "empty-offline") {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-6">
+        <div className="text-center max-w-xs">
+          {/* Иконка отсутствия сети — нейтральная, не тревожная */}
+          <div className="text-6xl mb-4">📵</div>
+          <h2 className="text-lg font-semibold text-gray-700 mb-2">
+            Каталог ещё не загружен
+          </h2>
+          <p className="text-sm text-gray-500 leading-relaxed">
+            Подключитесь к интернету один раз — и дальше каталог будет работать
+            даже без сети.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Готовое состояние (status === "ready"): обычный рендер каталога ────────
+  // Хуки выше уже вычислены; ниже — только не-хуковая логика рендера.
 
   const openLightbox = (product: Product) => {
     const idx = photoProducts.findIndex((p) => p.id === product.id);

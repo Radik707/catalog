@@ -56,9 +56,25 @@ export function useCatalogSync(): UseCatalogSyncResult {
   // (после первой успешной синхронизации с сервером).
   const persistCalledRef = useRef(false);
 
+  // Счётчик «поколений» синхронизации. Параллельные вызовы sync() (первый при
+  // монтировании + повтор по событию online) могут завершиться в любом порядке.
+  // Актуальным считаем только самый свежий вызов — запоздавший ответ старого
+  // запроса НЕ должен перезаписать новые данные (защита от гонки, CR-02).
+  const syncGenRef = useRef(0);
+  // Флаг «компонент жив»: запрещаем setState после размонтирования.
+  const mountedRef = useRef(true);
+
+  // Таймаут запроса к серверу (мс): «висящая» сеть не должна держать вечный скелетон.
+  const FETCH_TIMEOUT_MS = 10_000;
+
   // ─── Основная функция синхронизации ────────────────────────────────────────
 
   const sync = useCallback(async () => {
+    // Помечаем этот вызов новым поколением. isCurrent() == true, пока вызов
+    // остаётся самым свежим И компонент не размонтирован.
+    const myGen = ++syncGenRef.current;
+    const isCurrent = () => mountedRef.current && myGen === syncGenRef.current;
+
     // Шаг 1: Мгновенно читаем данные из IndexedDB — пользователь видит каталог
     // без ожидания сети. Это и есть «stale» часть stale-while-revalidate (D-01).
     let cached: Product[] = [];
@@ -69,7 +85,7 @@ export function useCatalogSync(): UseCatalogSyncResult {
       console.warn("[useCatalogSync] Не удалось прочитать IDB:", err);
     }
 
-    if (cached.length > 0) {
+    if (cached.length > 0 && isCurrent()) {
       // Кэш есть → мгновенно показываем товары, не ждём сети
       setProducts(cached);
       setStatus("ready");
@@ -78,7 +94,7 @@ export function useCatalogSync(): UseCatalogSyncResult {
     // Шаг 2: Читаем timestamp последней синхронизации из meta
     try {
       const ts = await getMeta<number>("syncTimestamp");
-      if (ts !== undefined) setSyncedAt(ts);
+      if (ts !== undefined && isCurrent()) setSyncedAt(ts);
     } catch {
       // Не критично — timestamp покажет null
     }
@@ -90,7 +106,7 @@ export function useCatalogSync(): UseCatalogSyncResult {
 
     if (!online) {
       // Нет сети — fetch не делаем; если кэш пустой → заглушка
-      if (cached.length === 0) {
+      if (cached.length === 0 && isCurrent()) {
         setStatus("empty-offline");
       }
       // Если кэш есть — status уже "ready", оставляем как есть
@@ -99,27 +115,38 @@ export function useCatalogSync(): UseCatalogSyncResult {
 
     // Шаг 4: Онлайн → fetch свежих данных с сервера (revalidate-часть SWR).
     // D-04: любой сбой (сеть, не-2xx, таймаут) = вести себя как офлайн.
+    // AbortController + setTimeout прерывают «висящий» запрос (WR-01).
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
     try {
-      const res = await fetch("/api/products");
+      const res = await fetch("/api/products", { signal: controller.signal });
       if (!res.ok) {
         // Сервер ответил ошибкой — трактуем как офлайн (D-04)
         throw new Error(`HTTP ${res.status}`);
       }
 
-      const fresh: Product[] = await res.json();
-
-      // Бесшовная подмена: хук возвращает новый массив, CatalogView перерисовывает список.
-      // Компонент НЕ размонтируется → позиция прокрутки, открытый раздел и фильтры
-      // сохраняются (они в состоянии CatalogView, не зависят от источника данных).
-      setProducts(fresh);
-
-      // Сохраняем свежие данные в IndexedDB для следующего офлайн-запуска
-      await saveProducts(fresh);
+      // WR-02: сервер обязан вернуть массив. Если придёт объект ошибки/мусор —
+      // НЕ затираем им офлайн-кэш, уходим в ветку «как офлайн».
+      const data: unknown = await res.json();
+      if (!Array.isArray(data)) {
+        throw new Error("Ответ /api/products не является массивом");
+      }
+      const fresh = data as Product[];
 
       const now = Date.now();
-      await saveMeta("syncTimestamp", now);
-      setSyncedAt(now);
-      setStatus("ready");
+      // Применяем результат только если это всё ещё самый свежий вызов (CR-02):
+      // и в UI, и в IndexedDB — чтобы экран и кэш не разъехались.
+      if (isCurrent()) {
+        // Бесшовная подмена: хук возвращает новый массив, CatalogView перерисовывает
+        // список. Компонент НЕ размонтируется → позиция прокрутки, открытый раздел
+        // и фильтры сохраняются (они в состоянии CatalogView).
+        setProducts(fresh);
+        // Сохраняем свежие данные в IndexedDB для следующего офлайн-запуска
+        await saveProducts(fresh);
+        await saveMeta("syncTimestamp", now);
+        setSyncedAt(now);
+        setStatus("ready");
+      }
 
       // Шаг 5: Однократный вызов persist() после первой успешной синхронизации.
       // Борьба с 7-дневным eviction на iOS — браузер не должен вытеснять наши данные.
@@ -132,21 +159,27 @@ export function useCatalogSync(): UseCatalogSyncResult {
         });
       }
     } catch (err) {
-      // D-04: сбой fetch = вести себя как офлайн.
+      // D-04: сбой fetch (сеть, не-2xx, таймаут/abort, не-массив) = вести себя как офлайн.
       // Технические подробности в консоль для отладки — в UI ничего не пробрасываем.
       console.warn("[useCatalogSync] Не удалось получить данные с сервера:", err);
 
-      if (cached.length === 0) {
+      if (cached.length === 0 && isCurrent()) {
         // Кэша нет и сервер упал → показываем заглушку «Подключитесь к интернету»
         setStatus("empty-offline");
       }
       // Если кэш есть — пользователь уже видит товары (status "ready"), оставляем как есть
+    } finally {
+      clearTimeout(timeoutId);
     }
-  }, []); // sync не зависит от внешнего состояния — зависимости стабильны
+  }, []); // sync не зависит от внешнего состояния — зависимости стабильны (refs)
 
   // ─── Эффект монтирования ────────────────────────────────────────────────────
 
   useEffect(() => {
+    // Компонент смонтирован — разрешаем setState (важно для повторного маунта
+    // в React StrictMode, где эффект отрабатывает дважды).
+    mountedRef.current = true;
+
     // Исправляем начальное значение isOnline — читаем настоящее состояние на клиенте
     // (на сервере navigator недоступен, поэтому делаем это в useEffect).
     if (typeof navigator !== "undefined") {
@@ -173,6 +206,8 @@ export function useCatalogSync(): UseCatalogSyncResult {
 
     // Cleanup: снимаем подписки при размонтировании (Claude's Discretion — обязательно)
     return () => {
+      // Запрещаем setState от «висящих» промисов sync() после размонтирования (CR-02)
+      mountedRef.current = false;
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
