@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Оффлайн-режим (PWA)
 status: executing
-last_updated: "2026-06-12T13:18:36.945Z"
-last_activity: 2026-06-12 -- Phase 11 planning complete
+last_updated: "2026-06-12T13:26:27.229Z"
+last_activity: 2026-06-12
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 5
-  completed_plans: 2
+  completed_plans: 3
   percent: 14
 ---
 
@@ -135,6 +135,9 @@ progress:
 - [10-02] start_url = /catalog/${CATALOG_SECRET} из env — секрет не захардкожен (D-09)
 - [10-02] viewport.themeColor отдельным export const viewport (Next.js 14 требует Viewport)
 - [10-02] apple-touch-icon.png colorType RGB без альфа — iOS не поддерживает прозрачность иконок
+- [11-01] База catalog-db, stores products и meta — единственное место с IndexedDB API в проекте
+- [11-01] Упрощённый формат: Product[] под одним ключом "all" — атомарные чтение/запись (Claude's Discretion)
+- [11-01] upgrade-колбэк с contains-проверкой — stores создаются только при отсутствии; задел под версионирование схемы (T-11-02)
 
 ### Ожидающие задачи
 
@@ -182,7 +185,7 @@ progress:
 | 8 (Скрытие «глазиком») | 4/4 | — | — |
 | 9 (Десктопный вид) | 1/1 | — | — |
 | 10 (SW + Manifest) | 2/2 | ~45 мин | ~22 мин |
-| 11 (IndexedDB) | 0/? | — | — |
+| 11 (IndexedDB) | 1/3 | ~2 мин | ~2 мин |
 | 12 (Офлайн-UX) | 0/? | — | — |
 | 13 (Синхронизация фото) | 0/? | — | — |
 | 14 (Install Prompt) | 0/? | — | — |
@@ -194,13 +197,13 @@ progress:
 ## Непрерывность сессий
 
 Последняя сессия: 2026-06-12
-Остановились на: Этап 11 обсуждён — контекст зафиксирован (11-CONTEXT.md): свежесть данных (stale-while-revalidate), первая загрузка (скелетон), офлайн без данных (дружелюбное сообщение).
-Следующий шаг: Запустить `/gsd-plan-phase 11` (план этапа на основе CONTEXT.md)
+Остановились на: Выполнен план 11-01 — создана обёртка IndexedDB lib/catalogDb.ts (база catalog-db, stores products+meta, версионирование схемы). Следующий план: 11-02 (хук useCatalogSync).
+Следующий шаг: `/gsd-execute-phase 11` (план 02)
 
 ## Current Position
 
-Phase: 11
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-06-12 -- Phase 11 planning complete
-Resume file: .planning/phases/11-indexeddb-usecatalogsync/11-CONTEXT.md
+Phase: 11 (indexeddb-usecatalogsync) — EXECUTING
+Plan: 2 of 3
+Status: Plan 11-01 complete. Next: execute 11-02-PLAN.md (useCatalogSync hook)
+Last activity: 2026-06-12 -- Plan 11-01 complete (lib/catalogDb.ts)
+Resume file: .planning/phases/11-indexeddb-usecatalogsync/11-01-SUMMARY.md
