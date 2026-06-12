@@ -1,11 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useOnlineStatus } from "@/lib/useOnlineStatus";
 
 const BOT_USERNAME = process.env.NEXT_PUBLIC_BOT_USERNAME;
 
 export default function TelegramButton() {
   const [pulse, setPulse] = useState(false);
+  // Хук состояния сети — true при наличии подключения, false в офлайне (D-05).
+  // Обновляется автоматически по событиям online/offline без перезагрузки.
+  const isOnline = useOnlineStatus();
 
   useEffect(() => {
     // Анимация пульсации при первом посещении
@@ -34,10 +38,17 @@ export default function TelegramButton() {
 
   return (
     <button
-      onClick={handleClick}
-      className={`fixed bottom-6 right-4 z-50 flex items-center justify-center w-14 h-14 rounded-full shadow-lg bg-[#0088cc] text-white transition-transform hover:scale-110 active:scale-95 ${pulse ? "animate-pulse" : ""}`}
-      aria-label="Открыть Telegram-помощника"
-      title="💬 Спросить помощника"
+      // Офлайн: onClick не вызывает handleClick (кнопка не открывает Telegram).
+      // Онлайн: обычное поведение.
+      onClick={isOnline ? handleClick : undefined}
+      disabled={!isOnline}
+      // Визуальное приглушение при офлайне — нейтральное, без красного (D-03).
+      // При онлайне — hover/active/pulse как прежде.
+      className={`fixed bottom-6 right-4 z-50 flex items-center justify-center w-14 h-14 rounded-full shadow-lg bg-[#0088cc] text-white transition-transform
+        ${isOnline ? `hover:scale-110 active:scale-95 ${pulse ? "animate-pulse" : ""}` : "opacity-50 cursor-not-allowed"}`}
+      // Подсказка зависит от состояния сети
+      aria-label={isOnline ? "Открыть Telegram-помощника" : "Нет сети"}
+      title={isOnline ? "💬 Спросить помощника" : "Нет сети — откройте Telegram при подключении"}
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"
