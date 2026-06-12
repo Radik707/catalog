@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Оффлайн-режим (PWA)
-status: ready_to_plan
-last_updated: "2026-06-12T00:00:00.000Z"
-last_activity: 2026-06-12
+status: planning
+last_updated: "2026-06-12T10:29:42.274Z"
+last_activity: 2026-06-12 — Roadmap v1.3 created (phases 10–14)
 progress:
-  total_phases: 5
+  total_phases: 7
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
