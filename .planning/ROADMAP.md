@@ -130,11 +130,11 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 10-01-PLAN.md — Инфраструктура SW: @serwist/next + serwist + idb, app/sw.ts (precache + каркас стратегий), withSerwist + заголовки Vercel в next.config.mjs, .gitignore (PWA-01)
+- [x] 10-01-PLAN.md — Инфраструктура SW: @serwist/next + serwist + idb, app/sw.ts (precache + каркас стратегий), withSerwist + заголовки Vercel в next.config.mjs, .gitignore (PWA-01)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 10-02-PLAN.md — Идентичность PWA: иконки ВД, app/manifest.ts (standalone, start_url из CATALOG_SECRET), PWA/iOS-метаданные в layout.tsx (PWA-01)
+- [x] 10-02-PLAN.md — Идентичность PWA: иконки ВД, app/manifest.ts (standalone, start_url из CATALOG_SECRET), PWA/iOS-метаданные в layout.tsx (PWA-01)
 
 **UI hint:** yes
 
@@ -237,7 +237,7 @@ Plans:
 | 7. Подгруппы в админ-панели | v1.1 | 1/1 | Complete (бэкфилл) | 2026-06-10 |
 | 8. Скрытие товаров «глазиком» | v1.2 | 4/4 | Complete | 2026-06-11 |
 | 9. Десктопный вид витрины | v1.2 | 1/1 | Complete | 2026-06-11 |
-| 10. Фундамент SW и Manifest | v1.3 | 0/2 | Not started | - |
+| 10. Фундамент SW и Manifest | v1.3 | 2/2 | Complete    | 2026-06-12 |
 | 11. Слой данных (IndexedDB) | v1.3 | 0/? | Not started | - |
 | 12. Офлайн-UX (индикаторы и корзина) | v1.3 | 0/? | Not started | - |
 | 13. Синхронизация фото | v1.3 | 0/? | Not started | - |
