@@ -6,6 +6,7 @@ import SettingsPanel from "@/components/SettingsPanel";
 import { NavProvider } from "@/components/NavProvider";
 import CatalogNav from "@/components/CatalogNav";
 import SubgroupFlyout from "@/components/SubgroupFlyout";
+import OfflineBar from "@/components/OfflineBar";
 import { getProducts } from "@/lib/sheets";
 import { buildNavData } from "@/lib/nav";
 
@@ -35,6 +36,9 @@ export default async function CatalogLayout({
             </div>
           </div>
         </header>
+
+        {/* Индикатор офлайн-режима и свежести данных — клиентский остров */}
+        <OfflineBar />
 
         {/* Полоса подгрупп выбранного раздела — выезжает под шапкой */}
         <SubgroupFlyout navData={navData} />
