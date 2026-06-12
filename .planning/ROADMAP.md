@@ -156,7 +156,20 @@ Plans:
 4. После первой синхронизации `navigator.storage.persist()` вызван — браузер уведомлён, что данные не должны вытесняться (особенно важно на iOS с 7-дневным eviction).
 5. Проверка на реальном iPhone: авиарежим → открыть каталог → товары видны (тест обязателен, эмулятор недостаточен).
 
-**Планы:** TBD
+**Планы:** 3 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 11-01-PLAN.md — lib/catalogDb.ts: обёртка IndexedDB на idb (база catalog-db, stores products/meta, upgrade-колбэк) (OFF-03)
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 11-02-PLAN.md — lib/useCatalogSync.ts: хук stale-while-revalidate (IDB → fetch → подмена), persist(), статусы loading/ready/empty-offline (OFF-01, OFF-03)
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 11-03-PLAN.md — Витрина на офлайн-источник: CatalogView из useCatalogSync + скелетон/заглушка, page.tsx без SSR-данных (OFF-01, OFF-02)
 
 ---
 
@@ -238,7 +251,7 @@ Plans:
 | 8. Скрытие товаров «глазиком» | v1.2 | 4/4 | Complete | 2026-06-11 |
 | 9. Десктопный вид витрины | v1.2 | 1/1 | Complete | 2026-06-11 |
 | 10. Фундамент SW и Manifest | v1.3 | 2/2 | Complete    | 2026-06-12 |
-| 11. Слой данных (IndexedDB) | v1.3 | 0/? | Not started | - |
+| 11. Слой данных (IndexedDB) | v1.3 | 0/3 | Planned | - |
 | 12. Офлайн-UX (индикаторы и корзина) | v1.3 | 0/? | Not started | - |
 | 13. Синхронизация фото | v1.3 | 0/? | Not started | - |
 | 14. Install Prompt | v1.3 | 0/? | Not started | - |
