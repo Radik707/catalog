@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Оффлайн-режим (PWA)
 status: executing
-last_updated: "2026-06-12T10:48:22.271Z"
-last_activity: 2026-06-12 -- Phase 10 planning complete
+last_updated: "2026-06-12T11:45:00.000Z"
+last_activity: 2026-06-12 -- Plan 10-01 complete (SW инфраструктура через @serwist/next)
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 2
-  completed_plans: 0
-  percent: 0
+  completed_plans: 1
+  percent: 14
 ---
 
 # Состояние проекта
@@ -25,11 +25,11 @@ progress:
 ## Текущая позиция
 
 **Веха:** v1.3 «Оффлайн-режим (PWA)»
-**Этап:** 10 — «Фундамент SW и Manifest» — готов к планированию
-**План:** —
-**Статус:** Дорожная карта создана (2026-06-12). Следующий шаг: `/gsd-plan-phase 10`
+**Этап:** 10 — «Фундамент SW и Manifest» — выполняется (план 01 ✅)
+**План:** 01 выполнен (SW инфраструктура); план 02 (manifest + иконки) — следующий
+**Статус:** Plan 10-01 complete. Следующий шаг: выполнить план 10-02 или `/gsd-plan-phase 11`
 
-Прогресс: [░░░░░░░░░░] 0% (0 из 5 этапов)
+Прогресс: [█░░░░░░░░░] 14% (1 план из 7 фаз)
 
 **Этапы вехи v1.3:**
 
@@ -128,6 +128,9 @@ progress:
 - [v1.3] skipWaiting: false — обновление SW только по явному согласию (иначе ChunkLoadError у агентов)
 - [v1.3] Фото: CacheFirst on-demand + maxEntries:450 + diff по URL (не precache всех 900)
 - [v1.3] Деплой вехи: только git push → Vercel; daniella не трогается
+- [10-01] @serwist/next v9.5.11 установлен; skipWaiting:false — обновление SW по явному согласию
+- [10-01] disable:dev — SW отключён в npm run dev; Cache-Control max-age=0 для /sw.js (Vercel)
+- [10-01] CacheFirst Cloudinary: maxEntries:450 заложен в каркас; офлайн-эффект — этап 13
 
 ### Ожидающие задачи
 
@@ -174,7 +177,7 @@ progress:
 | 7 (Подгруппы в панели) | 1/1 | — | — |
 | 8 (Скрытие «глазиком») | 4/4 | — | — |
 | 9 (Десктопный вид) | 1/1 | — | — |
-| 10 (SW + Manifest) | 0/? | — | — |
+| 10 (SW + Manifest) | 1/2 | ~15 мин | ~15 мин |
 | 11 (IndexedDB) | 0/? | — | — |
 | 12 (Офлайн-UX) | 0/? | — | — |
 | 13 (Синхронизация фото) | 0/? | — | — |
@@ -187,12 +190,12 @@ progress:
 ## Непрерывность сессий
 
 Последняя сессия: 2026-06-12
-Остановились на: Дорожная карта v1.3 создана (этапы 10–14, 13 требований распределены).
-Следующий шаг: `/gsd-plan-phase 10` — начать планирование этапа «Фундамент SW и Manifest»
+Остановились на: Plan 10-01 выполнен — SW инфраструктура через @serwist/next подключена.
+Следующий шаг: Выполнить план 10-02 (manifest + иконки) или запустить `/gsd-plan-phase 11`
 
 ## Current Position
 
 Phase: 10 — Фундамент SW и Manifest
-Plan: —
-Status: Ready to execute
-Last activity: 2026-06-12 -- Phase 10 planning complete
+Plan: 01 ✅ выполнен (SW инфраструктура)
+Status: Plan 10-01 complete
+Last activity: 2026-06-12 -- Plan 10-01 complete (SW + @serwist/next)
