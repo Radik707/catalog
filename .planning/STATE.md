@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Оффлайн-режим (PWA)
 status: executing
-last_updated: "2026-06-12T13:26:27.229Z"
+last_updated: "2026-06-12T14:00:00.000Z"
 last_activity: 2026-06-12
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 5
-  completed_plans: 3
-  percent: 14
+  completed_plans: 4
+  percent: 20
 ---
 
 # Состояние проекта
@@ -25,11 +25,11 @@ progress:
 ## Текущая позиция
 
 **Веха:** v1.3 «Оффлайн-режим (PWA)»
-**Этап:** 10 — «Фундамент SW и Manifest» — оба плана выполнены (01 ✅ 02 ✅)
-**План:** 02 выполнен (Manifest + иконки PWA, PWA-01 закрыт)
-**Статус:** Plan 10-02 complete. Следующий шаг: `/gsd-plan-phase 11` (IndexedDB + useCatalogSync)
+**Этап:** 11 — «Слой данных (IndexedDB + useCatalogSync)» — план 01 ✅, план 02 ✅
+**План:** 02 выполнен (хук useCatalogSync: stale-while-revalidate, OFF-01 + OFF-03)
+**Статус:** Plan 11-02 complete. Следующий шаг: план 03 (витрина на офлайн-источник)
 
-Прогресс: [██░░░░░░░░] 29% (2 плана из 7 фаз)
+Прогресс: [███░░░░░░░] 29% (4 плана из 7 фаз)
 
 **Этапы вехи v1.3:**
 
@@ -138,6 +138,9 @@ progress:
 - [11-01] База catalog-db, stores products и meta — единственное место с IndexedDB API в проекте
 - [11-01] Упрощённый формат: Product[] под одним ключом "all" — атомарные чтение/запись (Claude's Discretion)
 - [11-01] upgrade-колбэк с contains-проверкой — stores создаются только при отсутствии; задел под версионирование схемы (T-11-02)
+- [11-02] sync() через useCallback([]) — зависимостей нет, ссылка стабильна; useEffect([sync]) корректен
+- [11-02] Начальное isOnline=true на SSR, исправляется в useEffect — безопасно для Next.js гидратации
+- [11-02] persist() вызывается под двойным guard: persistCalledRef + navigator.storage?.persist (nullable)
 
 ### Ожидающие задачи
 
@@ -197,13 +200,13 @@ progress:
 ## Непрерывность сессий
 
 Последняя сессия: 2026-06-12
-Остановились на: Выполнен план 11-01 — создана обёртка IndexedDB lib/catalogDb.ts (база catalog-db, stores products+meta, версионирование схемы). Следующий план: 11-02 (хук useCatalogSync).
-Следующий шаг: `/gsd-execute-phase 11` (план 02)
+Остановились на: Выполнен план 11-02 — создан хук useCatalogSync (stale-while-revalidate, persist(), авто-подтягивание по online). Следующий план: 11-03 (витрина на офлайн-источник).
+Следующий шаг: `/gsd-execute-phase 11` (план 03)
 
 ## Current Position
 
 Phase: 11 (indexeddb-usecatalogsync) — EXECUTING
-Plan: 2 of 3
-Status: Plan 11-01 complete. Next: execute 11-02-PLAN.md (useCatalogSync hook)
-Last activity: 2026-06-12 -- Plan 11-01 complete (lib/catalogDb.ts)
-Resume file: .planning/phases/11-indexeddb-usecatalogsync/11-01-SUMMARY.md
+Plan: 3 of 3
+Status: Plan 11-02 complete. Next: execute 11-03-PLAN.md (CatalogView на useCatalogSync + скелетон/заглушка)
+Last activity: 2026-06-12 -- Plan 11-02 complete (lib/useCatalogSync.ts)
+Resume file: .planning/phases/11-indexeddb-usecatalogsync/11-02-SUMMARY.md

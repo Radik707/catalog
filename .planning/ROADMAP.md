@@ -165,7 +165,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1)*
 
-- [ ] 11-02-PLAN.md — lib/useCatalogSync.ts: хук stale-while-revalidate (IDB → fetch → подмена), persist(), статусы loading/ready/empty-offline (OFF-01, OFF-03)
+- [x] 11-02-PLAN.md — lib/useCatalogSync.ts: хук stale-while-revalidate (IDB → fetch → подмена), persist(), статусы loading/ready/empty-offline (OFF-01, OFF-03) ✅ 2026-06-12
 
 **Wave 3** *(blocked on Wave 2)*
 
@@ -251,7 +251,7 @@ Plans:
 | 8. Скрытие товаров «глазиком» | v1.2 | 4/4 | Complete | 2026-06-11 |
 | 9. Десктопный вид витрины | v1.2 | 1/1 | Complete | 2026-06-11 |
 | 10. Фундамент SW и Manifest | v1.3 | 2/2 | Complete    | 2026-06-12 |
-| 11. Слой данных (IndexedDB) | v1.3 | 1/3 | In Progress|  |
+| 11. Слой данных (IndexedDB) | v1.3 | 2/3 | In Progress|  |
 | 12. Офлайн-UX (индикаторы и корзина) | v1.3 | 0/? | Not started | - |
 | 13. Синхронизация фото | v1.3 | 0/? | Not started | - |
 | 14. Install Prompt | v1.3 | 0/? | Not started | - |
