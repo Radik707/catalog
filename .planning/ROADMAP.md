@@ -194,7 +194,7 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 12-01-PLAN.md — Индикатор сети и свежести: хук useOnlineStatus, утилита formatSyncTime, компонент OfflineBar + вставка в layout (SYNC-03)
+- [x] 12-01-PLAN.md — Индикатор сети и свежести: хук useOnlineStatus, утилита formatSyncTime, компонент OfflineBar + вставка в layout (SYNC-03)
 
 **Wave 2** *(blocked on Wave 1)*
 
@@ -261,7 +261,7 @@ Plans:
 | 9. Десктопный вид витрины | v1.2 | 1/1 | Complete | 2026-06-11 |
 | 10. Фундамент SW и Manifest | v1.3 | 2/2 | Complete    | 2026-06-12 |
 | 11. Слой данных (IndexedDB) | v1.3 | 3/3 | Complete    | 2026-06-12 |
-| 12. Офлайн-UX (индикаторы и корзина) | v1.3 | 0/2 | Planned | - |
+| 12. Офлайн-UX (индикаторы и корзина) | v1.3 | 1/2 | In Progress|  |
 | 13. Синхронизация фото | v1.3 | 0/? | Not started | - |
 | 14. Install Prompt | v1.3 | 0/? | Not started | - |
 

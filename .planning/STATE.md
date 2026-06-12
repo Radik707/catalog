@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Оффлайн-режим (PWA)
 status: executing
-last_updated: "2026-06-12T18:29:24.895Z"
-last_activity: 2026-06-12 -- Phase 12 planning complete
+last_updated: "2026-06-12T18:40:06.331Z"
+last_activity: 2026-06-12
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 7
-  completed_plans: 5
+  completed_plans: 6
   percent: 29
 ---
 
@@ -146,6 +146,11 @@ progress:
 - [11-03] Скелетон — 12 карточек с animate-pulse в сетке grid-cols-2..2xl:grid-cols-6 (D-02, не спиннер)
 - [11-03] Офлайн-заглушка без кнопки — хук сам подтянет данные по событию online (D-03, авто)
 - [11-03] page.tsx синхронный (убран async) — нет await после удаления getProducts()
+- [12-01] useOnlineStatus: useState(true) + typeof navigator guard — SSR-safe без useCatalogSync
+- [12-01] OfflineBar читает syncTimestamp через getMeta напрямую — лёгкий остров без тяжёлого хука
+- [12-01] isStale вычисляется в рендере — нет устаревшего состояния при долгом просмотре
+- [12-01] При syncedAt === null и онлайн — полоска скрыта (нет мигания при первом запуске)
+- [12-01] try/catch вокруг getMeta — защита от приватного режима iOS (T-12-02 mitigate)
 
 ### Ожидающие задачи
 
@@ -209,8 +214,8 @@ progress:
 
 ## Current Position
 
-Phase: 12
-Plan: Not started
+Phase: 12 (ux) — EXECUTING
+Plan: 2 of 2
 Status: Ready to execute
-Last activity: 2026-06-12 -- Phase 12 planning complete
-Resume file: .planning/phases/12-ux/12-CONTEXT.md
+Last activity: 2026-06-12
+Resume file: None
