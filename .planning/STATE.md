@@ -194,12 +194,13 @@ progress:
 ## Непрерывность сессий
 
 Последняя сессия: 2026-06-12
-Остановились на: Plan 10-02 выполнен — Web App Manifest + иконки PWA, PWA-01 закрыт.
-Следующий шаг: Запустить `/gsd-plan-phase 11` (IndexedDB + useCatalogSync)
+Остановились на: Этап 11 обсуждён — контекст зафиксирован (11-CONTEXT.md): свежесть данных (stale-while-revalidate), первая загрузка (скелетон), офлайн без данных (дружелюбное сообщение).
+Следующий шаг: Запустить `/gsd-plan-phase 11` (план этапа на основе CONTEXT.md)
 
 ## Current Position
 
 Phase: 11
 Plan: Not started
-Status: Ready to plan
-Last activity: 2026-06-12
+Status: Context gathered — ready to plan
+Last activity: 2026-06-12 — Phase 11 context gathered (11-CONTEXT.md)
+Resume file: .planning/phases/11-indexeddb-usecatalogsync/11-CONTEXT.md
