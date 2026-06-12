@@ -30,10 +30,18 @@ export default function TelegramButton() {
     const appUrl = `tg://resolve?domain=${BOT_USERNAME}`;
     const webUrl = `https://t.me/${BOT_USERNAME}`;
     window.location.href = appUrl;
-    // Если приложение не установлено — через 1.5 сек открываем веб-версию
-    setTimeout(() => {
+    // Запасной вариант: если приложение не установлено — через 1.5 сек откроем веб-версию.
+    // Но если приложение перехватило переход (вкладка ушла в фон) — отменяем веб-вкладку,
+    // чтобы не открывать Telegram дважды (WR-03).
+    const timer = setTimeout(() => {
       window.open(webUrl, "_blank");
     }, 1500);
+    const cancelFallback = () => {
+      if (document.hidden) {
+        clearTimeout(timer);
+      }
+    };
+    document.addEventListener("visibilitychange", cancelFallback, { once: true });
   }
 
   return (
