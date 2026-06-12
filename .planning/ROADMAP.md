@@ -122,7 +122,11 @@ Plans:
 4. В dev-режиме (`npm run dev`) SW отключён — разработка не ломается из-за кэша; PWA-поведение проверяется только через `npm run build && npm start`.
 5. `public/sw.js` и `public/swe-worker*.js` добавлены в `.gitignore` — сгенерированные файлы не попадают в репозиторий.
 
-**Планы:** TBD
+**Планы:** 2 plans
+
+Plans:
+- [ ] 10-01-PLAN.md — Инфраструктура SW: @serwist/next + serwist + idb, app/sw.ts (precache + каркас стратегий), withSerwist + заголовки Vercel в next.config.mjs, .gitignore (PWA-01)
+- [ ] 10-02-PLAN.md — Идентичность PWA: иконки ВД, app/manifest.ts (standalone, start_url из CATALOG_SECRET), PWA/iOS-метаданные в layout.tsx (PWA-01)
 
 **UI hint:** yes
 
@@ -225,7 +229,7 @@ Plans:
 | 7. Подгруппы в админ-панели | v1.1 | 1/1 | Complete (бэкфилл) | 2026-06-10 |
 | 8. Скрытие товаров «глазиком» | v1.2 | 4/4 | Complete | 2026-06-11 |
 | 9. Десктопный вид витрины | v1.2 | 1/1 | Complete | 2026-06-11 |
-| 10. Фундамент SW и Manifest | v1.3 | 0/? | Not started | - |
+| 10. Фундамент SW и Manifest | v1.3 | 0/2 | Not started | - |
 | 11. Слой данных (IndexedDB) | v1.3 | 0/? | Not started | - |
 | 12. Офлайн-UX (индикаторы и корзина) | v1.3 | 0/? | Not started | - |
 | 13. Синхронизация фото | v1.3 | 0/? | Not started | - |
