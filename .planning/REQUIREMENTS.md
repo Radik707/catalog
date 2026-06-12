@@ -61,28 +61,29 @@
 
 ## Прослеживаемость (Traceability)
 
-Какие этапы покрывают какие требования. *(Заполняется при создании дорожной карты.)*
+Какие этапы покрывают какие требования.
 
 | Требование | Этап | Статус |
 |------------|------|--------|
-| OFF-01 | TBD | Pending |
-| OFF-02 | TBD | Pending |
-| OFF-03 | TBD | Pending |
-| IMG-01 | TBD | Pending |
-| IMG-02 | TBD | Pending |
-| IMG-03 | TBD | Pending |
-| PWA-01 | TBD | Pending |
-| PWA-02 | TBD | Pending |
-| SYNC-01 | TBD | Pending |
-| SYNC-02 | TBD | Pending |
-| SYNC-03 | TBD | Pending |
-| CART-01 | TBD | Pending |
-| CART-02 | TBD | Pending |
+| OFF-01 | Этап 11 | Pending |
+| OFF-02 | Этап 11 | Pending |
+| OFF-03 | Этап 11 | Pending |
+| IMG-01 | Этап 13 | Pending |
+| IMG-02 | Этап 13 | Pending |
+| IMG-03 | Этап 13 | Pending |
+| PWA-01 | Этап 10 | Pending |
+| PWA-02 | Этап 14 | Pending |
+| SYNC-01 | Этап 13 | Pending |
+| SYNC-02 | Этап 13 | Pending |
+| SYNC-03 | Этап 12 | Pending |
+| CART-01 | Этап 12 | Pending |
+| CART-02 | Этап 12 | Pending |
 
 **Покрытие:**
 - Требований v1.3 (MVP): 13 всего
 - Будущих (v1.3.x): 4
-- Привязано к этапам: заполняется дорожной картой
+- Привязано к этапам: 13/13 (100%) ✓
 
 ---
 *Требования определены: 2026-06-12 — веха v1.3 «Оффлайн-режим (PWA)», на основе исследования*
+*Трассировка заполнена: 2026-06-12 — дорожная карта v1.3 создана (этапы 10–14)*
