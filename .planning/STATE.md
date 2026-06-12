@@ -4,13 +4,13 @@ milestone: v1.3
 milestone_name: Оффлайн-режим (PWA)
 status: executing
 last_updated: "2026-06-12T11:45:00.000Z"
-last_activity: 2026-06-12 -- Plan 10-01 complete (SW инфраструктура через @serwist/next)
+last_activity: 2026-06-12 -- Plan 10-02 complete (Web App Manifest + иконки PWA, PWA-01 закрыт)
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 2
-  completed_plans: 1
-  percent: 14
+  completed_plans: 2
+  percent: 29
 ---
 
 # Состояние проекта
@@ -25,11 +25,11 @@ progress:
 ## Текущая позиция
 
 **Веха:** v1.3 «Оффлайн-режим (PWA)»
-**Этап:** 10 — «Фундамент SW и Manifest» — выполняется (план 01 ✅)
-**План:** 01 выполнен (SW инфраструктура); план 02 (manifest + иконки) — следующий
-**Статус:** Plan 10-01 complete. Следующий шаг: выполнить план 10-02 или `/gsd-plan-phase 11`
+**Этап:** 10 — «Фундамент SW и Manifest» — оба плана выполнены (01 ✅ 02 ✅)
+**План:** 02 выполнен (Manifest + иконки PWA, PWA-01 закрыт)
+**Статус:** Plan 10-02 complete. Следующий шаг: `/gsd-plan-phase 11` (IndexedDB + useCatalogSync)
 
-Прогресс: [█░░░░░░░░░] 14% (1 план из 7 фаз)
+Прогресс: [██░░░░░░░░] 29% (2 плана из 7 фаз)
 
 **Этапы вехи v1.3:**
 
@@ -131,6 +131,10 @@ progress:
 - [10-01] @serwist/next v9.5.11 установлен; skipWaiting:false — обновление SW по явному согласию
 - [10-01] disable:dev — SW отключён в npm run dev; Cache-Control max-age=0 для /sw.js (Vercel)
 - [10-01] CacheFirst Cloudinary: maxEntries:450 заложен в каркас; офлайн-эффект — этап 13
+- [10-02] MetadataRoute.Manifest (Next.js built-in) — внешняя библиотека не нужна (D-15)
+- [10-02] start_url = /catalog/${CATALOG_SECRET} из env — секрет не захардкожен (D-09)
+- [10-02] viewport.themeColor отдельным export const viewport (Next.js 14 требует Viewport)
+- [10-02] apple-touch-icon.png colorType RGB без альфа — iOS не поддерживает прозрачность иконок
 
 ### Ожидающие задачи
 
@@ -177,7 +181,7 @@ progress:
 | 7 (Подгруппы в панели) | 1/1 | — | — |
 | 8 (Скрытие «глазиком») | 4/4 | — | — |
 | 9 (Десктопный вид) | 1/1 | — | — |
-| 10 (SW + Manifest) | 1/2 | ~15 мин | ~15 мин |
+| 10 (SW + Manifest) | 2/2 | ~45 мин | ~22 мин |
 | 11 (IndexedDB) | 0/? | — | — |
 | 12 (Офлайн-UX) | 0/? | — | — |
 | 13 (Синхронизация фото) | 0/? | — | — |
@@ -190,12 +194,12 @@ progress:
 ## Непрерывность сессий
 
 Последняя сессия: 2026-06-12
-Остановились на: Plan 10-01 выполнен — SW инфраструктура через @serwist/next подключена.
-Следующий шаг: Выполнить план 10-02 (manifest + иконки) или запустить `/gsd-plan-phase 11`
+Остановились на: Plan 10-02 выполнен — Web App Manifest + иконки PWA, PWA-01 закрыт.
+Следующий шаг: Запустить `/gsd-plan-phase 11` (IndexedDB + useCatalogSync)
 
 ## Current Position
 
 Phase: 10 — Фундамент SW и Manifest
-Plan: 01 ✅ выполнен (SW инфраструктура)
-Status: Plan 10-01 complete
-Last activity: 2026-06-12 -- Plan 10-01 complete (SW + @serwist/next)
+Plan: 02 ✅ выполнен (Manifest + иконки PWA, PWA-01 закрыт)
+Status: Plan 10-02 complete — этап 10 завершён полностью
+Last activity: 2026-06-12 -- Plan 10-02 complete (Web App Manifest + иконки PWA)
