@@ -141,14 +141,21 @@ export function useInstallPrompt(): UseInstallPromptResult {
       // В приватном режиме iOS localStorage недоступен — деградируем к «показать как обычно»
     }
 
-    // --- Детект iOS (D-03) ---
-    // UA содержит iPhone/iPad/iPod И не находимся в standalone.
+    // --- Детект платформы по UA (D-03) ---
     const ua = navigator.userAgent;
-    const isIosSafari = /iPhone|iPad|iPod/.test(ua);
+    const isIos = /iPhone|iPad|iPod/.test(ua);
+    const isAndroid = /Android/i.test(ua);
 
-    if (isIosSafari) {
+    if (isIos) {
+      // iOS — своя инструкция «Поделиться → На экран Домой» (нет beforeinstallprompt)
       setPlatform("ios");
-      // На iOS нет beforeinstallprompt — продолжаем только для сигнала вовлечённости
+    } else if (isAndroid) {
+      // Любой Android-браузер (Chrome, Яндекс, Opera, Samsung, Firefox…):
+      // платформа android. Системное окно (canPromptAndroid) подтянется ниже,
+      // если браузер пришлёт beforeinstallprompt. Даже без него пользователь
+      // сможет открыть инструкцию по ручной установке из настроек — путь
+      // установки доступен с ЛЮБОГО браузера (универсальность).
+      setPlatform("android");
     }
 
     // --- Детект Android (D-02) ---

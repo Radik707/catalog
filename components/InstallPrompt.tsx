@@ -21,6 +21,8 @@
 // Брендинг (D-08): белый фон, синий акцент bg-blue-600.
 
 import { useInstallPromptContext } from "@/components/InstallPromptProvider";
+// Подсказка по ручной установке под конкретный браузер (Яндекс, Opera, Chrome…)
+import { getInstallHint } from "@/lib/browserInstallHint";
 
 export default function InstallPrompt() {
   const {
@@ -69,6 +71,14 @@ export default function InstallPrompt() {
   // после отказа). Показываем, как поставить через меню браузера.
   // -----------------------------------------------------------------------
   if (platform === "android" && forceOpen && !canPromptAndroid) {
+    // Определяем браузер и берём инструкцию именно под него (Яндекс, Opera,
+    // Samsung, Firefox, Edge, Chrome или универсальную). navigator доступен —
+    // шторка рендерится только на клиенте по действию пользователя.
+    const hint =
+      typeof navigator !== "undefined"
+        ? getInstallHint(navigator.userAgent)
+        : getInstallHint("");
+
     return (
       <div
         className="fixed bottom-0 left-0 right-0 z-[60] bg-white shadow-[0_-4px_16px_rgba(0,0,0,0.15)] rounded-t-2xl animate-[slideUp_0.25s_ease-out]"
@@ -89,44 +99,40 @@ export default function InstallPrompt() {
             </button>
           </div>
 
-          {/* Инструкция: установка через меню браузера */}
+          {/* Подзаголовок с именем браузера */}
+          <p className="text-xs text-gray-500 mb-3">
+            {hint.browser === "ваш браузер"
+              ? "Установка через меню браузера:"
+              : `В браузере ${hint.browser}:`}
+          </p>
+
+          {/* Инструкция: шаги под конкретный браузер */}
           <div className="space-y-3 mb-4">
-            <div className="flex items-start gap-3">
-              <div className="shrink-0 w-7 h-7 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center mt-0.5">
-                1
+            {hint.steps.map((step, i) => (
+              <div key={i} className="flex items-start gap-3">
+                <div className="shrink-0 w-7 h-7 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center mt-0.5">
+                  {i + 1}
+                </div>
+                <p className="text-sm text-gray-800">{step}</p>
               </div>
-              <p className="text-sm text-gray-800">
-                Откройте{" "}
-                <span className="font-semibold text-blue-600">меню браузера</span>{" "}
-                — три точки{" "}
-                <span className="font-semibold">⋮</span> в правом верхнем углу
-              </p>
-            </div>
-            <div className="flex items-start gap-3">
-              <div className="shrink-0 w-7 h-7 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center mt-0.5">
-                2
-              </div>
-              <p className="text-sm text-gray-800">
-                Выберите пункт установки и подтвердите:
-                <br />
-                <span className="font-semibold text-blue-600">
-                  «Добавить ярлык на рабочий стол»
-                </span>{" "}
-                — в Яндекс.Браузере;
-                <br />
-                <span className="font-semibold text-blue-600">
-                  «Установить приложение»
-                </span>{" "}
-                — в Chrome
-              </p>
-            </div>
+            ))}
           </div>
+
+          {/* Если у браузера нет полноэкранной установки (напр. Яндекс) —
+              честно советуем Chrome для приложения на весь экран */}
+          {hint.recommendChrome && (
+            <p className="text-xs text-gray-500 mb-3 bg-blue-50 rounded-lg px-3 py-2">
+              💡 В этом браузере ярлык откроется как вкладка. Чтобы каталог
+              открывался <span className="font-semibold">на весь экран</span> как
+              приложение — откройте его в <span className="font-semibold">Chrome</span>{" "}
+              → меню ⋮ → «Установить приложение».
+            </p>
+          )}
 
           {/* Подсказка про «паузу» браузера после отказа */}
           <p className="text-xs text-gray-400 mb-3">
-            Кнопка «Установить» во всплывающей панели может не сработать, если вы
-            раньше закрыли окно установки — браузер временно его блокирует. Меню
-            браузера работает всегда.
+            Если всплывающая кнопка «Установить» не срабатывает — браузер временно
+            блокирует своё окно после отказа. Меню браузера работает всегда.
           </p>
 
           <button
