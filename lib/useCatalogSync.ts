@@ -15,6 +15,8 @@ import {
   getMeta,
   saveMeta,
 } from "@/lib/catalogDb";
+// Умная предзагрузка только новых фото после успешного обновления каталога (D-04)
+import { syncPhotos } from "@/lib/syncPhotos";
 
 // ─── Типы ────────────────────────────────────────────────────────────────────
 
@@ -36,6 +38,12 @@ export interface UseCatalogSyncResult {
   syncedAt: number | null;
   /** Статус загрузки — для скелетона, заглушки и витрины */
   status: CatalogStatus;
+  /**
+   * Ручная синхронизация для кнопки «Обновить» (D-01/SYNC-01).
+   * Обновляет И данные каталога, И diff-предзагрузку новых фото.
+   * sync() стабильна через useCallback([]) — защита от гонки встроена (CR-02).
+   */
+  refetch: () => Promise<void>;
 }
 
 // ─── Хук ─────────────────────────────────────────────────────────────────────
@@ -144,6 +152,10 @@ export function useCatalogSync(): UseCatalogSyncResult {
         // Сохраняем свежие данные в IndexedDB для следующего офлайн-запуска
         await saveProducts(fresh);
         await saveMeta("syncTimestamp", now);
+        // Поток 4 (ARCHITECTURE.md): fetch → saveProducts → saveMeta(syncTimestamp) →
+        // syncPhotos(diff новых фото) → setStatus("ready").
+        // syncPhotos сам читает/пишет prevImageUrls — отдельного saveMeta не нужен.
+        await syncPhotos(fresh);
         setSyncedAt(now);
         setStatus("ready");
       }
@@ -213,5 +225,6 @@ export function useCatalogSync(): UseCatalogSyncResult {
     };
   }, [sync]); // sync — стабильная ссылка через useCallback([])
 
-  return { products, isOnline, syncedAt, status };
+  // refetch: sync — стабильная ссылка (useCallback([])); защита от гонки уже встроена
+  return { products, isOnline, syncedAt, status, refetch: sync };
 }
