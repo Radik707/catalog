@@ -119,14 +119,34 @@ export default function InstallPrompt() {
           </div>
 
           {/* Если у браузера нет полноэкранной установки (напр. Яндекс) —
-              честно советуем Chrome для приложения на весь экран */}
+              честно объясняем и даём кнопку «Открыть в Chrome», где приложение
+              ставится по-настоящему (на весь экран). */}
           {hint.recommendChrome && (
-            <p className="text-xs text-gray-500 mb-3 bg-blue-50 rounded-lg px-3 py-2">
-              💡 В этом браузере ярлык откроется как вкладка. Чтобы каталог
-              открывался <span className="font-semibold">на весь экран</span> как
-              приложение — откройте его в <span className="font-semibold">Chrome</span>{" "}
-              → меню ⋮ → «Установить приложение».
-            </p>
+            <div className="mb-3">
+              <p className="text-xs text-gray-500 mb-2 bg-blue-50 rounded-lg px-3 py-2">
+                💡 Этот браузер добавляет только ярлык-вкладку — настоящее
+                приложение на весь экран он ставить не умеет. Это умеет{" "}
+                <span className="font-semibold">Chrome</span>: откройте каталог
+                там и нажмите «Установить приложение».
+              </p>
+              <button
+                onClick={() => {
+                  // Открываем текущую страницу в Chrome через Android-intent.
+                  // Если Chrome не установлен — fallback на обычное открытие по https.
+                  const path =
+                    window.location.host +
+                    window.location.pathname +
+                    window.location.search;
+                  const fallback = encodeURIComponent(window.location.href);
+                  window.location.href =
+                    `intent://${path}#Intent;scheme=https;package=com.android.chrome;` +
+                    `S.browser_fallback_url=${fallback};end`;
+                }}
+                className="w-full py-2.5 text-sm font-semibold text-white bg-blue-600 rounded-lg transition-colors hover:bg-blue-700 active:bg-blue-800"
+              >
+                Открыть в Chrome для установки
+              </button>
+            </div>
           )}
 
           {/* Подсказка про «паузу» браузера после отказа */}
