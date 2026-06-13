@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Оффлайн-режим (PWA)
 status: executing
-last_updated: "2026-06-13T14:49:00Z"
-last_activity: 2026-06-13 -- Phase 14, Plan 01 completed (useInstallPrompt + InstallPromptProvider)
+last_updated: "2026-06-13T15:30:00Z"
+last_activity: 2026-06-13 -- Phase 14, Plan 02 completed (InstallPrompt UI — баннер Android + bottom-sheet iOS + кнопка в настройках)
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 12
-  completed_plans: 10
-  percent: 61
+  completed_plans: 11
+  percent: 67
 ---
 
 # Состояние проекта
@@ -25,9 +25,9 @@ progress:
 ## Текущая позиция
 
 **Веха:** v1.3 «Оффлайн-режим (PWA)»
-**Этап:** 14 — «Install Prompt (Android + iOS)» — план 01 ✅
-**План:** 01 выполнен (useInstallPrompt + InstallPromptProvider, коммит 3eb9ed5)
-**Статус:** Этап 14 в процессе — план 01 ЗАВЕРШЁН. Следующий шаг: план 02 (UI баннера и шторки)
+**Этап:** 14 — «Install Prompt (Android + iOS)» — план 02 ✅
+**План:** 02 выполнен (InstallPrompt UI — баннер Android + bottom-sheet iOS + кнопка в настройках, коммиты a127320, 70050c1)
+**Статус:** Этап 14 в процессе — план 02 ЗАВЕРШЁН. Следующий шаг: план 03 (viewport-fit=cover + safe-area)
 
 Прогресс: [█████░░░░░] 49% (9 планов из 5 завершённых фаз)
 
@@ -163,6 +163,10 @@ progress:
 - [14-01] Сигнал вовлечённости: таймер 25с ИЛИ скролл ≥100px, флаг engagementFired исключает двойное срабатывание
 - [14-01] localStorage в try/catch во всех точках — деградация к «показать как обычно» в приватном режиме iOS (T-14-01)
 - [14-01] InstallPromptProvider по паттерну CatalogSyncProvider — единственный вызов хука в провайдере, контекст раздаёт результат
+- [14-02] forceOpen + openFromSettings() в хуке: принудительное открытие iOS-шторки из настроек игнорирует dismissed (D-05)
+- [14-02] InstallPromptProvider обёрнут внутри CatalogSyncProvider — SettingsPanel и InstallPrompt делят одно событие
+- [14-02] <InstallPrompt /> смонтирован сразу после <OfflineBar /> — минимально-инвазивная вставка (D-06)
+- [14-02] env(safe-area-inset-bottom) через inline style (не Tailwind) — надёжнее на Safari (D-07)
 
 ### Ожидающие задачи
 
@@ -224,13 +228,13 @@ progress:
 ## Непрерывность сессий
 
 Последняя сессия: 2026-06-13
-Остановились на: Завершён план 14-01 — хук useInstallPrompt (детект android/ios/installed + engaged + dismissed) и провайдер InstallPromptProvider. Коммит 3eb9ed5. npm run build ✓.
-Следующий шаг: `/gsd-execute-phase 14` план 02 (UI: баннер Android + шторка iOS + кнопка в настройках)
+Остановились на: Завершён план 14-02 — InstallPrompt UI (баннер Android + bottom-sheet iOS + кнопка в настройках + forceOpen). Коммиты a127320, 70050c1. npm run build ✓.
+Следующий шаг: `/gsd-execute-phase 14` план 03 (viewport-fit=cover, safe-area метатеги)
 
 ## Current Position
 
 Phase: 14 (install-prompt-android-ios) — EXECUTING
-Plan: 2 of 3
-Status: Plan 01 complete — moving to Plan 02
-Last activity: 2026-06-13 -- Plan 14-01 complete (useInstallPrompt + InstallPromptProvider, commit 3eb9ed5)
+Plan: 3 of 3
+Status: Plan 02 complete — moving to Plan 03
+Last activity: 2026-06-13 -- Plan 14-02 complete (InstallPrompt UI — Android banner + iOS bottom-sheet + Settings button, commits a127320 70050c1)
 Resume file: None

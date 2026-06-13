@@ -254,11 +254,11 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 14-01-PLAN.md — Хук-фундамент: lib/useInstallPrompt.ts (детект android/ios/standalone, beforeinstallprompt-перехват, localStorage-флаг, сигнал вовлечённости) + InstallPromptProvider (единый экземпляр через контекст) (PWA-02)
+- [x] 14-01-PLAN.md — Хук-фундамент: lib/useInstallPrompt.ts (детект android/ios/standalone, beforeinstallprompt-перехват, localStorage-флаг, сигнал вовлечённости) + InstallPromptProvider (единый экземпляр через контекст) (PWA-02)
 
 **Wave 2** *(blocked on Wave 1)*
 
-- [ ] 14-02-PLAN.md — UI установки: InstallPrompt (Android-баннер + iOS bottom-sheet), пункт «Установить приложение» в SettingsPanel, монтирование в layout под провайдером (PWA-02)
+- [x] 14-02-PLAN.md — UI установки: InstallPrompt (Android-баннер + iOS bottom-sheet), пункт «Установить приложение» в SettingsPanel, монтирование в layout под провайдером (PWA-02)
 
 **Wave 3** *(blocked on Wave 2)*
 
@@ -285,7 +285,7 @@ Plans:
 | 11. Слой данных (IndexedDB) | v1.3 | 3/3 | Complete    | 2026-06-12 |
 | 12. Офлайн-UX (индикаторы и корзина) | v1.3 | 2/2 | Complete    | 2026-06-12 |
 | 13. Синхронизация фото | v1.3 | 2/2 | Complete (⏸ iPhone-UAT отложена) | 2026-06-13 |
-| 14. Install Prompt | v1.3 | 0/3 | Planned | - |
+| 14. Install Prompt | v1.3 | 2/3 | In Progress | 2026-06-13 |
 
 ---
 
