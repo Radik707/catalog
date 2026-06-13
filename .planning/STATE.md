@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Оффлайн-режим (PWA)
 status: executing
-last_updated: "2026-06-13T15:30:00Z"
-last_activity: 2026-06-13 -- Phase 14, Plan 02 completed (InstallPrompt UI — баннер Android + bottom-sheet iOS + кнопка в настройках)
+last_updated: "2026-06-13T16:00:00Z"
+last_activity: 2026-06-13 -- Phase 14, Plan 03 completed (viewport-fit=cover; iPhone-приёмка отложена на конец вехи v1.3)
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 12
-  completed_plans: 11
-  percent: 67
+  completed_plans: 12
+  percent: 75
 ---
 
 # Состояние проекта
@@ -25,11 +25,11 @@ progress:
 ## Текущая позиция
 
 **Веха:** v1.3 «Оффлайн-режим (PWA)»
-**Этап:** 14 — «Install Prompt (Android + iOS)» — план 02 ✅
-**План:** 02 выполнен (InstallPrompt UI — баннер Android + bottom-sheet iOS + кнопка в настройках, коммиты a127320, 70050c1)
-**Статус:** Этап 14 в процессе — план 02 ЗАВЕРШЁН. Следующий шаг: план 03 (viewport-fit=cover + safe-area)
+**Этап:** 14 — «Install Prompt (Android + iOS)» — план 03 ✅ ЗАВЕРШЁН
+**План:** 03 выполнен (viewport-fit=cover в layout.tsx, коммит 96cf863; iPhone-приёмка отложена)
+**Статус:** Этап 14 ЗАВЕРШЁН (все 3 плана выполнены). Веха v1.3 ожидает финальной iPhone-приёмки.
 
-Прогресс: [█████░░░░░] 49% (9 планов из 5 завершённых фаз)
+Прогресс: [███████░░░] 75% (12 планов, этапы 10–14 завершены; ⏸ iPhone-приёмка вехи v1.3 отложена)
 
 **Этапы вехи v1.3:**
 
@@ -37,7 +37,7 @@ progress:
 - [x] Этап 11: Слой данных (IndexedDB + useCatalogSync) — OFF-01, OFF-02, OFF-03 ✅
 - [x] Этап 12: Офлайн-UX (индикаторы и корзина) — SYNC-03, CART-01, CART-02 ✅
 - [x] Этап 13: Синхронизация фото — SYNC-01 ✅, SYNC-02 ✅, IMG-01..03 ✅ (код), ⏸ iPhone-приёмка отложена
-- [ ] Этап 14: Install Prompt (Android + iOS) — PWA-02
+- [x] Этап 14: Install Prompt (Android + iOS) — PWA-02 ✅ (⏸ iPhone-приёмка отложена)
 
 ## Что дальше
 
@@ -193,6 +193,7 @@ progress:
 | v1.3 финал | IMG-01..03 iPhone-приёмка офлайн-фото (этап 13) | Отложена | Перед сдачей вехи v1.3 (после этапа 14) |
 | v1.3 финал | OFF-01..03 iPhone-приёмка данных офлайн (этап 11) | Отложена | Перед сдачей вехи v1.3 |
 | v1.3 финал | CART-01..02 iPhone-приёмка офлайн-корзины (этап 12) | Отложена | Перед сдачей вехи v1.3 |
+| v1.3 финал | PWA-02 iPhone-приёмка Install Prompt (этап 14, критерии #2/#5) | Отложена | Перед сдачей вехи v1.3 |
 
 ## Метрики выполнения
 
@@ -219,7 +220,7 @@ progress:
 | 11 (IndexedDB) | 3/3 | ~17 мин | ~6 мин |
 | 12 (Офлайн-UX) | 0/? | — | — |
 | 13 (Синхронизация фото) | 2/2 | ~13 мин | ~6 мин |
-| 14 (Install Prompt) | 1/3 | ~5 мин | ~5 мин |
+| 14 (Install Prompt) | 3/3 | ~8 мин | ~3 мин |
 
 **Тренд:** Стабильно
 
@@ -228,13 +229,13 @@ progress:
 ## Непрерывность сессий
 
 Последняя сессия: 2026-06-13
-Остановились на: Завершён план 14-02 — InstallPrompt UI (баннер Android + bottom-sheet iOS + кнопка в настройках + forceOpen). Коммиты a127320, 70050c1. npm run build ✓.
-Следующий шаг: `/gsd-execute-phase 14` план 03 (viewport-fit=cover, safe-area метатеги)
+Остановились на: Завершён план 14-03 — viewport-fit=cover в layout.tsx (коммит 96cf863). Этап 14 полностью выполнен. iPhone-приёмка (критерии #2/#5) отложена на конец вехи v1.3.
+Следующий шаг: Финальная iPhone-приёмка всех отложенных тестов вехи v1.3 (этапы 11–14)
 
 ## Current Position
 
-Phase: 14 (install-prompt-android-ios) — EXECUTING
-Plan: 3 of 3
-Status: Plan 02 complete — moving to Plan 03
-Last activity: 2026-06-13 -- Plan 14-02 complete (InstallPrompt UI — Android banner + iOS bottom-sheet + Settings button, commits a127320 70050c1)
+Phase: 14 (install-prompt-android-ios) — COMPLETE
+Plan: 3 of 3 (все планы выполнены)
+Status: Этап 14 завершён — все 3 плана выполнены. Ожидается финальная iPhone-приёмка вехи v1.3.
+Last activity: 2026-06-13 -- Plan 14-03 complete (viewport-fit=cover, коммит 96cf863; iPhone-приёмка отложена)
 Resume file: None
