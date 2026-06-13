@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Оффлайн-режим (PWA)
 status: executing
-last_updated: "2026-06-13T14:13:13.553Z"
-last_activity: 2026-06-13 -- Phase 14 planning complete
+last_updated: "2026-06-13T14:49:00Z"
+last_activity: 2026-06-13 -- Phase 14, Plan 01 completed (useInstallPrompt + InstallPromptProvider)
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 12
-  completed_plans: 9
-  percent: 57
+  completed_plans: 10
+  percent: 61
 ---
 
 # Состояние проекта
@@ -25,9 +25,9 @@ progress:
 ## Текущая позиция
 
 **Веха:** v1.3 «Оффлайн-режим (PWA)»
-**Этап:** 13 — «Синхронизация фото» — план 01 ✅, план 02 ✅
-**План:** 02 выполнен (CatalogSyncProvider + SyncButton; SYNC-01 закрыт; iPhone-приёмка IMG-01..03 отложена)
-**Статус:** Этап 13 ЗАВЕРШЁН (по авто-критериям). Следующий шаг: этап 14 (Install Prompt)
+**Этап:** 14 — «Install Prompt (Android + iOS)» — план 01 ✅
+**План:** 01 выполнен (useInstallPrompt + InstallPromptProvider, коммит 3eb9ed5)
+**Статус:** Этап 14 в процессе — план 01 ЗАВЕРШЁН. Следующий шаг: план 02 (UI баннера и шторки)
 
 Прогресс: [█████░░░░░] 49% (9 планов из 5 завершённых фаз)
 
@@ -159,6 +159,10 @@ progress:
 - [13-02] isOnline берётся из useCatalogSyncContext (не дублируется через useOnlineStatus в SyncButton)
 - [13-02] OfflineBar оставлен как есть — читает syncTimestamp напрямую из IDB, обновится при следующем тике ≤60с
 - [13-02] iPhone-приёмка (Task 3) отложена на конец вехи v1.3 — по образцу этапов 11 и 12
+- [14-01] useInstallPrompt перехватывает beforeinstallprompt в ref (не state) — promptInstall() получает событие без лишних ре-рендеров
+- [14-01] Сигнал вовлечённости: таймер 25с ИЛИ скролл ≥100px, флаг engagementFired исключает двойное срабатывание
+- [14-01] localStorage в try/catch во всех точках — деградация к «показать как обычно» в приватном режиме iOS (T-14-01)
+- [14-01] InstallPromptProvider по паттерну CatalogSyncProvider — единственный вызов хука в провайдере, контекст раздаёт результат
 
 ### Ожидающие задачи
 
@@ -211,7 +215,7 @@ progress:
 | 11 (IndexedDB) | 3/3 | ~17 мин | ~6 мин |
 | 12 (Офлайн-UX) | 0/? | — | — |
 | 13 (Синхронизация фото) | 2/2 | ~13 мин | ~6 мин |
-| 14 (Install Prompt) | 0/? | — | — |
+| 14 (Install Prompt) | 1/3 | ~5 мин | ~5 мин |
 
 **Тренд:** Стабильно
 
@@ -220,13 +224,13 @@ progress:
 ## Непрерывность сессий
 
 Последняя сессия: 2026-06-13
-Остановились на: Завершён план 13-02 — CatalogSyncProvider + SyncButton (↻ в шапке, spin→галочка, disabled офлайн). SYNC-01 закрыт. iPhone-приёмка IMG-01..03 отложена на конец вехи v1.3. Этап 13 ЗАВЕРШЁН.
-Следующий шаг: `/gsd-execute-phase 14` (Install Prompt — Android баннер + iOS инструкция)
+Остановились на: Завершён план 14-01 — хук useInstallPrompt (детект android/ios/installed + engaged + dismissed) и провайдер InstallPromptProvider. Коммит 3eb9ed5. npm run build ✓.
+Следующий шаг: `/gsd-execute-phase 14` план 02 (UI: баннер Android + шторка iOS + кнопка в настройках)
 
 ## Current Position
 
-Phase: 13 (photo-sync) — EXECUTING
-Plan: 2 of 2
-Status: Ready to execute
-Last activity: 2026-06-13 -- Phase 14 planning complete
+Phase: 14 (install-prompt-android-ios) — EXECUTING
+Plan: 2 of 3
+Status: Plan 01 complete — moving to Plan 02
+Last activity: 2026-06-13 -- Plan 14-01 complete (useInstallPrompt + InstallPromptProvider, commit 3eb9ed5)
 Resume file: None
