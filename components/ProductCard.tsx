@@ -78,6 +78,9 @@ export default function ProductCard({
   presentationSizes,
 }: ProductCardProps) {
   const [flipped, setFlipped] = useState(false);
+  // Флаг ошибки загрузки фото (D-06): при офлайн и незакэшированном фото
+  // браузер не может загрузить изображение — показываем иконку-заглушку.
+  const [imgError, setImgError] = useState(false);
   const inStock = product.stock > 0;
   const packaging = getPackaging(product.group, product.name);
   const badgeStyle = product.badge ? BADGE_STYLES[product.badge] : null;
@@ -135,14 +138,19 @@ export default function ProductCard({
                     : undefined
                 }
               >
-                {product.imageUrl ? (
+                {product.imageUrl && !imgError ? (
+                  // unoptimized: браузер запрашивает прямой res.cloudinary.com/... URL
+                  // (подход 1) — совпадает с matcher SW и prefetch, кэш работает корректно.
                   <Image
                     src={product.imageUrl}
                     alt={product.name}
                     fill
                     className="object-contain"
+                    unoptimized
+                    onError={() => setImgError(true)}
                   />
                 ) : (
+                  // Заглушка: нет фото ИЛИ фото не загрузилось (D-06 — офлайн без кэша)
                   <PhotoPlaceholder iconSize={placeholderIcon} />
                 )}
                 {badgeStyle && (
@@ -280,15 +288,20 @@ export default function ProductCard({
               className="flex-shrink-0 w-14 h-14 rounded overflow-hidden border border-gray-100 bg-white focus:outline-none"
               aria-label={product.imageUrl ? "Открыть фото" : "Показать описание товара"}
             >
-              {product.imageUrl ? (
+              {product.imageUrl && !imgError ? (
+                // unoptimized: прямой Cloudinary URL — тот же, что ловит SW-matcher.
+                // onError: при офлайн + незакэшированном фото → иконка-заглушка (D-06).
                 <Image
                   src={product.imageUrl}
                   alt={product.name}
                   width={56}
                   height={56}
                   className="w-full h-full object-contain"
+                  unoptimized
+                  onError={() => setImgError(true)}
                 />
               ) : (
+                // Заглушка: нет фото ИЛИ фото не загрузилось (D-06 — офлайн без кэша)
                 <PhotoPlaceholder />
               )}
             </button>
