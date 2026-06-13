@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.vkusnyidom.catalog",
+      "sha256_cert_fingerprints": [
+        "DB:1A:49:12:EA:F4:9A:A6:A7:30:FD:75:EE:6A:42:91:59:A4:9A:AA:99:07:AA:B9:21:14:3E:EA:EF:51:ED:43"
+      ]
+    }
+  }
+]

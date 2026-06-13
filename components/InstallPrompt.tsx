@@ -99,11 +99,26 @@ export default function InstallPrompt() {
             </button>
           </div>
 
-          {/* Подзаголовок с именем браузера */}
-          <p className="text-xs text-gray-500 mb-3">
-            {hint.browser === "ваш браузер"
-              ? "Установка через меню браузера:"
-              : `В браузере ${hint.browser}:`}
+          {/* ГЛАВНЫЙ путь — скачать готовое приложение (.apk).
+              Работает с ЛЮБОГО браузера, включая Яндекс: скачал файл →
+              открыл → разрешил установку → приложение на весь экран. */}
+          <a
+            href="/app/vkusnyi-dom.apk"
+            download="vkusnyi-dom.apk"
+            className="block w-full py-3 mb-2 text-center text-sm font-semibold text-white bg-blue-600 rounded-lg transition-colors hover:bg-blue-700 active:bg-blue-800"
+          >
+            ⬇ Скачать приложение
+          </a>
+          <p className="text-xs text-gray-500 mb-4">
+            После скачивания откройте файл и нажмите «Установить». Если телефон
+            предупредит про «неизвестный источник» — это нормально, разрешите
+            установку один раз. Приложение появится на главном экране и откроется
+            на весь экран.
+          </p>
+
+          {/* Запасной путь — через меню браузера */}
+          <p className="text-xs font-medium text-gray-400 mb-2">
+            Или вручную{hint.browser === "ваш браузер" ? "" : ` (${hint.browser})`}:
           </p>
 
           {/* Инструкция: шаги под конкретный браузер */}
