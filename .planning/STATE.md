@@ -2,16 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Оффлайн-режим (PWA)
-status: ready_to_plan
-last_updated: 2026-06-12T19:48:19.946Z
+status: planning
+last_updated: "2026-06-13T13:02:21.689Z"
 last_activity: 2026-06-12
 progress:
   total_phases: 7
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 7
   completed_plans: 7
-  percent: 29
-stopped_at: Phase 12 complete (2/2) — ready to discuss Phase 13
+  percent: 43
 ---
 
 # Состояние проекта
@@ -219,4 +218,4 @@ Phase: 13
 Plan: Not started
 Status: Ready to plan
 Last activity: 2026-06-12
-Resume file: None
+Resume file: .planning/phases/13-photo-sync/13-CONTEXT.md
