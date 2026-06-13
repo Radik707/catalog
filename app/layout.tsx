@@ -30,6 +30,9 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   // Фирменный синий #2563eb — совпадает с шапкой каталога bg-blue-600
   themeColor: "#2563eb",
+  // viewport-fit=cover активирует env(safe-area-inset-*) для нижней шторки/баннера
+  // в standalone-режиме на iPhone с чёлкой — без этого safe-area молча не работает (D-07)
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
