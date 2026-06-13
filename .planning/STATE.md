@@ -2,16 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Оффлайн-режим (PWA)
-status: milestone_complete
-last_updated: 2026-06-13T15:16:25.559Z
-last_activity: 2026-06-13 -- Phase 14, Plan 03 completed (viewport-fit=cover; iPhone-приёмка отложена на конец вехи v1.3)
+status: Awaiting next milestone
+last_updated: "2026-06-13T19:03:57.873Z"
+last_activity: 2026-06-13 — Milestone v1.3 completed and archived
 progress:
   total_phases: 7
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 12
   completed_plans: 12
-  percent: 57
-stopped_at: Milestone complete (Phase 14 was final phase)
+  percent: 71
 ---
 
 # Состояние проекта
@@ -235,8 +234,11 @@ stopped_at: Milestone complete (Phase 14 was final phase)
 
 ## Current Position
 
-Phase: 14
-Plan: Not started
-Status: Milestone complete
-Last activity: 2026-06-13
-Resume file: None
+Phase: Milestone v1.3 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-06-13 — Milestone v1.3 completed and archived
+
+## Operator Next Steps
+
+- Start the next milestone with /gsd-new-milestone
