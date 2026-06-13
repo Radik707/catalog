@@ -285,7 +285,7 @@ Plans:
 | 11. Слой данных (IndexedDB) | v1.3 | 3/3 | Complete    | 2026-06-12 |
 | 12. Офлайн-UX (индикаторы и корзина) | v1.3 | 2/2 | Complete    | 2026-06-12 |
 | 13. Синхронизация фото | v1.3 | 2/2 | Complete (⏸ iPhone-UAT отложена) | 2026-06-13 |
-| 14. Install Prompt | v1.3 | 3/3 | Complete (⏸ iPhone-UAT отложена) | 2026-06-13 |
+| 14. Install Prompt | v1.3 | 3/3 | Complete    | 2026-06-13 |
 
 ---
 
