@@ -8,8 +8,8 @@ import ScrollToTop from "./ScrollToTop";
 import Lightbox from "./Lightbox";
 import { useCatalogSettings, PRESENTATION_PRESETS } from "./CatalogSettings";
 import { useNav, NavMode } from "./NavProvider";
-// Клиентский хук офлайн-синхронизации — источник данных при отсутствии пропа products
-import { useCatalogSync } from "@/lib/useCatalogSync";
+// Единый экземпляр sync из провайдера — разделяется с кнопкой ↻ в шапке (план 02)
+import { useCatalogSyncContext } from "@/components/CatalogSyncProvider";
 
 interface CatalogViewProps {
   // products теперь опциональный: при отсутствии данные берутся из useCatalogSync (офлайн-режим)
@@ -27,9 +27,10 @@ export default function CatalogView({ products: productsProp, initialMode }: Cat
   const [search, setSearch] = useState("");
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
-  // Хук синхронизации вызывается БЕЗУСЛОВНО (правило хуков — нельзя в ветке условия).
+  // Читаем единственный экземпляр sync из провайдера (CatalogSyncProvider в layout).
+  // Хук вызывается БЕЗУСЛОВНО (правило хуков — нельзя в ветке условия).
   // Когда проп передан — данные хука игнорируются, используется проп.
-  const sync = useCatalogSync();
+  const sync = useCatalogSyncContext();
 
   // Рабочий массив: проп имеет приоритет (обратная совместимость / тесты);
   // при отсутствии пропа — данные приходят из IndexedDB через хук (офлайн-источник).
