@@ -6,6 +6,7 @@ import { defaultCache } from "@serwist/next/worker";
 import type { PrecacheEntry, SerwistGlobalConfig } from "serwist";
 import {
   CacheFirst,
+  CacheableResponsePlugin,
   ExpirationPlugin,
   NetworkFirst,
   Serwist,
@@ -63,6 +64,10 @@ const serwist = new Serwist({
       handler: new CacheFirst({
         cacheName: "cloudinary-images",
         plugins: [
+          // Кэшируем только успешные ответы (status 200):
+          // 4xx/5xx (включая возможные 401/403 от Cloudinary) в кэш не попадают.
+          // Защита T-13-01: не сохранять ошибочные ответы как «фото».
+          new CacheableResponsePlugin({ statuses: [200] }),
           new ExpirationPlugin({
             maxEntries: 450,
             maxAgeSeconds: 7 * 24 * 60 * 60, // 7 дней в секундах
