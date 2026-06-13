@@ -40,6 +40,11 @@ export interface UseInstallPromptResult {
   /** true — сработал сигнал вовлечённости: прошёл таймер ИЛИ был скролл */
   engaged: boolean;
   /**
+   * true — шторка открыта принудительно из панели настроек (D-05).
+   * Игнорирует dismissed и engaged — пользователь сам попросил показать.
+   */
+  forceOpen: boolean;
+  /**
    * Вызывает нативный диалог установки Android.
    * Обнуляет сохранённое событие после использования.
    */
@@ -49,6 +54,12 @@ export interface UseInstallPromptResult {
    * Пишет флаг в localStorage (обёрнуто в try/catch — грабли приватного режима iOS).
    */
   dismiss: () => void;
+  /**
+   * Открывает iOS-шторку из панели настроек (D-05).
+   * Устанавливает forceOpen=true — шторка показывается даже при dismissed.
+   * На Android — вызывает promptInstall() напрямую.
+   */
+  openFromSettings: () => Promise<void>;
 }
 
 /** Ключ localStorage для флага «подсказка закрыта» */
@@ -82,6 +93,9 @@ export function useInstallPrompt(): UseInstallPromptResult {
 
   // true — сработал сигнал вовлечённости (таймер или скролл)
   const [engaged, setEngaged] = useState<boolean>(false);
+
+  // true — шторка открыта принудительно из панели настроек (D-05)
+  const [forceOpen, setForceOpen] = useState<boolean>(false);
 
   // Сохранённое событие beforeinstallprompt — в ref, чтобы promptInstall()
   // имел к нему доступ без лишних ре-рендеров.
@@ -197,9 +211,11 @@ export function useInstallPrompt(): UseInstallPromptResult {
   /**
    * Закрывает подсказку и запоминает это навсегда в localStorage.
    * Баннер не появится при следующих визитах.
+   * Также сбрасывает forceOpen — шторка закрывается даже при принудительном открытии.
    */
   const dismiss = useCallback(() => {
     setDismissed(true);
+    setForceOpen(false);
     // Оборачиваем в try/catch — приватный режим iOS (T-14-01, T-12-02)
     try {
       localStorage.setItem(DISMISSED_KEY, "1");
@@ -208,13 +224,30 @@ export function useInstallPrompt(): UseInstallPromptResult {
     }
   }, []);
 
+  /**
+   * Открывает подсказку из панели настроек (D-05).
+   * На iOS — устанавливает forceOpen=true, шторка появится даже при dismissed.
+   * На Android — вызывает нативный диалог установки напрямую.
+   */
+  const openFromSettings = useCallback(async () => {
+    if (platform === "ios") {
+      // Сбрасываем dismissed чтобы dismiss() из шторки мог снова его поставить
+      setForceOpen(true);
+    } else if (platform === "android") {
+      // Для Android сразу вызываем нативный диалог
+      await promptInstall();
+    }
+  }, [platform, promptInstall]);
+
   return {
     platform,
     canPromptAndroid,
     isStandalone,
     dismissed,
     engaged,
+    forceOpen,
     promptInstall,
     dismiss,
+    openFromSettings,
   };
 }
