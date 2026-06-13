@@ -47,8 +47,18 @@ export interface UseInstallPromptResult {
   /**
    * Вызывает нативный диалог установки Android.
    * Обнуляет сохранённое событие после использования.
+   * Возвращает результат: "accepted" — установлено, "dismissed" — пользователь
+   * отказался, "unavailable" — браузер не показал окно (нет события / «пауза»
+   * после отказа / браузер бросил исключение). По "dismissed"/"unavailable"
+   * вызывающий код показывает инструкцию по ручной установке.
    */
-  promptInstall: () => Promise<void>;
+  promptInstall: () => Promise<"accepted" | "dismissed" | "unavailable">;
+  /**
+   * Принудительно показать инструкцию-шторку по ручной установке
+   * (меню браузера → «Добавить ярлык на рабочий стол» / «Установить приложение»).
+   * Нужна баннеру как запасной путь, если системное окно не открылось.
+   */
+  showInstallHelp: () => void;
   /**
    * Ставит флаг «закрыто» — баннер больше не появляется автоматически.
    * Пишет флаг в localStorage (обёрнуто в try/catch — грабли приватного режима iOS).
@@ -186,26 +196,44 @@ export function useInstallPrompt(): UseInstallPromptResult {
    * Вызывает нативный диалог установки Android.
    * После использования обнуляет сохранённое событие (нельзя вызвать дважды).
    */
-  const promptInstall = useCallback(async () => {
+  const promptInstall = useCallback(async (): Promise<
+    "accepted" | "dismissed" | "unavailable"
+  > => {
     const prompt = deferredPromptRef.current;
-    if (!prompt) return;
+    if (!prompt) return "unavailable";
 
-    // Вызываем нативный промпт браузера
-    await prompt.prompt();
+    try {
+      // Вызываем нативный промпт браузера
+      await prompt.prompt();
 
-    // Ждём выбора пользователя
-    const { outcome } = await prompt.userChoice;
+      // Ждём выбора пользователя
+      const { outcome } = await prompt.userChoice;
 
-    // Независимо от выбора — событие использовано, обнуляем
-    deferredPromptRef.current = null;
-    setCanPromptAndroid(false);
+      // Независимо от выбора — событие использовано, обнуляем
+      deferredPromptRef.current = null;
+      setCanPromptAndroid(false);
 
-    if (outcome === "accepted") {
-      // Пользователь принял — ставим флаг «уже установлено»
-      setPlatform("installed");
-      setIsStandalone(true);
+      if (outcome === "accepted") {
+        // Пользователь принял — ставим флаг «уже установлено»
+        setPlatform("installed");
+        setIsStandalone(true);
+      }
+      return outcome;
+    } catch {
+      // Браузер отклонил показ окна (например, «пауза» после отказа) или
+      // событие протухло — считаем недоступным, чтобы показать ручную инструкцию.
+      deferredPromptRef.current = null;
+      setCanPromptAndroid(false);
+      return "unavailable";
     }
-    // При dismissed — баннер сам закроет себя через dismiss()
+  }, []);
+
+  /**
+   * Принудительно показать инструкцию-шторку по ручной установке (D-05).
+   * Запасной путь для баннера, когда системное окно не открылось.
+   */
+  const showInstallHelp = useCallback(() => {
+    setForceOpen(true);
   }, []);
 
   /**
@@ -231,8 +259,12 @@ export function useInstallPrompt(): UseInstallPromptResult {
    */
   const openFromSettings = useCallback(async () => {
     if (platform === "android" && canPromptAndroid) {
-      // Android и системное событие доступно — сразу нативный диалог установки.
-      await promptInstall();
+      // Android и системное событие доступно — пробуем нативный диалог установки.
+      // Если окно не открылось/пользователь отказался — показываем инструкцию.
+      const outcome = await promptInstall();
+      if (outcome !== "accepted") {
+        setForceOpen(true);
+      }
     } else {
       // iOS — всегда инструкция-шторка.
       // Android без доступного события (событие уже использовано ИЛИ Chrome
@@ -251,6 +283,7 @@ export function useInstallPrompt(): UseInstallPromptResult {
     engaged,
     forceOpen,
     promptInstall,
+    showInstallHelp,
     dismiss,
     openFromSettings,
   };

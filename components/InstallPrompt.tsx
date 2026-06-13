@@ -31,6 +31,7 @@ export default function InstallPrompt() {
     engaged,
     forceOpen,
     promptInstall,
+    showInstallHelp,
     dismiss,
   } = useInstallPromptContext();
 
@@ -168,10 +169,16 @@ export default function InstallPrompt() {
 
           {/* Кнопка установки */}
           <button
-            onClick={() => {
-              // Запускаем нативный диалог Android
-              void promptInstall();
-              // Хук сам обнулит canPromptAndroid — баннер исчезнет
+            onClick={async () => {
+              // Пробуем системное окно установки Android.
+              const outcome = await promptInstall();
+              // Если браузер не показал окно (отказ ранее / «пауза» / нет
+              // поддержки) — открываем шторку с инструкцией по ручной установке,
+              // чтобы нажатие не было «пустым».
+              if (outcome !== "accepted") {
+                showInstallHelp();
+              }
+              // При accepted хук переключит platform="installed" — баннер исчезнет.
             }}
             className="shrink-0 px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg transition-colors hover:bg-blue-700 active:bg-blue-800"
           >
