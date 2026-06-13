@@ -230,15 +230,18 @@ export function useInstallPrompt(): UseInstallPromptResult {
    * На Android — вызывает нативный диалог установки напрямую.
    */
   const openFromSettings = useCallback(async () => {
-    if (platform === "ios") {
-      // Принудительно открываем шторку через forceOpen — она игнорирует
-      // флаг dismissed (D-05); закрыть её можно тем же dismiss().
-      setForceOpen(true);
-    } else if (platform === "android") {
-      // Для Android сразу вызываем нативный диалог
+    if (platform === "android" && canPromptAndroid) {
+      // Android и системное событие доступно — сразу нативный диалог установки.
       await promptInstall();
+    } else {
+      // iOS — всегда инструкция-шторка.
+      // Android без доступного события (событие уже использовано ИЛИ Chrome
+      // временно блокирует повторный показ после отказа) — тоже показываем
+      // шторку, но с инструкцией про меню браузера (D-05). forceOpen игнорирует
+      // dismissed — пользователь сам нажал кнопку в настройках.
+      setForceOpen(true);
     }
-  }, [platform, promptInstall]);
+  }, [platform, canPromptAndroid, promptInstall]);
 
   return {
     platform,

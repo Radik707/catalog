@@ -39,13 +39,14 @@ export default function InstallPrompt() {
     return null;
   }
 
-  // Android: ждём перехваченного события и сигнала вовлечённости
+  // Android: авто-баннер показываем при перехваченном событии + вовлечённости
+  // и пока не закрыт (D-01). Исключение — forceOpen из настроек, когда события
+  // нет (уже использовано ИЛИ Chrome «на паузе» после отказа): тогда ниже
+  // покажем инструкцию-шторку про меню браузера.
   if (platform === "android") {
-    if (!canPromptAndroid || !engaged) {
-      return null;
-    }
-    // Закрытый баннер не возвращается автоматически (D-01)
-    if (dismissed) {
+    const showAutoBanner = canPromptAndroid && engaged && !dismissed;
+    const showManualSheet = forceOpen && !canPromptAndroid;
+    if (!showAutoBanner && !showManualSheet) {
       return null;
     }
   }
@@ -58,6 +59,71 @@ export default function InstallPrompt() {
     if (dismissed && !forceOpen) {
       return null;
     }
+  }
+
+  // -----------------------------------------------------------------------
+  // Ветка Android — инструкция по ручной установке (forceOpen без события).
+  // Возникает, когда пользователь нажал «Установить приложение» в настройках,
+  // а системное окно недоступно (событие использовано / Chrome на «паузе»
+  // после отказа). Показываем, как поставить через меню браузера.
+  // -----------------------------------------------------------------------
+  if (platform === "android" && forceOpen && !canPromptAndroid) {
+    return (
+      <div
+        className="fixed bottom-0 left-0 right-0 z-[60] bg-white shadow-[0_-4px_16px_rgba(0,0,0,0.15)] rounded-t-2xl animate-[slideUp_0.25s_ease-out]"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
+        <div className="max-w-screen-2xl mx-auto px-5 pt-4 pb-3">
+          {/* Шапка: заголовок + крестик */}
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-base font-semibold text-gray-900">
+              Установить приложение
+            </p>
+            <button
+              onClick={dismiss}
+              aria-label="Закрыть инструкцию установки"
+              className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors rounded-full hover:bg-gray-100"
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Инструкция: установка через меню браузера */}
+          <div className="space-y-3 mb-4">
+            <div className="flex items-start gap-3">
+              <div className="shrink-0 w-7 h-7 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center mt-0.5">
+                1
+              </div>
+              <p className="text-sm text-gray-800">
+                Откройте{" "}
+                <span className="font-semibold text-blue-600">меню браузера</span>{" "}
+                — три точки{" "}
+                <span className="font-semibold">⋮</span> в правом верхнем углу
+              </p>
+            </div>
+            <div className="flex items-start gap-3">
+              <div className="shrink-0 w-7 h-7 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center mt-0.5">
+                2
+              </div>
+              <p className="text-sm text-gray-800">
+                Выберите{" "}
+                <span className="font-semibold text-blue-600">
+                  «Установить приложение»
+                </span>{" "}
+                (или «Добавить на главный экран») и подтвердите
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={dismiss}
+            className="w-full py-2.5 text-sm font-medium text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            Понятно
+          </button>
+        </div>
+      </div>
+    );
   }
 
   // -----------------------------------------------------------------------
