@@ -220,7 +220,16 @@ Plans:
 4. На iPhone кэш фото не вызывает ошибку `QuotaExceededError` и не блокирует загрузку каталога; суммарный объём кэша остаётся в пределах ~50 МБ.
 5. Проверка на реальном iPhone: просмотреть 5–10 товаров → авиарежим → открыть те же карточки → фото видны без сети.
 
-**Планы:** TBD
+**Планы:** 2 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 13-01-PLAN.md — Кэш-слой фото: raw Cloudinary URL (unoptimized) + onError-заглушка в ProductCard, CacheableResponsePlugin(200) в sw.ts, lib/syncPhotos.ts (diff+prefetch новых), syncPhotos+refetch в useCatalogSync (IMG-01..03, SYNC-02)
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 13-02-PLAN.md — Кнопка ↻ в шапке: CatalogSyncProvider (единый sync), SyncButton (spin→галочка, disabled офлайн), встройка в layout + перевод CatalogView на контекст + отложенная iPhone-приёмка (SYNC-01, IMG-01..03)
 
 ---
 
@@ -262,7 +271,7 @@ Plans:
 | 10. Фундамент SW и Manifest | v1.3 | 2/2 | Complete    | 2026-06-12 |
 | 11. Слой данных (IndexedDB) | v1.3 | 3/3 | Complete    | 2026-06-12 |
 | 12. Офлайн-UX (индикаторы и корзина) | v1.3 | 2/2 | Complete    | 2026-06-12 |
-| 13. Синхронизация фото | v1.3 | 0/? | Not started | - |
+| 13. Синхронизация фото | v1.3 | 0/2 | Not started | - |
 | 14. Install Prompt | v1.3 | 0/? | Not started | - |
 
 ---
