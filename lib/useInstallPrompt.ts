@@ -231,7 +231,8 @@ export function useInstallPrompt(): UseInstallPromptResult {
    */
   const openFromSettings = useCallback(async () => {
     if (platform === "ios") {
-      // Сбрасываем dismissed чтобы dismiss() из шторки мог снова его поставить
+      // Принудительно открываем шторку через forceOpen — она игнорирует
+      // флаг dismissed (D-05); закрыть её можно тем же dismiss().
       setForceOpen(true);
     } else if (platform === "android") {
       // Для Android сразу вызываем нативный диалог

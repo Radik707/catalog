@@ -26,7 +26,10 @@ export default function SettingsPanel() {
   } = useCatalogSettings();
 
   // Состояние установки PWA: платформа, standalone-режим, функция открытия (D-05)
-  const { platform, isStandalone, openFromSettings } = useInstallPromptContext();
+  // canPromptAndroid нужен, чтобы не показывать на Android кнопку-пустышку,
+  // когда системное событие установки ещё не перехвачено (WR-02).
+  const { platform, isStandalone, canPromptAndroid, openFromSettings } =
+    useInstallPromptContext();
 
   if (!panelOpen) return null;
 
@@ -116,8 +119,13 @@ export default function SettingsPanel() {
             Кнопка «Установить приложение» (D-05, PWA-02).
             Скрывается, если приложение уже запущено в standalone-режиме
             (устанавливать нечего) или платформа не поддерживает установку.
+            На Android — только когда событие beforeinstallprompt перехвачено
+            (canPromptAndroid), иначе нажатие молча ничего не делало бы (WR-02).
+            На iOS события нет — кнопка всегда открывает инструкцию-шторку.
           */}
-          {!isStandalone && (platform === "android" || platform === "ios") && (
+          {!isStandalone &&
+            (platform === "ios" ||
+              (platform === "android" && canPromptAndroid)) && (
             <button
               onClick={() => {
                 // Android: вызываем нативный диалог установки

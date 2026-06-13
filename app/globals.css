@@ -10,3 +10,19 @@
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+
+/*
+  Анимация выезда снизу для iOS-шторки установки (CR-01, этап 14).
+  Класс animate-[slideUp_0.25s_ease-out] в InstallPrompt.tsx ссылается
+  на эти keyframes по имени — без их объявления анимация молча не работала.
+*/
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}

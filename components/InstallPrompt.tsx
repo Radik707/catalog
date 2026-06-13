@@ -15,8 +15,9 @@
 // forceOpen (D-05): открывает шторку принудительно из панели настроек,
 // даже если dismissed — пользователь сам попросил показать.
 //
-// Позиционирование: fixed bottom-0, z-50 (ниже шапки не пересекается,
-// выше контента). Safe-area (D-07): pb-[env(safe-area-inset-bottom)].
+// Позиционирование: fixed bottom-0, z-[60] — выше контента и выше
+// плавающей кнопки Telegram (z-50), чтобы баннер/шторка не перекрывались
+// ей в нижнем углу (WR-01). Safe-area (D-07): pb-[env(safe-area-inset-bottom)].
 // Брендинг (D-08): белый фон, синий акцент bg-blue-600.
 
 import { useInstallPromptContext } from "@/components/InstallPromptProvider";
@@ -66,7 +67,7 @@ export default function InstallPrompt() {
     return (
       // Внешний контейнер: fixed снизу, полная ширина, фирменные цвета
       <div
-        className="fixed bottom-0 left-0 right-0 z-50 bg-white shadow-[0_-4px_12px_rgba(0,0,0,0.12)] rounded-t-2xl"
+        className="fixed bottom-0 left-0 right-0 z-[60] bg-white shadow-[0_-4px_12px_rgba(0,0,0,0.12)] rounded-t-2xl"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         {/* Внутреннее содержимое: горизонтальная компоновка */}
@@ -118,7 +119,7 @@ export default function InstallPrompt() {
     return (
       // Внешний контейнер: fixed снизу, белый фон, скруглённые верхние углы, тень
       <div
-        className="fixed bottom-0 left-0 right-0 z-50 bg-white shadow-[0_-4px_16px_rgba(0,0,0,0.15)] rounded-t-2xl animate-[slideUp_0.25s_ease-out]"
+        className="fixed bottom-0 left-0 right-0 z-[60] bg-white shadow-[0_-4px_16px_rgba(0,0,0,0.15)] rounded-t-2xl animate-[slideUp_0.25s_ease-out]"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         <div className="max-w-screen-2xl mx-auto px-5 pt-4 pb-3">
