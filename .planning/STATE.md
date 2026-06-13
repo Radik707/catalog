@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Оффлайн-режим (PWA)
 status: executing
-last_updated: "2026-06-13T13:19:59.739Z"
-last_activity: 2026-06-13 -- Phase 13 planning complete
+last_updated: "2026-06-13T13:31:52.459Z"
+last_activity: 2026-06-13
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 9
-  completed_plans: 7
+  completed_plans: 8
   percent: 43
 ---
 
@@ -151,6 +151,10 @@ progress:
 - [12-01] isStale вычисляется в рендере — нет устаревшего состояния при долгом просмотре
 - [12-01] При syncedAt === null и онлайн — полоска скрыта (нет мигания при первом запуске)
 - [12-01] try/catch вокруг getMeta — защита от приватного режима iOS (T-12-02 mitigate)
+- [13-01] Подход 1 (locked): raw Cloudinary URL через unoptimized — matcher SW, рендер и prefetch используют один формат
+- [13-01] CacheableResponsePlugin statuses:[200] — защита T-13-01 от кэширования 4xx/5xx/opaque
+- [13-01] syncPhotos: при пустом prevUrls fetch не вызывается (анти-паттерн №1, взрыв квоты iOS)
+- [13-01] refetch: sync — sync стабилен через useCallback([]), защита от гонки syncGenRef встроена
 
 ### Ожидающие задачи
 
@@ -199,7 +203,7 @@ progress:
 | 10 (SW + Manifest) | 2/2 | ~45 мин | ~22 мин |
 | 11 (IndexedDB) | 3/3 | ~17 мин | ~6 мин |
 | 12 (Офлайн-UX) | 0/? | — | — |
-| 13 (Синхронизация фото) | 0/? | — | — |
+| 13 (Синхронизация фото) | 1/2 | ~3 мин | ~3 мин |
 | 14 (Install Prompt) | 0/? | — | — |
 
 **Тренд:** Стабильно
@@ -208,14 +212,14 @@ progress:
 
 ## Непрерывность сессий
 
-Последняя сессия: 2026-06-12
-Остановились на: Выполнен план 11-03 — CatalogView на useCatalogSync (скелетон D-02, заглушка D-03), page.tsx без SSR-данных. OFF-01 + OFF-02 закрыты. Этап 11 завершён.
-Следующий шаг: `/gsd-execute-phase 12` (Офлайн-UX — индикаторы синхронизации и офлайн-корзина)
+Последняя сессия: 2026-06-13
+Остановились на: Выполнен план 13-01 — кэш-слой фото: unoptimized в ProductCard, CacheableResponsePlugin(200) в sw.ts, syncPhotos с diff, refetch в useCatalogSync. IMG-01/02/03 + SYNC-02 закрыты.
+Следующий шаг: `/gsd-execute-phase 13` план 02 (SyncButton — кнопка «Обновить» в шапке)
 
 ## Current Position
 
-Phase: 13
-Plan: Not started
+Phase: 13 (photo-sync) — EXECUTING
+Plan: 2 of 2
 Status: Ready to execute
-Last activity: 2026-06-13 -- Phase 13 planning complete
-Resume file: .planning/phases/13-photo-sync/13-CONTEXT.md
+Last activity: 2026-06-13
+Resume file: None
