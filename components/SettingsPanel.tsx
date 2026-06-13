@@ -6,6 +6,8 @@ import {
   GridPreset,
   ViewMode,
 } from "./CatalogSettings";
+// Контекст установки PWA — для пункта «Установить приложение» (D-05, PWA-02)
+import { useInstallPromptContext } from "@/components/InstallPromptProvider";
 
 // Выпадающая панель настроек отображения. Появляется под синей шапкой
 // при нажатии на шестерёнку, закрывается тапом мимо или повторным нажатием.
@@ -22,6 +24,9 @@ export default function SettingsPanel() {
     panelOpen,
     setPanelOpen,
   } = useCatalogSettings();
+
+  // Состояние установки PWA: платформа, standalone-режим, функция открытия (D-05)
+  const { platform, isStandalone, openFromSettings } = useInstallPromptContext();
 
   if (!panelOpen) return null;
 
@@ -105,6 +110,27 @@ export default function SettingsPanel() {
                 </button>
               ))}
             </div>
+          )}
+
+          {/*
+            Кнопка «Установить приложение» (D-05, PWA-02).
+            Скрывается, если приложение уже запущено в standalone-режиме
+            (устанавливать нечего) или платформа не поддерживает установку.
+          */}
+          {!isStandalone && (platform === "android" || platform === "ios") && (
+            <button
+              onClick={() => {
+                // Android: вызываем нативный диалог установки
+                // iOS: открываем bottom-sheet с инструкцией (forceOpen игнорирует dismissed)
+                void openFromSettings();
+                // Закрываем панель настроек после нажатия
+                setPanelOpen(false);
+              }}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 text-xs font-medium transition-colors hover:bg-blue-100 hover:border-blue-300"
+            >
+              <span>📲</span>
+              <span>Установить приложение</span>
+            </button>
           )}
         </div>
       </div>

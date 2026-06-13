@@ -11,6 +11,10 @@ import OfflineBar from "@/components/OfflineBar";
 import SyncButton from "@/components/SyncButton";
 // Провайдер единственного экземпляра useCatalogSync — шарится между SyncButton и CatalogView
 import CatalogSyncProvider from "@/components/CatalogSyncProvider";
+// Провайдер состояния установки PWA — шарится между баннером и кнопкой настроек (D-06)
+import InstallPromptProvider from "@/components/InstallPromptProvider";
+// Баннер установки Android + bottom-sheet инструкции iOS (PWA-02)
+import InstallPrompt from "@/components/InstallPrompt";
 import { getProducts } from "@/lib/sheets";
 import { buildNavData } from "@/lib/nav";
 
@@ -35,32 +39,42 @@ export default async function CatalogLayout({
           Размещается внутри NavProvider/CatalogSettingsProvider, которые нужны шапке.
         */}
         <CatalogSyncProvider>
-          {/* Синяя шапка: переключатель режима + иконки разделов слева, кнопки справа */}
-          <header className="sticky top-0 z-50 bg-blue-600 shadow-sm">
-            {/* Внутренний контейнер шапки ограничен max-w для центрирования на широких мониторах */}
-            <div className="flex items-center justify-between px-2 h-12 gap-2 max-w-screen-2xl mx-auto w-full">
-              <CatalogNav navData={navData} secret={params.secret} />
-              <div className="flex items-center gap-1 shrink-0">
-                {/* Кнопка ↻ «Обновить» — слева от шестерёнки (D-01 из CONTEXT.md) */}
-                <SyncButton />
-                <SettingsButton />
-                <CartIcon secret={params.secret} />
+          {/*
+            InstallPromptProvider обёртывает всё дерево внутри CatalogSyncProvider,
+            чтобы и SettingsPanel (шапка), и InstallPrompt (рядом с OfflineBar)
+            делили ОДНО перехваченное событие beforeinstallprompt (D-06).
+          */}
+          <InstallPromptProvider>
+            {/* Синяя шапка: переключатель режима + иконки разделов слева, кнопки справа */}
+            <header className="sticky top-0 z-50 bg-blue-600 shadow-sm">
+              {/* Внутренний контейнер шапки ограничен max-w для центрирования на широких мониторах */}
+              <div className="flex items-center justify-between px-2 h-12 gap-2 max-w-screen-2xl mx-auto w-full">
+                <CatalogNav navData={navData} secret={params.secret} />
+                <div className="flex items-center gap-1 shrink-0">
+                  {/* Кнопка ↻ «Обновить» — слева от шестерёнки (D-01 из CONTEXT.md) */}
+                  <SyncButton />
+                  <SettingsButton />
+                  <CartIcon secret={params.secret} />
+                </div>
               </div>
-            </div>
-          </header>
+            </header>
 
-          {/* Индикатор офлайн-режима и свежести данных — клиентский остров */}
-          <OfflineBar />
+            {/* Индикатор офлайн-режима и свежести данных — клиентский остров */}
+            <OfflineBar />
 
-          {/* Полоса подгрупп выбранного раздела — выезжает под шапкой */}
-          <SubgroupFlyout navData={navData} />
+            {/* Баннер установки PWA — рядом с OfflineBar (D-06, PWA-02) */}
+            <InstallPrompt />
 
-          {/* Выпадающая панель настроек (по кнопке-шестерёнке) */}
-          <SettingsPanel />
+            {/* Полоса подгрупп выбранного раздела — выезжает под шапкой */}
+            <SubgroupFlyout navData={navData} />
 
-          {/* Контейнер витрины: ограничение ширины и центрирование на десктопе */}
-          <main className="max-w-screen-2xl mx-auto w-full">{children}</main>
-          <TelegramButton />
+            {/* Выпадающая панель настроек (по кнопке-шестерёнке) */}
+            <SettingsPanel />
+
+            {/* Контейнер витрины: ограничение ширины и центрирование на десктопе */}
+            <main className="max-w-screen-2xl mx-auto w-full">{children}</main>
+            <TelegramButton />
+          </InstallPromptProvider>
         </CatalogSyncProvider>
       </NavProvider>
     </CatalogSettingsProvider>
