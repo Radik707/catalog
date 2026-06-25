@@ -22,7 +22,7 @@ interface CatalogViewProps {
 
 export default function CatalogView({ products: productsProp, initialMode }: CatalogViewProps) {
   // Настройки отображения (управляются шестерёнкой в шапке)
-  const { viewMode, gridPreset, showPhotos, showPrices } = useCatalogSettings();
+  const { viewMode, gridPreset, showPhotos, showPrices, priceForm } = useCatalogSettings();
   // Состояние навигации (режим, раздел, подгруппа) — из общего контекста
   const { mode, section, subgroup, setMode } = useNav();
   // Избранное — для режима «fav»
@@ -195,6 +195,7 @@ export default function CatalogView({ products: productsProp, initialMode }: Cat
       viewMode={viewMode}
       onPhotoOpen={() => openLightbox(product)}
       presentationSizes={viewMode === "presentation" ? preset.sizes : undefined}
+      priceForm={priceForm}
     />
   );
 
@@ -257,6 +258,7 @@ export default function CatalogView({ products: productsProp, initialMode }: Cat
           index={lightboxIndex}
           onIndexChange={setLightboxIndex}
           onClose={() => setLightboxIndex(null)}
+          priceForm={priceForm}
         />
       )}
     </div>

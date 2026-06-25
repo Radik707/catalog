@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useCartContext } from "@/components/CartProvider";
+import { useCatalogSettings } from "@/components/CatalogSettings";
+import { effectivePrice } from "@/lib/pricing";
 import { useOnlineStatus } from "@/lib/useOnlineStatus";
 
 const TELEGRAM_USERNAME = "ZhukOleh";
@@ -15,8 +17,16 @@ export default function CartPage({
 }: {
   params: { secret: string };
 }) {
-  const { items, totalPrice, updateQuantity, removeFromCart, clearCart } =
+  const { items, updateQuantity, removeFromCart, clearCart } =
     useCartContext();
+  // Форма цен — для +5% на товары Ефимовой (форма «1»)
+  const { priceForm } = useCatalogSettings();
+
+  // Итог с учётом формы цен (а не базовый totalPrice из контекста)
+  const totalPrice = items.reduce(
+    (sum, { product, quantity }) => sum + effectivePrice(product, priceForm) * quantity,
+    0
+  );
 
   const isEmpty = items.length === 0;
 
@@ -87,7 +97,7 @@ export default function CartPage({
                 {product.name}
               </p>
               <p className="text-xs text-gray-400 mt-0.5">
-                {product.price.toFixed(2)} ₽ / шт
+                {effectivePrice(product, priceForm).toFixed(2)} ₽ / шт
               </p>
             </div>
 
@@ -114,7 +124,7 @@ export default function CartPage({
             {/* Сумма по строке */}
             <div className="flex-shrink-0 w-20 text-right">
               <p className="text-sm font-bold text-gray-900">
-                {(product.price * quantity).toFixed(2)} ₽
+                {(effectivePrice(product, priceForm) * quantity).toFixed(2)} ₽
               </p>
               <button
                 onClick={() => removeFromCart(product.id)}
@@ -147,16 +157,22 @@ export default function CartPage({
 
 /* ---------- Кнопка Telegram ---------- */
 function TelegramButton() {
-  const { items, totalPrice } = useCartContext();
+  const { items } = useCartContext();
+  // Форма цен — текст заказа должен совпадать с тем, что видит клиент
+  const { priceForm } = useCatalogSettings();
   // Хук состояния сети — true при наличии подключения, false в офлайне.
   // Обновляется автоматически по событиям online/offline без перезагрузки страницы.
   const isOnline = useOnlineStatus();
 
-  // Сборка текста заказа и открытие Telegram — без изменений
+  // Сборка текста заказа и открытие Telegram (с учётом формы цен)
   const handleSend = () => {
+    const totalPrice = items.reduce(
+      (sum, { product, quantity }) => sum + effectivePrice(product, priceForm) * quantity,
+      0
+    );
     const lines = items.map(
       ({ product, quantity }) =>
-        `• ${product.name} × ${quantity} = ${(product.price * quantity).toFixed(2)} ₽`
+        `• ${product.name} × ${quantity} = ${(effectivePrice(product, priceForm) * quantity).toFixed(2)} ₽`
     );
     const text = [
       "Заказ:",
@@ -192,7 +208,9 @@ function TelegramButton() {
 
 /* ---------- Кнопка MAX ---------- */
 function MaxOrderButton() {
-  const { items, totalPrice } = useCartContext();
+  const { items } = useCartContext();
+  // Форма цен — текст заказа должен совпадать с тем, что видит клиент
+  const { priceForm } = useCatalogSettings();
   // Хук состояния сети — офлайн блокирует кнопку, как у Telegram.
   const isOnline = useOnlineStatus();
   // Локальное состояние «идёт отправка» — пока ждём короткий id от сервера.
@@ -201,11 +219,15 @@ function MaxOrderButton() {
   // Фича выключена, если не заданы ник бота и эндпоинт приёма заказа.
   if (!MAX_BOT || !MAX_ORDER_URL) return null;
 
-  // Сборка текста заказа — формат тот же, что у Telegram-кнопки.
+  // Сборка текста заказа — формат тот же, что у Telegram-кнопки (с учётом формы цен).
   const buildText = () => {
+    const totalPrice = items.reduce(
+      (sum, { product, quantity }) => sum + effectivePrice(product, priceForm) * quantity,
+      0
+    );
     const lines = items.map(
       ({ product, quantity }) =>
-        `• ${product.name} × ${quantity} = ${(product.price * quantity).toFixed(2)} ₽`
+        `• ${product.name} × ${quantity} = ${(effectivePrice(product, priceForm) * quantity).toFixed(2)} ₽`
     );
     return ["Заказ:", ...lines, "", `Итого: ${totalPrice.toFixed(2)} ₽`].join("\n");
   };

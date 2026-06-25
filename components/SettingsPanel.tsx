@@ -24,6 +24,8 @@ export default function SettingsPanel() {
     setShowPhotos,
     showPrices,
     setShowPrices,
+    priceForm,
+    setPriceForm,
     panelOpen,
     setPanelOpen,
   } = useCatalogSettings();
@@ -97,6 +99,29 @@ export default function SettingsPanel() {
           >
             ₽
           </button>
+
+          {/* Форма цен: 1-я — +5% на товары Ефимовой; 2-я — базовые цены */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500">Форма</span>
+            <div className="flex rounded-lg overflow-hidden border border-gray-200 text-xs">
+              <button
+                onClick={() => setPriceForm("1")}
+                className={`px-3 py-1.5 transition-colors ${
+                  priceForm === "1" ? "bg-blue-500 text-white" : "bg-white text-gray-500"
+                }`}
+              >
+                1-я
+              </button>
+              <button
+                onClick={() => setPriceForm("2")}
+                className={`px-3 py-1.5 transition-colors ${
+                  priceForm === "2" ? "bg-blue-500 text-white" : "bg-white text-gray-500"
+                }`}
+              >
+                2-я
+              </button>
+            </div>
+          </div>
 
           {/* Плотность сетки — только в режиме презентации */}
           {viewMode === "presentation" && (

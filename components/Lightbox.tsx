@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Product } from "@/lib/types";
 import { getPackaging } from "@/lib/packaging";
+import { PriceForm, effectivePrice } from "@/lib/pricing";
 
 // Просмотрщик-галерея фото на весь экран (lightbox) с «живыми» свайпами.
 // Внутри — «плёнка» из трёх кадров: предыдущий | текущий | следующий.
@@ -17,6 +18,7 @@ interface LightboxProps {
   index: number; // индекс текущего товара
   onIndexChange: (newIndex: number) => void;
   onClose: () => void;
+  priceForm?: PriceForm; // форма цен (для +5% Ефимовой)
 }
 
 // Длительность плавного доезда (мс) — должна совпадать с CSS-transition.
@@ -32,6 +34,7 @@ export default function Lightbox({
   index,
   onIndexChange,
   onClose,
+  priceForm = "2",
 }: LightboxProps) {
   const product = products[index];
   const hasPrev = index > 0;
@@ -203,7 +206,7 @@ export default function Lightbox({
         <div className="px-5 pb-6 pt-2 text-center text-white" onClick={(e) => e.stopPropagation()}>
           <p className="text-base font-medium leading-snug">{p.name}</p>
           <p className="mt-1 text-lg font-bold">
-            {p.price.toFixed(2)} ₽
+            {effectivePrice(p, priceForm).toFixed(2)} ₽
             {packaging && (
               <span className="ml-2 text-sm font-normal text-white/70">{packaging}</span>
             )}

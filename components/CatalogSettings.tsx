@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 import { PresentationSizes } from "./ProductCard";
+import { PriceForm } from "@/lib/pricing";
 
 // Общие настройки отображения каталога. Живут в контексте, чтобы
 // кнопка-шестерёнка в шапке и сам каталог делили одно состояние.
@@ -65,6 +66,8 @@ interface CatalogSettings {
   setShowPhotos: (v: boolean) => void;
   showPrices: boolean;
   setShowPrices: (v: boolean) => void;
+  priceForm: PriceForm; // "2" — базовые цены; "1" — +5% на товары Ефимовой
+  setPriceForm: (v: PriceForm) => void;
   panelOpen: boolean; // открыта ли выпадающая панель настроек
   setPanelOpen: (v: boolean) => void;
 }
@@ -87,6 +90,8 @@ export default function CatalogSettingsProvider({
   const [gridPreset, setGridPreset] = useState<GridPreset>("3x4");
   const [showPhotos, setShowPhotos] = useState(true);
   const [showPrices, setShowPrices] = useState(true);
+  // Форма цен: по умолчанию "2" (базовые цены как сейчас)
+  const [priceForm, setPriceForm] = useState<PriceForm>("2");
   const [panelOpen, setPanelOpen] = useState(false);
 
   // Загрузка сохранённых настроек из localStorage.
@@ -99,6 +104,9 @@ export default function CatalogSettingsProvider({
 
     if (localStorage.getItem("showPhotos") === "0") setShowPhotos(false);
     if (localStorage.getItem("showPrices") === "0") setShowPrices(false);
+
+    const pf = localStorage.getItem("priceForm");
+    if (pf === "1" || pf === "2") setPriceForm(pf);
   }, []);
 
   // Обёртки сеттеров с сохранением в localStorage.
@@ -118,6 +126,10 @@ export default function CatalogSettingsProvider({
     setShowPrices(v);
     localStorage.setItem("showPrices", v ? "1" : "0");
   };
+  const updatePriceForm = (v: PriceForm) => {
+    setPriceForm(v);
+    localStorage.setItem("priceForm", v);
+  };
 
   return (
     <Ctx.Provider
@@ -130,6 +142,8 @@ export default function CatalogSettingsProvider({
         setShowPhotos: updateShowPhotos,
         showPrices,
         setShowPrices: updateShowPrices,
+        priceForm,
+        setPriceForm: updatePriceForm,
         panelOpen,
         setPanelOpen,
       }}

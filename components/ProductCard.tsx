@@ -4,6 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import { Product } from "@/lib/types";
 import { getPackaging } from "@/lib/packaging";
+import { PriceForm, effectivePrice } from "@/lib/pricing";
 import AddToCartButton from "./AddToCartButton";
 import CardCornerButton from "./CardCornerButton";
 
@@ -42,6 +43,8 @@ interface ProductCardProps {
   onPhotoOpen?: () => void;
   // Размеры элементов в режиме презентации (зависят от выбранной плотности сетки).
   presentationSizes?: PresentationSizes;
+  // Форма цен: "1" → +5% на товары Ефимовой; "2" → базовые цены (по умолчанию).
+  priceForm?: PriceForm;
 }
 
 const BADGE_STYLES: Record<string, string> = {
@@ -77,8 +80,11 @@ export default function ProductCard({
   viewMode = "list",
   onPhotoOpen,
   presentationSizes,
+  priceForm = "2",
 }: ProductCardProps) {
   const [flipped, setFlipped] = useState(false);
+  // Цена с учётом выбранной формы (для Ефимовой при форме «1» — +5%)
+  const displayPrice = effectivePrice(product, priceForm);
   // Флаг ошибки загрузки фото (D-06): при офлайн и незакэшированном фото
   // браузер не может загрузить изображение — показываем иконку-заглушку.
   const [imgError, setImgError] = useState(false);
@@ -183,7 +189,7 @@ export default function ProductCard({
                 {showPrices ? (
                   <div className="min-w-0">
                     <p className={`${priceCls} font-bold text-gray-900 leading-none whitespace-nowrap`}>
-                      {product.price.toFixed(2)} ₽
+                      {displayPrice.toFixed(2)} ₽
                     </p>
                     {packaging && (
                       <p className={`${pkgCls} text-gray-400 mt-0.5 truncate hidden sm:block`}>
@@ -237,7 +243,7 @@ export default function ProductCard({
             <div className="flex items-end justify-between gap-1">
               <div className="min-w-0">
                 <p className={`${priceCls} font-bold text-gray-900 leading-none whitespace-nowrap`}>
-                  {product.price.toFixed(2)} ₽
+                  {displayPrice.toFixed(2)} ₽
                 </p>
                 {packaging && (
                   <p className="text-[10px] text-gray-400 mt-0.5 truncate">{packaging}</p>
@@ -335,7 +341,7 @@ export default function ProductCard({
             {showPrices && (
               <div className="text-right">
                 <span className="text-sm font-bold text-gray-900 whitespace-nowrap">
-                  {product.price.toFixed(2)} ₽
+                  {displayPrice.toFixed(2)} ₽
                 </span>
                 {packaging && (
                   <p className="text-xs text-gray-400">{packaging}</p>
@@ -378,7 +384,7 @@ export default function ProductCard({
           <div className="flex items-end justify-between gap-2">
             <div className="min-w-0">
               <p className="text-sm font-bold text-gray-900 leading-none whitespace-nowrap">
-                {product.price.toFixed(2)} ₽
+                {displayPrice.toFixed(2)} ₽
               </p>
               {packaging && (
                 <p className="text-[10px] text-gray-400 mt-0.5 truncate">{packaging}</p>
