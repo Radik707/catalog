@@ -71,7 +71,7 @@ def list_subs() -> None:
 def set_sub(url: str) -> None:
     body = {
         "url": url,
-        "update_types": ["bot_started", "message_created"],
+        "update_types": ["bot_started", "message_created", "message_callback"],
     }
     if SECRET:
         body["secret"] = SECRET

@@ -1,37 +1,38 @@
 r"""
 max_bot.py — Blueprint интеграции с мессенджером MAX (Модель A: приём заказов).
 
-Поток (см. CLAUDE.md / задачу «второй канал связи MAX»):
+Поток:
     1. Покупатель в корзине жмёт «Отправить заказ в MAX».
-    2. Витрина шлёт текст заказа POST /max/order → получает короткий id.
+    2. Витрина шлёт POST /max/order {text, catalog_url} → получает короткий id.
     3. Витрина открывает чат с ботом: https://max.ru/<bot>?start=<id>
-    4. MAX присылает боту событие bot_started с payload=<id> на /max/webhook.
-    5. Бот достаёт заказ по id, пересылает его ВЛАДЕЛЬЦУ (с контактом покупателя)
-       и отвечает покупателю «заказ принят».
+    4. MAX присылает боту bot_started с payload=<id> на /max/webhook.
+    5. Бот пересылает заказ ВЛАДЕЛЬЦУ (с контактом покупателя) и отвечает покупателю
+       подтверждением с инлайн-кнопками: Редактировать / Отменить / Написать агенту / В каталог.
+    6. Нажатия на кнопки приходят событием message_callback → обрабатываем
+       (отмена с подтверждением, уведомление владельцу).
 
-Почему короткий id, а не весь заказ в ссылке: в диплинк ?start= помещается
-лишь 128 символов — заказ туда не влезает, поэтому он лежит на сервере,
-а боту передаётся только id (живёт MAX_ORDER_TTL секунд).
+Почему короткий id, а не весь заказ в ссылке: в диплинк ?start= помещается лишь
+128 символов. Заказ лежит на сервере (живёт MAX_ORDER_TTL секунд), боту идёт только id.
 
 Эндпоинты (публичные, вне секретного сегмента загрузчика):
-    POST /max/order    — приём заказа от витрины (с CORS), возвращает {id}
-    POST /max/webhook  — приём событий MAX (bot_started/message_created)
+    POST /max/order    — приём заказа от витрины (CORS), возвращает {id}
+    POST /max/webhook  — приём событий MAX (bot_started / message_created / message_callback)
 
-Переменные окружения (в uploader/.env):
-    MAX_BOT_TOKEN       — токен бота MAX (заголовок Authorization). Обязателен.
-    MAX_OWNER_CHAT_ID   — chat_id владельца с ботом (куда слать заказы).
-                          Узнаётся из лога bot_started при первом /start владельца.
-    MAX_API_BASE        — база API (по умолч. https://platform-api2.max.ru —
-                          обязательная переадресация до 19.07.2026).
-    MAX_WEBHOOK_SECRET  — секрет вебхука (сверяется с X-Max-Bot-Api-Secret).
-    MAX_CORS_ORIGIN     — разрешённые origin витрины через запятую (по умолч. *).
-    MAX_ORDER_TTL       — время жизни заказа в секундах (по умолч. 900).
-    MAX_CA_BUNDLE       — путь к доверенному CA (Минцифры) для TLS к API, если нужно.
+Переменные окружения (uploader/.env):
+    MAX_BOT_TOKEN          — токен бота MAX (заголовок Authorization). Обязателен.
+    MAX_OWNER_CHAT_ID      — chat_id владельца с ботом (куда слать заказы).
+    MAX_OWNER_PROFILE_URL  — ссылка на профиль владельца в MAX (для кнопки «Написать агенту»).
+                             Если пусто — кнопка не показывается.
+    MAX_API_BASE           — база API (по умолч. https://platform-api2.max.ru).
+    MAX_WEBHOOK_SECRET     — секрет вебхука (сверяется с X-Max-Bot-Api-Secret).
+    MAX_CORS_ORIGIN        — разрешённые origin витрины через запятую (по умолч. *).
+    MAX_ORDER_TTL          — время жизни заказа в секундах (по умолч. 86400 — сутки,
+                             чтобы кнопка «Отменить» работала какое-то время).
+    MAX_CA_BUNDLE          — путь к доверенному CA (Минцифры) для TLS к API, если нужно.
 """
 
 import os
 import time
-import json
 import hmac
 import logging
 import secrets
@@ -47,71 +48,117 @@ max_bp = Blueprint("max_bot", __name__)
 # ── Конфигурация из окружения ──
 MAX_BOT_TOKEN = os.environ.get("MAX_BOT_TOKEN", "")
 MAX_OWNER_CHAT_ID = os.environ.get("MAX_OWNER_CHAT_ID", "")
+MAX_OWNER_PROFILE_URL = os.environ.get("MAX_OWNER_PROFILE_URL", "").strip()
 MAX_API_BASE = os.environ.get("MAX_API_BASE", "https://platform-api2.max.ru").rstrip("/")
 MAX_WEBHOOK_SECRET = os.environ.get("MAX_WEBHOOK_SECRET", "")
 MAX_CORS_ORIGIN = os.environ.get("MAX_CORS_ORIGIN", "*")
-MAX_ORDER_TTL = int(os.environ.get("MAX_ORDER_TTL", "900"))
-# Путь к доверенному сертификату для TLS к API MAX (Минцифры). Пусто → системный набор.
+MAX_ORDER_TTL = int(os.environ.get("MAX_ORDER_TTL", "86400"))
 MAX_CA_BUNDLE = os.environ.get("MAX_CA_BUNDLE", "")
 _VERIFY = MAX_CA_BUNDLE if MAX_CA_BUNDLE else True
 
-# Разрешённые origin для CORS — список из запятой
 _ALLOWED_ORIGINS = [o.strip() for o in MAX_CORS_ORIGIN.split(",") if o.strip()]
 
-# ── Временное хранилище заказов (id → текст) ──
-# В памяти процесса: сервис крутится под gunicorn -w 1 (один воркер, как и
-# остальная часть app.py), поэтому общий dict корректен. Заказ живёт минуты,
-# переживать рестарт не обязан (TTL короткий). Замок защищает от гонок потоков.
-_orders: "dict[str, tuple[str, float]]" = {}
+# ── Временное хранилище заказов ──
+# В памяти процесса (gunicorn -w 1). Заказ хранится со статусом, чтобы работали
+# «Отменить» (нужен после доставки) и однократная доставка владельцу.
+# Запись: {text, catalog_url, customer_chat_id, customer_name, state, expires}
+#   state: "pending" (создан) → "delivered" (доставлен владельцу) → "cancelled".
+_orders: "dict[str, dict]" = {}
 _orders_lock = threading.Lock()
 
 
 def _prune_orders() -> None:
-    """Удалить просроченные заказы (ленивая очистка при каждом обращении)."""
+    """Удалить просроченные заказы (ленивая очистка)."""
     now = time.time()
-    expired = [k for k, (_, exp) in _orders.items() if exp < now]
-    for k in expired:
+    for k in [k for k, v in _orders.items() if v.get("expires", 0) < now]:
         _orders.pop(k, None)
 
 
-def _store_order(text: str) -> str:
-    """Сохранить заказ, вернуть короткий id (помещается в ?start=, ≤128 симв.)."""
-    order_id = secrets.token_urlsafe(8)  # ~11 символов
+def _store_order(text: str, catalog_url: str) -> str:
+    """Сохранить заказ, вернуть короткий id (помещается в ?start=)."""
+    order_id = secrets.token_urlsafe(8)
     with _orders_lock:
         _prune_orders()
-        _orders[order_id] = (text, time.time() + MAX_ORDER_TTL)
+        _orders[order_id] = {
+            "text": text,
+            "catalog_url": catalog_url,
+            "customer_chat_id": None,
+            "customer_name": None,
+            "state": "pending",
+            "expires": time.time() + MAX_ORDER_TTL,
+        }
     return order_id
 
 
-def _pop_order(order_id: str) -> "str | None":
-    """Забрать заказ по id (одноразово) и удалить его из хранилища."""
+def _get_order(order_id: str) -> "dict | None":
     with _orders_lock:
         _prune_orders()
-        item = _orders.pop(order_id, None)
-    return item[0] if item else None
+        return _orders.get(order_id)
+
+
+# ── Сборка инлайн-клавиатур ──
+
+def _btn_link(text: str, url: str) -> dict:
+    return {"type": "link", "text": text, "url": url}
+
+
+def _btn_cb(text: str, payload: str) -> dict:
+    return {"type": "callback", "text": text, "payload": payload}
+
+
+def _kb(rows: list) -> dict:
+    """Вложение-клавиатура MAX: type=inline_keyboard, payload.buttons = 2D-массив."""
+    return {"type": "inline_keyboard", "payload": {"buttons": rows}}
+
+
+def _order_keyboard(order_id: str, order: dict) -> dict:
+    """Клавиатура под подтверждением заказа покупателю."""
+    catalog_url = (order.get("catalog_url") or "").rstrip("/")
+    cart_url = f"{catalog_url}/cart" if catalog_url else ""
+
+    # Первый ряд: Редактировать (ссылка на корзину) + Отменить (callback)
+    row1 = []
+    if cart_url:
+        row1.append(_btn_link("✏️ Редактировать", cart_url))
+    row1.append(_btn_cb("🗑 Отменить", f"cancel:{order_id}"))
+
+    # Второй ряд: Написать агенту (если задан профиль) + В каталог
+    row2 = []
+    if MAX_OWNER_PROFILE_URL:
+        row2.append(_btn_link("💬 Написать агенту", MAX_OWNER_PROFILE_URL))
+    if catalog_url:
+        row2.append(_btn_link("🛍 В каталог", catalog_url))
+
+    rows = [row1]
+    if row2:
+        rows.append(row2)
+    return _kb(rows)
+
+
+def _cancel_confirm_keyboard(order_id: str) -> dict:
+    """Клавиатура подтверждения отмены заказа."""
+    return _kb([[
+        _btn_cb("✅ Да, отменить", f"cancelyes:{order_id}"),
+        _btn_cb("↩️ Нет, оставить", f"cancelno:{order_id}"),
+    ]])
 
 
 # ── Вызовы MAX Bot API ──
 
-def max_send(chat_id, text: str) -> bool:
-    """Отправить текстовое сообщение в чат MAX. Возвращает True при успехе.
-
-    Авторизация — токен в заголовке Authorization. Для совместимости с разными
-    версиями API дублируем токен и в query-параметре access_token (лишний
-    параметр безвреден, если сервер его игнорирует).
-    """
+def max_send(chat_id, text: str, attachments: "list | None" = None) -> bool:
+    """Отправить сообщение в чат MAX (с опциональными вложениями — клавиатурой)."""
     if not MAX_BOT_TOKEN:
         log.error("MAX_BOT_TOKEN не задан — отправка невозможна")
         return False
-    url = f"{MAX_API_BASE}/messages"
+    body: dict = {"text": text}
+    if attachments:
+        body["attachments"] = attachments
     try:
         resp = requests.post(
-            url,
+            f"{MAX_API_BASE}/messages",
             params={"chat_id": chat_id, "access_token": MAX_BOT_TOKEN},
             headers={"Authorization": MAX_BOT_TOKEN},
-            json={"text": text},
-            timeout=20,
-            verify=_VERIFY,
+            json=body, timeout=20, verify=_VERIFY,
         )
         if resp.status_code // 100 != 2:
             log.warning("MAX /messages вернул %s: %s", resp.status_code, resp.text[:300])
@@ -122,10 +169,43 @@ def max_send(chat_id, text: str) -> bool:
         return False
 
 
-# ── CORS (витрина дёргает /max/order с другого домена) ──
+def max_answer(callback_id: str, text: "str | None" = None,
+               attachments: "list | None" = None,
+               notification: "str | None" = None) -> bool:
+    """Ответ на нажатие инлайн-кнопки (POST /answers).
+
+    Если передан text/attachments — сообщение с кнопкой будет заменено (отредактировано).
+    notification — всплывающее уведомление у нажавшего.
+    """
+    if not MAX_BOT_TOKEN:
+        return False
+    body: dict = {}
+    if text is not None or attachments is not None:
+        msg: dict = {"text": text or ""}
+        if attachments is not None:
+            msg["attachments"] = attachments
+        body["message"] = msg
+    if notification:
+        body["notification"] = notification
+    try:
+        resp = requests.post(
+            f"{MAX_API_BASE}/answers",
+            params={"callback_id": callback_id, "access_token": MAX_BOT_TOKEN},
+            headers={"Authorization": MAX_BOT_TOKEN},
+            json=body, timeout=20, verify=_VERIFY,
+        )
+        if resp.status_code // 100 != 2:
+            log.warning("MAX /answers вернул %s: %s", resp.status_code, resp.text[:300])
+            return False
+        return True
+    except requests.RequestException as e:
+        log.warning("Ошибка ответа на callback MAX: %s", e)
+        return False
+
+
+# ── CORS ──
 
 def _cors_origin() -> str:
-    """Подобрать значение заголовка Access-Control-Allow-Origin под запрос."""
     origin = request.headers.get("Origin", "")
     if "*" in _ALLOWED_ORIGINS:
         return "*"
@@ -136,7 +216,6 @@ def _cors_origin() -> str:
 
 @max_bp.after_request
 def _add_cors(resp):
-    """Добавить CORS-заголовки ко всем ответам blueprint'а."""
     resp.headers["Access-Control-Allow-Origin"] = _cors_origin()
     resp.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
     resp.headers["Access-Control-Allow-Headers"] = "Content-Type"
@@ -148,31 +227,31 @@ def _add_cors(resp):
 
 @max_bp.route("/max/order", methods=["POST", "OPTIONS"])
 def max_order():
-    # Предзапрос CORS — браузер шлёт OPTIONS перед POST с JSON-телом
     if request.method == "OPTIONS":
         return make_response("", 204)
 
     data = request.get_json(silent=True) or {}
     text = (data.get("text") or "").strip()
+    catalog_url = (data.get("catalog_url") or "").strip()
     if not text:
         return jsonify(ok=False, message="Пустой заказ"), 400
-    # Защита от слишком больших тел (заказ — это короткий список позиций)
     if len(text) > 4000:
         text = text[:4000]
+    # Принимаем только http(s)-ссылку каталога (защита от мусора в кнопках)
+    if catalog_url and not catalog_url.startswith(("http://", "https://")):
+        catalog_url = ""
 
-    order_id = _store_order(text)
+    order_id = _store_order(text, catalog_url)
     log.info("Принят заказ MAX id=%s (%d симв.)", order_id, len(text))
     return jsonify(ok=True, id=order_id)
 
 
-# ── Маршрут вебхука MAX ──
+# ── Логика событий ──
 
 def _verify_secret() -> bool:
-    """Сверить секрет вебхука (если задан) с заголовком X-Max-Bot-Api-Secret."""
     if not MAX_WEBHOOK_SECRET:
-        return True  # секрет не настроен — пропускаем (желательно настроить)
-    got = request.headers.get("X-Max-Bot-Api-Secret", "")
-    return hmac.compare_digest(got, MAX_WEBHOOK_SECRET)
+        return True
+    return hmac.compare_digest(request.headers.get("X-Max-Bot-Api-Secret", ""), MAX_WEBHOOK_SECRET)
 
 
 def _format_customer(user: dict) -> str:
@@ -181,42 +260,84 @@ def _format_customer(user: dict) -> str:
     username = user.get("username")
     if username:
         return f"👤 Покупатель: {name}\nhttps://max.ru/{username}"
-    user_id = user.get("user_id", "—")
-    return f"👤 Покупатель: {name} (id: {user_id})"
+    return f"👤 Покупатель: {name} (id: {user.get('user_id', '—')})"
 
 
 def _handle_started(chat_id, user: dict, payload: str) -> None:
-    """Обработать вход покупателя по диплинку: доставить заказ владельцу."""
-    # Лог для разовой настройки MAX_OWNER_CHAT_ID: владелец один раз жмёт /start,
-    # из этого лога берём его chat_id и прописываем в окружение.
+    """Вход покупателя по диплинку: доставить заказ владельцу + подтверждение с кнопками."""
     log.info(
         "bot_started chat_id=%s user_id=%s name=%r payload=%r",
         chat_id, user.get("user_id"), user.get("name"), payload,
     )
 
     if not payload:
-        # Вход без заказа (например, по плавающей иконке) — мягкое приветствие.
         max_send(chat_id, "Здравствуйте! Это бот каталога «Вкусный Дом». "
                           "Соберите корзину на сайте и нажмите «Отправить заказ в MAX».")
         return
 
-    order_text = _pop_order(payload)
-    if not order_text:
-        # id неизвестен или заказ просрочен (TTL вышел)
+    order = _get_order(payload)
+    if not order:
         max_send(chat_id, "Ссылка на заказ устарела. Откройте корзину на сайте "
                           "и отправьте заказ заново — мы всё получим.")
         return
 
-    # 1. Заказ владельцу — с контактом покупателя (Модель A: видим, кто заказал)
-    if MAX_OWNER_CHAT_ID:
-        owner_msg = f"🛒 Новый заказ через MAX\n\n{order_text}\n\n{_format_customer(user)}"
-        if not max_send(MAX_OWNER_CHAT_ID, owner_msg):
-            log.error("Не удалось доставить заказ владельцу (chat_id=%s)", MAX_OWNER_CHAT_ID)
-    else:
-        log.error("MAX_OWNER_CHAT_ID не задан — заказ %s некуда переслать", payload)
+    # Доставка владельцу — однократно (защита от повторного bot_started)
+    if order["state"] == "pending":
+        order["customer_chat_id"] = chat_id
+        order["customer_name"] = (user.get("name") or "").strip()
+        order["state"] = "delivered"
+        if MAX_OWNER_CHAT_ID:
+            owner_msg = f"🛒 Новый заказ через MAX\n\n{order['text']}\n\n{_format_customer(user)}"
+            if not max_send(MAX_OWNER_CHAT_ID, owner_msg):
+                log.error("Не удалось доставить заказ владельцу (chat_id=%s)", MAX_OWNER_CHAT_ID)
+        else:
+            log.error("MAX_OWNER_CHAT_ID не задан — заказ %s некуда переслать", payload)
 
-    # 2. Подтверждение покупателю
-    max_send(chat_id, "Спасибо! Ваш заказ принят 🙌 Скоро свяжемся с вами.")
+    # Подтверждение покупателю с кнопками управления заказом
+    max_send(
+        chat_id,
+        "Спасибо! Ваш заказ принят 🙌 Скоро свяжемся с вами.",
+        attachments=[_order_keyboard(payload, order)],
+    )
+
+
+def _handle_callback(callback_id: str, payload: str) -> None:
+    """Обработка нажатия инлайн-кнопки."""
+    action, _, order_id = payload.partition(":")
+    order = _get_order(order_id)
+
+    if action == "cancel":
+        # Первый шаг отмены — спрашиваем подтверждение
+        max_answer(
+            callback_id,
+            text="Уверены, что хотите отменить заказ?",
+            attachments=[_cancel_confirm_keyboard(order_id)],
+        )
+
+    elif action == "cancelyes":
+        if not order or order.get("state") == "cancelled":
+            max_answer(callback_id, text="Заказ уже неактуален.", notification="Заказ не найден")
+            return
+        order["state"] = "cancelled"
+        # Уведомляем владельца
+        if MAX_OWNER_CHAT_ID:
+            short = (order.get("text") or "")[:200]
+            who = order.get("customer_name") or "покупатель"
+            max_send(MAX_OWNER_CHAT_ID, f"❌ Покупатель ({who}) отменил заказ:\n\n{short}")
+        # Правим сообщение покупателя — кнопки убираем
+        max_answer(callback_id, text="Заказ отменён ✓", notification="Заказ отменён")
+
+    elif action == "cancelno":
+        # Отмена отменена — возвращаем исходное подтверждение с кнопками
+        if order:
+            max_answer(
+                callback_id,
+                text="Заказ в силе ✅",
+                attachments=[_order_keyboard(order_id, order)],
+                notification="Оставляем заказ",
+            )
+        else:
+            max_answer(callback_id, text="Заказ в силе ✅", notification="Оставляем заказ")
 
 
 @max_bp.route("/max/webhook", methods=["POST", "OPTIONS"])
@@ -238,20 +359,24 @@ def max_webhook():
                 update.get("user") or {},
                 (update.get("payload") or "").strip(),
             )
+        elif utype == "message_callback":
+            cb = update.get("callback") or {}
+            callback_id = cb.get("callback_id")
+            payload = (cb.get("payload") or "").strip()
+            if callback_id and payload:
+                _handle_callback(callback_id, payload)
         elif utype == "message_created":
-            # Запасной разбор: иногда старт по диплинку приходит сообщением «/start <id>».
+            # Запасной разбор старта по диплинку через сообщение «/start <id>».
             msg = update.get("message") or {}
             body = msg.get("body") or {}
             text = (body.get("text") or "").strip()
-            sender = (msg.get("sender") or {})
-            recipient = (msg.get("recipient") or {})
-            chat_id = recipient.get("chat_id")
+            sender = msg.get("sender") or {}
+            chat_id = (msg.get("recipient") or {}).get("chat_id")
             if text.startswith("/start"):
                 parts = text.split(maxsplit=1)
                 payload = parts[1].strip() if len(parts) > 1 else ""
                 _handle_started(chat_id, sender, payload)
-    except Exception as e:  # noqa: BLE001 — вебхук всегда отвечает 200, иначе MAX будет ретраить
+    except Exception as e:  # noqa: BLE001 — вебхук всегда отвечает 200
         log.exception("Ошибка обработки вебхука MAX: %s", e)
 
-    # MAX ждёт 200 в ответ, иначе повторяет доставку события
     return jsonify(ok=True)

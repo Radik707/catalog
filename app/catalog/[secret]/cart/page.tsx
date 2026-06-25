@@ -212,6 +212,11 @@ function MaxOrderButton() {
 
   const handleSend = async () => {
     const text = buildText();
+    // Базовый URL каталога (без хвоста /cart) — нужен серверу для кнопок
+    // «Редактировать» (→ корзина) и «В каталог» в подтверждении заказа в MAX.
+    const catalogUrl =
+      window.location.origin +
+      window.location.pathname.replace(/\/cart\/?$/, "");
     setSending(true);
     try {
       // 1. Кладём заказ на сервер (daniella) и получаем короткий id.
@@ -220,7 +225,7 @@ function MaxOrderButton() {
       const res = await fetch(MAX_ORDER_URL as string, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, catalog_url: catalogUrl }),
       });
       if (!res.ok) throw new Error(`status ${res.status}`);
       const { id } = await res.json();
