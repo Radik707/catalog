@@ -34,9 +34,11 @@ max_bot.py — Blueprint интеграции с мессенджером MAX (�
 import os
 import time
 import hmac
+import sqlite3
 import logging
 import secrets
 import threading
+from pathlib import Path
 
 import requests
 from flask import Blueprint, request, jsonify, make_response
@@ -58,42 +60,66 @@ _VERIFY = MAX_CA_BUNDLE if MAX_CA_BUNDLE else True
 
 _ALLOWED_ORIGINS = [o.strip() for o in MAX_CORS_ORIGIN.split(",") if o.strip()]
 
-# ── Временное хранилище заказов ──
-# В памяти процесса (gunicorn -w 1). Заказ хранится со статусом, чтобы работали
-# «Отменить» (нужен после доставки) и однократная доставка владельцу.
-# Запись: {text, catalog_url, customer_chat_id, customer_name, state, expires}
-#   state: "pending" (создан) → "delivered" (доставлен владельцу) → "cancelled".
-_orders: "dict[str, dict]" = {}
-_orders_lock = threading.Lock()
+# ── Хранилище заказов (SQLite на диске) ──
+# Постоянное хранилище: заказ переживает перезапуск службы и перезагрузку сервера
+# (раньше был dict в памяти — рестарт терял заказы, и старт со старым id давал
+# «ссылка устарела»). Заказ хранится со статусом для «Отменить» и однократной
+# доставки владельцу. state: "pending" → "delivered" → "cancelled".
+MAX_DB_PATH = os.environ.get("MAX_DB_PATH", str(Path(__file__).resolve().parent / "max_orders.db"))
+_db_lock = threading.Lock()  # сериализуем запись (gunicorn -w 1, но потоки)
 
 
-def _prune_orders() -> None:
-    """Удалить просроченные заказы (ленивая очистка)."""
-    now = time.time()
-    for k in [k for k, v in _orders.items() if v.get("expires", 0) < now]:
-        _orders.pop(k, None)
+def _db() -> sqlite3.Connection:
+    conn = sqlite3.connect(MAX_DB_PATH, timeout=10)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def _init_db() -> None:
+    with _db_lock, _db() as conn:
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS orders (
+                id TEXT PRIMARY KEY,
+                text TEXT,
+                catalog_url TEXT,
+                customer_chat_id TEXT,
+                customer_name TEXT,
+                state TEXT,
+                expires REAL
+            )"""
+        )
+
+
+_init_db()
 
 
 def _store_order(text: str, catalog_url: str) -> str:
     """Сохранить заказ, вернуть короткий id (помещается в ?start=)."""
     order_id = secrets.token_urlsafe(8)
-    with _orders_lock:
-        _prune_orders()
-        _orders[order_id] = {
-            "text": text,
-            "catalog_url": catalog_url,
-            "customer_chat_id": None,
-            "customer_name": None,
-            "state": "pending",
-            "expires": time.time() + MAX_ORDER_TTL,
-        }
+    with _db_lock, _db() as conn:
+        conn.execute("DELETE FROM orders WHERE expires < ?", (time.time(),))  # чистка просроченных
+        conn.execute(
+            "INSERT INTO orders (id, text, catalog_url, customer_chat_id, customer_name, state, expires) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (order_id, text, catalog_url, None, None, "pending", time.time() + MAX_ORDER_TTL),
+        )
     return order_id
 
 
 def _get_order(order_id: str) -> "dict | None":
-    with _orders_lock:
-        _prune_orders()
-        return _orders.get(order_id)
+    with _db_lock, _db() as conn:
+        conn.execute("DELETE FROM orders WHERE expires < ?", (time.time(),))
+        row = conn.execute("SELECT * FROM orders WHERE id = ?", (order_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def _update_order(order_id: str, **fields) -> None:
+    """Обновить поля заказа (state, customer_*). Без полей — ничего не делает."""
+    if not fields:
+        return
+    cols = ", ".join(f"{k} = ?" for k in fields)
+    with _db_lock, _db() as conn:
+        conn.execute(f"UPDATE orders SET {cols} WHERE id = ?", (*fields.values(), order_id))
 
 
 # ── Сборка инлайн-клавиатур ──
@@ -283,9 +309,12 @@ def _handle_started(chat_id, user: dict, payload: str) -> None:
 
     # Доставка владельцу — однократно (защита от повторного bot_started)
     if order["state"] == "pending":
-        order["customer_chat_id"] = chat_id
-        order["customer_name"] = (user.get("name") or "").strip()
-        order["state"] = "delivered"
+        _update_order(
+            payload,
+            customer_chat_id=str(chat_id),
+            customer_name=(user.get("name") or "").strip(),
+            state="delivered",
+        )
         if MAX_OWNER_CHAT_ID:
             owner_msg = f"🛒 Новый заказ через MAX\n\n{order['text']}\n\n{_format_customer(user)}"
             if not max_send(MAX_OWNER_CHAT_ID, owner_msg):
@@ -318,7 +347,7 @@ def _handle_callback(callback_id: str, payload: str) -> None:
         if not order or order.get("state") == "cancelled":
             max_answer(callback_id, text="Заказ уже неактуален.", notification="Заказ не найден")
             return
-        order["state"] = "cancelled"
+        _update_order(order_id, state="cancelled")
         # Уведомляем владельца
         if MAX_OWNER_CHAT_ID:
             short = (order.get("text") or "")[:200]
