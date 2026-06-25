@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useNav, NavMode } from "./NavProvider";
 import { SectionNav } from "@/lib/nav";
@@ -27,6 +27,27 @@ export default function CatalogNav({ navData, secret }: { navData: SectionNav[];
   const pathname = usePathname();
   const router = useRouter();
   const catalogPath = `/catalog/${secret}`;
+
+  // ── Подсказка о прокрутке ряда разделов ──
+  // Градиент у края показывает, что иконки можно листать (есть скрытые слева/справа).
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [canLeft, setCanLeft] = useState(false);
+  const [canRight, setCanRight] = useState(false);
+
+  const updateEdges = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setCanLeft(el.scrollLeft > 4);
+    // Запас 4px на дробные ширины
+    setCanRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+  }, []);
+
+  // Пересчёт при монтировании, смене данных/режима и ресайзе окна
+  useEffect(() => {
+    updateEdges();
+    window.addEventListener("resize", updateEdges);
+    return () => window.removeEventListener("resize", updateEdges);
+  }, [updateEdges, navData, mode, expanded]);
 
   // Если мы не на странице каталога (например, в корзине) — вернуться в каталог.
   // Состояние навигации (NavProvider) живёт в общем layout и переживёт переход,
@@ -72,27 +93,42 @@ export default function CatalogNav({ navData, secret }: { navData: SectionNav[];
 
       {/* Иконки разделов — только в «Каталоге» и только когда переключатель свёрнут */}
       {!expanded && mode === "catalog" && (
-        <div className="flex gap-1 overflow-x-auto scrollbar-hide min-w-0">
-          {navData.map((s) => {
-            const active = section === s.section;
-            return (
-              <button
-                key={s.section}
-                onClick={() => {
-                  selectSection(active ? null : s.section);
-                  goCatalogIfNeeded();
-                }}
-                className={`shrink-0 flex flex-col items-center justify-center px-1.5 py-0.5 rounded leading-none transition-colors ${
-                  active ? "bg-white text-blue-600" : "text-white active:bg-blue-500 hover:bg-blue-500"
-                }`}
-                style={{ minWidth: 46 }}
-                title={s.section}
-              >
-                <span className="text-base">{s.icon}</span>
-                <span className="text-[9px] mt-0.5 whitespace-nowrap">{s.label}</span>
-              </button>
-            );
-          })}
+        <div className="relative min-w-0 flex-1">
+          {/* Прокручиваемый ряд иконок */}
+          <div
+            ref={scrollRef}
+            onScroll={updateEdges}
+            className="flex gap-1 overflow-x-auto scrollbar-hide"
+          >
+            {navData.map((s) => {
+              const active = section === s.section;
+              return (
+                <button
+                  key={s.section}
+                  onClick={() => {
+                    selectSection(active ? null : s.section);
+                    goCatalogIfNeeded();
+                  }}
+                  className={`shrink-0 flex flex-col items-center justify-center px-1.5 py-0.5 rounded leading-none transition-colors ${
+                    active ? "bg-white text-blue-600" : "text-white active:bg-blue-500 hover:bg-blue-500"
+                  }`}
+                  style={{ minWidth: 46 }}
+                  title={s.section}
+                >
+                  <span className="text-base">{s.icon}</span>
+                  <span className="text-[9px] mt-0.5 whitespace-nowrap">{s.label}</span>
+                </button>
+              );
+            })}
+          </div>
+          {/* Градиент-подсказка слева: есть скрытые иконки за левым краем */}
+          {canLeft && (
+            <div className="pointer-events-none absolute inset-y-0 left-0 w-6 bg-gradient-to-r from-blue-600 to-transparent" />
+          )}
+          {/* Градиент-подсказка справа: есть ещё иконки за правым краем */}
+          {canRight && (
+            <div className="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-blue-600 to-transparent" />
+          )}
         </div>
       )}
     </div>
