@@ -431,6 +431,79 @@ def load_current_groups() -> dict:
     return mapping
 
 
+# ── Память правок: надёжность чтения (страховка от тихой потери фото/правок) ──
+
+class EditMemoryError(Exception):
+    """Сбой чтения вкладки «Правки», который НЕЛЬЗЯ трактовать как «правок нет».
+
+    Бросается, когда память правок не прочиталась из-за ошибки сети / лимита
+    Google API / подозрительно усечённого ответа. Перегон обязан прерваться
+    (sys.exit в main), а НЕ записать каталог без правок — иначе временный сбой
+    тихо затрёт выставленные владельцем фото/группы/скрытия (баг «Добрый»).
+    """
+
+
+# Параметры чтения памяти правок
+EDIT_MEMORY_RETRIES = 3                       # сколько раз пытаемся прочитать вкладку «Правки»
+EDIT_MEMORY_RETRY_DELAYS = (1, 3, 6)          # паузы между попытками, сек (нарастающие)
+EDIT_MEMORY_STATE_PATH = SCRIPT_DIR / "edit_memory_state.json"     # baseline числа правок
+EDIT_MEMORY_ORPHANS_PATH = SCRIPT_DIR / "edit_memory_orphans.json"  # отчёт о несовпавших правках
+EDIT_MEMORY_MIN_BASELINE = 50                 # ниже этого эталона baseline-проверку не делаем
+EDIT_MEMORY_DROP_RATIO = 0.5                  # «подозрительно мало»: < 50% от прошлого успешного
+
+
+def _load_edit_memory_baseline() -> "int | None":
+    """Прочитать эталонное число правок из прошлого успешного чтения. None — если эталона нет."""
+    try:
+        with open(EDIT_MEMORY_STATE_PATH, "r", encoding="utf-8") as f:
+            value = int(json.load(f).get("last_good_count"))
+        return value if value >= 0 else None
+    except Exception:  # noqa: BLE001 — нет файла/битый JSON → эталона просто нет
+        return None
+
+
+def _save_edit_memory_baseline(count: int) -> None:
+    """Сохранить число правок как новый эталон (вызывается только после успешного чтения)."""
+    try:
+        with open(EDIT_MEMORY_STATE_PATH, "w", encoding="utf-8") as f:
+            json.dump({"last_good_count": count}, f, ensure_ascii=False, indent=2)
+    except Exception as e:  # noqa: BLE001 — не критично, эталон обновим в следующий раз
+        log.warning("Не удалось сохранить эталон числа правок (%s) — продолжаю", e)
+
+
+def _check_edit_memory_baseline(count: int) -> None:
+    """Подушка для правок: резкое падение числа прочитанных правок = подозрение на сбой.
+
+    Если в прошлый успешный раз правок было заметно больше, а сейчас < 50% —
+    это похоже на частичный ответ Google API (без явного исключения).
+    Прерываем перегон, чтобы не затереть выставленные фото/правки.
+    """
+    baseline = _load_edit_memory_baseline()
+    if baseline is None or baseline < EDIT_MEMORY_MIN_BASELINE:
+        return  # надёжного эталона нет — проверять не от чего (первый запуск/малая вкладка)
+    if count < baseline * EDIT_MEMORY_DROP_RATIO:
+        raise EditMemoryError(
+            f"прочитано правок {count}, а в прошлый успешный раз — {baseline} "
+            f"(меньше {int(EDIT_MEMORY_DROP_RATIO * 100)}%). Похоже на частичный ответ Google API. "
+            "Перегон прерван, чтобы не затереть выставленные владельцем фото/правки. "
+            f"Если правки реально удалены массово — удалите {EDIT_MEMORY_STATE_PATH.name} и повторите."
+        )
+
+
+def _read_pravki_values(creds_path: str, sheets_id: str, scopes: list) -> list:
+    """Один заход чтения вкладки «Правки» → список строк (включая заголовок).
+
+    WorksheetNotFound пробрасывается наружу как «вкладки нет» (легитимно пусто);
+    остальные ошибки (лимит/сеть/доступ) уходят выше — там решают про ретрай.
+    """
+    import gspread  # noqa: F401 — нужен для типа исключения у вызывающего
+    from google.oauth2.service_account import Credentials
+
+    creds = Credentials.from_service_account_file(creds_path, scopes=scopes)
+    ss = gspread.authorize(creds).open_by_key(sheets_id)
+    return ss.worksheet("Правки").get_all_values()
+
+
 def load_edit_memory() -> dict[str, dict[str, str]]:
     """Загрузить память ручных правок владельца из вкладки «Правки» той же Google-таблицы.
 
@@ -445,12 +518,16 @@ def load_edit_memory() -> dict[str, dict[str, str]]:
     Пример строки: «конфеты ромашка» | «group» | «Коробочные конфеты»
     Несколько строк на один товар накапливаются в словарь типов.
 
-    Graceful-fallback: нет gspread / нет credentials / нет вкладки / ошибка доступа → {},
-    скрипт продолжает работу без правок (как если бы памяти не существовало).
+    Различаем «правок реально нет» и «сбой чтения»:
+      - нет gspread / нет credentials / нет вкладки (WorksheetNotFound) → {} (легитимно пусто);
+      - ошибка сети / лимит Google API → ретрай EDIT_MEMORY_RETRIES раз, и при неудаче
+        НЕ возвращаем {}, а бросаем EditMemoryError (перегон прервётся, фото/правки целы);
+      - подозрительно малое число правок против эталона → тоже EditMemoryError.
     """
+    import time
+
     try:
         import gspread
-        from google.oauth2.service_account import Credentials
     except ImportError:
         return {}
 
@@ -472,21 +549,38 @@ def load_edit_memory() -> dict[str, dict[str, str]]:
         "https://www.googleapis.com/auth/drive",
     ]
 
-    # --- Чтение вкладки «Правки» ---
-    try:
-        creds = Credentials.from_service_account_file(creds_path, scopes=scopes)
-        ss = gspread.authorize(creds).open_by_key(sheets_id)
+    # --- Чтение вкладки «Правки» с ретраями ---
+    # Ошибку чтения (лимит/сеть) НЕ маскируем под «правок нет»: повторяем попытки,
+    # и только WorksheetNotFound трактуем как легитимно пустую память.
+    values = None
+    last_err = None
+    for attempt in range(1, EDIT_MEMORY_RETRIES + 1):
         try:
-            values = ss.worksheet("Правки").get_all_values()
+            values = _read_pravki_values(creds_path, sheets_id, scopes)
+            break
         except gspread.exceptions.WorksheetNotFound:
             # Вкладки ещё нет — это нормально (память пуста), не ошибка
             log.info("Вкладка «Правки» не найдена — память правок пуста")
             return {}
-    except Exception as e:  # noqa: BLE001
-        log.warning("Не удалось прочитать вкладку «Правки»: %s", e)
-        return {}
+        except Exception as e:  # noqa: BLE001 — лимит API / сеть / доступ → пробуем ещё раз
+            last_err = e
+            log.warning(
+                "Чтение вкладки «Правки»: попытка %d/%d не удалась: %s",
+                attempt, EDIT_MEMORY_RETRIES, e,
+            )
+            if attempt < EDIT_MEMORY_RETRIES:
+                delay = EDIT_MEMORY_RETRY_DELAYS[min(attempt - 1, len(EDIT_MEMORY_RETRY_DELAYS) - 1)]
+                time.sleep(delay)
+
+    if values is None:
+        # Все попытки провалились — это СБОЙ, а не «правок нет». Прерываем перегон.
+        raise EditMemoryError(
+            f"не удалось прочитать вкладку «Правки» за {EDIT_MEMORY_RETRIES} попыток: {last_err}"
+        )
 
     if not values:
+        # Вкладка существует, но пустая (даже без заголовка) — память реально пуста.
+        # Эталон НЕ обновляем: baseline-проверка дальше не дойдёт (mapping будет пуст).
         return {}
 
     # --- Найти индексы колонок по заголовкам ---
@@ -496,8 +590,12 @@ def load_edit_memory() -> dict[str, dict[str, str]]:
         тип_i = header.index("Тип")
         значение_i = header.index("Значение")
     except ValueError:
-        log.warning("Вкладка «Правки»: ожидаются колонки 'Товар', 'Тип', 'Значение' — пропускаем")
-        return {}
+        # Лист прочитался, но заголовки не на месте — это повреждение схемы, а не «пусто».
+        # Молча вернуть {} нельзя: затрёт правки. Прерываем перегон.
+        raise EditMemoryError(
+            "вкладка «Правки» прочитана, но не найдены колонки 'Товар'/'Тип'/'Значение' "
+            f"(заголовок: {header[:8]}). Перегон прерван, чтобы не затереть правки."
+        )
 
     # Допустимые типы правок (Этап 3: группа + фото + описание; Этап 4-02: название D-05; метка badge; Этап 7: подгруппа; Этап 8: скрыт)
     ALLOWED_TYPES = {"group", "photo", "description", "name", "badge", "подгруппа", "скрыт"}
@@ -528,6 +626,11 @@ def load_edit_memory() -> dict[str, dict[str, str]]:
         if key not in mapping:
             mapping[key] = {}
         mapping[key][raw_type] = raw_value
+
+    # Подушка для правок: резкое падение числа против эталона → подозрение на сбой, прерываем.
+    _check_edit_memory_baseline(len(mapping))
+    # Чтение успешно и не подозрительно — обновляем эталон для следующих запусков.
+    _save_edit_memory_baseline(len(mapping))
 
     log.info("Загружено правок из памяти: %d", len(mapping))
     return mapping
@@ -573,13 +676,18 @@ def apply_edit_memory(
       - 'badge'       → p['badge_override']  = метка («новинка»/«хит»/«акция»);
                         пустая строка означает явное снятие метки (приоритет в products_to_rows)
 
-    Возвращает число товаров, НЕ найденных в памяти (новые для разметки, MEM-03/D-05).
+    Возвращает кортеж (число_товаров_без_правок, множество_ключей-сирот), где
+    сироты — правки, чей ключ не совпал ни с одним товаром (вероятно, товар
+    переименован в прайсе → ключ нормализованного имени «уехал», та же причина,
+    по которой слетали фото «Добрый»). Их разбирает report_edit_memory_orphans().
     """
     new_for_memory = 0
+    matched_keys: set = set()
     for p in products:
         key = normalize_name(p["name"])
         edit = edit_memory.get(key)
         if edit:
+            matched_keys.add(key)
             # Правка группы — перебивает авто-маппинг (D-06)
             if "group" in edit:
                 p["display_group"] = edit["group"]
@@ -609,7 +717,58 @@ def apply_edit_memory(
                 p["hidden"] = edit["скрыт"]
         else:
             new_for_memory += 1
-    return new_for_memory
+
+    # Сироты: правки, чей ключ не совпал ни с одним товаром текущего прайса.
+    orphan_keys = set(edit_memory) - matched_keys
+    return new_for_memory, orphan_keys
+
+
+def report_edit_memory_orphans(
+    edit_memory: dict[str, dict[str, str]],
+    orphan_keys: set,
+) -> None:
+    """Сообщить о правках, чей товар не найден в текущем прайсе (несовпадение ключа).
+
+    Причина — товар переименован в прайсе ИЛИ временно отсутствует. Особенно
+    болезненны сироты типа 'photo'/'name': владелец выставил фото/имя, товар
+    переименовали → ключ перестал совпадать и правка тихо не применилась
+    (механика бага «Добрый»). Громко логируем такие случаи и пишем полный
+    отчёт в edit_memory_orphans.json (задел для показа владельцу в админ-панели).
+    """
+    if not orphan_keys:
+        # Все правки нашли свои товары — снимаем устаревший отчёт, если был.
+        try:
+            if EDIT_MEMORY_ORPHANS_PATH.exists():
+                EDIT_MEMORY_ORPHANS_PATH.unlink()
+        except Exception:  # noqa: BLE001 — не критично
+            pass
+        return
+
+    report = []
+    photo_name = []  # подмножество с фото/именем — самые заметные для покупателя
+    for key in sorted(orphan_keys):
+        types = sorted(edit_memory.get(key, {}).keys())
+        entry = {"key": key, "types": types}
+        report.append(entry)
+        if "photo" in types or "name" in types:
+            photo_name.append(entry)
+
+    log.warning(
+        "Правок-сирот (товар не найден в прайсе — переименование или отсутствие): %d, "
+        "из них с фото/именем: %d",
+        len(report), len(photo_name),
+    )
+    for entry in photo_name[:30]:
+        log.warning("  ! не применилось [%s]: %s", ", ".join(entry["types"]), entry["key"])
+    if len(photo_name) > 30:
+        log.warning("  … ещё %d правок с фото/именем (полный список в %s)",
+                    len(photo_name) - 30, EDIT_MEMORY_ORPHANS_PATH.name)
+
+    try:
+        with open(EDIT_MEMORY_ORPHANS_PATH, "w", encoding="utf-8") as f:
+            json.dump(report, f, ensure_ascii=False, indent=2)
+    except Exception as e:  # noqa: BLE001 — отчёт необязателен
+        log.warning("Не удалось записать отчёт сирот правок (%s)", e)
 
 
 # Маппинг папок Cloudinary → логические имена в photo_overrides.json
@@ -1010,8 +1169,15 @@ def main():
     # Загрузить индекс URL для резолва фото-référence из правок владельца (тип 'photo')
     url_index = load_url_index()
 
-    # Загрузить память ручных правок владельца (MEM-01)
-    edit_memory = load_edit_memory()
+    # Загрузить память ручных правок владельца (MEM-01).
+    # При сбое чтения (лимит API / сеть / усечённый ответ) load_edit_memory бросает
+    # EditMemoryError — прерываем перегон ДО записи, чтобы не затереть выставленные
+    # фото/правки. Выход с кодом 1 → uploader/app.py откатит к Товары_BACKUP.
+    try:
+        edit_memory = load_edit_memory()
+    except EditMemoryError as e:
+        log.error("Перегон прерван — ненадёжное чтение памяти правок: %s", e)
+        sys.exit(1)
 
     # Парсить все файлы (авто-определение формата: старый vs новый)
     all_products = []
@@ -1054,8 +1220,10 @@ def main():
 
     # Наложить память правок поверх авто-маппинга (D-06: правка владельца побеждает)
     # Вызов ПОСЛЕ apply_group_mapping и блока нового формата, ПЕРЕД products_to_rows
-    new_for_memory = apply_edit_memory(all_products, edit_memory)
+    new_for_memory, orphan_keys = apply_edit_memory(all_products, edit_memory)
     log.info("Товаров без правок (новые для памяти): %d", new_for_memory)
+    # Сообщить о правках, чей товар не нашёлся в прайсе (вероятно, переименован, п.3)
+    report_edit_memory_orphans(edit_memory, orphan_keys)
 
     # [НОВОЕ, этап 5] Загрузить карту структуры и проставить Подгруппа/Раздел
     # Вызов ПОСЛЕ apply_edit_memory, ПЕРЕД products_to_rows (позиция из D-04/D-05)

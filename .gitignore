@@ -37,6 +37,10 @@ uploader/price/
 uploader/last_batch/
 uploader/history.json
 
+# память правок: серверное состояние (эталон числа правок + отчёт сирот), рантайм, не в git
+scripts/edit_memory_state.json
+scripts/edit_memory_orphans.json
+
 # debug
 npm-debug.log*
 
