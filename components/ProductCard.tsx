@@ -125,6 +125,19 @@ export default function ProductCard({
     const badgePos = isPresentation ? "top-2 left-2" : "top-1 left-1";
     const placeholderIcon = isPresentation ? "w-16 h-16" : "w-10 h-10";
 
+    // ── Авто-fit названия на телефоне ──
+    // Карточки должны быть одинаковой высоты, а имя — помещаться целиком.
+    // Размер шрифта подбираем по длине названия (без JS-измерений — быстро на 800+
+    // карточках и без мигания), блок имени фиксированной высоты (≈3 строки),
+    // line-clamp-3 — страховка от выхода за блок у самых длинных имён.
+    // На планшете/ПК (sm+) — прежнее поведение: размер из пресета, 2 строки.
+    const len = product.name.length;
+    const phoneNameCls =
+      len <= 40 ? "text-sm" : len <= 60 ? "text-xs" : len <= 78 ? "text-[11px]" : "text-[10px]";
+    // sm:-часть размера берём из пресета, чтобы не конфликтовала с phoneNameCls (телефон)
+    const smNameCls =
+      nameCls.split(" ").filter((c) => c.startsWith("sm:")).join(" ") || "sm:text-xs";
+
     return (
       <div
         style={{ perspective: "1000px" }}
@@ -186,7 +199,7 @@ export default function ProductCard({
                   На телефоне — полностью, без сокращений (line-clamp-none); карточка
                   растёт по тексту. На планшете/ПК — в две строки (как раньше). */}
               <p
-                className={`${nameCls} font-medium text-gray-900 leading-tight line-clamp-none sm:line-clamp-2`}
+                className={`${phoneNameCls} ${smNameCls} font-medium text-gray-900 leading-tight overflow-hidden line-clamp-3 sm:line-clamp-2 h-[3.4rem] sm:h-auto`}
               >
                 {product.name}
               </p>
