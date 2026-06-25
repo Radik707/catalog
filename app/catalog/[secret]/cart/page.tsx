@@ -1,9 +1,14 @@
 "use client";
 
+import { useState } from "react";
 import { useCartContext } from "@/components/CartProvider";
 import { useOnlineStatus } from "@/lib/useOnlineStatus";
 
 const TELEGRAM_USERNAME = "ZhukOleh";
+// Параметры MAX: ник бота (для ссылки) и эндпоинт приёма заказа на daniella.
+// Если переменные не заданы — кнопка MAX не рендерится (фича выключена).
+const MAX_BOT = process.env.NEXT_PUBLIC_MAX_BOT;
+const MAX_ORDER_URL = process.env.NEXT_PUBLIC_MAX_ORDER_URL;
 
 export default function CartPage({
   params,
@@ -130,7 +135,11 @@ export default function CartPage({
             {totalPrice.toFixed(2)} ₽
           </span>
         </div>
-        <TelegramButton />
+        {/* Два канала отправки заказа: Telegram (как было) и MAX (новый) */}
+        <div className="flex flex-col gap-2">
+          <TelegramButton />
+          <MaxOrderButton />
+        </div>
       </div>
     </div>
   );
@@ -177,6 +186,68 @@ function TelegramButton() {
           Нет сети — заказ отправится, когда появится интернет. Корзина сохранена.
         </p>
       )}
+    </div>
+  );
+}
+
+/* ---------- Кнопка MAX ---------- */
+function MaxOrderButton() {
+  const { items, totalPrice } = useCartContext();
+  // Хук состояния сети — офлайн блокирует кнопку, как у Telegram.
+  const isOnline = useOnlineStatus();
+  // Локальное состояние «идёт отправка» — пока ждём короткий id от сервера.
+  const [sending, setSending] = useState(false);
+
+  // Фича выключена, если не заданы ник бота и эндпоинт приёма заказа.
+  if (!MAX_BOT || !MAX_ORDER_URL) return null;
+
+  // Сборка текста заказа — формат тот же, что у Telegram-кнопки.
+  const buildText = () => {
+    const lines = items.map(
+      ({ product, quantity }) =>
+        `• ${product.name} × ${quantity} = ${(product.price * quantity).toFixed(2)} ₽`
+    );
+    return ["Заказ:", ...lines, "", `Итого: ${totalPrice.toFixed(2)} ₽`].join("\n");
+  };
+
+  const handleSend = async () => {
+    const text = buildText();
+    setSending(true);
+    try {
+      // 1. Кладём заказ на сервер (daniella) и получаем короткий id.
+      //    В ссылку ?start= помещается лишь 128 символов — весь заказ туда не влезает,
+      //    поэтому передаём боту только id, а сам заказ он заберёт с сервера.
+      const res = await fetch(MAX_ORDER_URL as string, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok) throw new Error(`status ${res.status}`);
+      const { id } = await res.json();
+      // 2. Открываем чат с ботом MAX. По start=<id> бот возьмёт заказ
+      //    и перешлёт владельцу вместе с контактом покупателя (Модель A).
+      window.open(`https://max.ru/${MAX_BOT}?start=${id}`, "_blank");
+    } catch {
+      // Запасной путь: сервер недоступен — открываем системный «Поделиться» MAX
+      //    с уже подставленным текстом заказа (получателя покупатель выберёт сам).
+      //    Так заказ не теряется, даже если бэкенд лежит.
+      window.open(`https://max.ru/:share?text=${encodeURIComponent(text)}`, "_blank");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-2">
+      <button
+        onClick={handleSend}
+        // Блокируем в офлайне и на время отправки
+        disabled={!isOnline || sending}
+        // Фирменный сине-фиолетовый градиент MAX
+        className="w-full py-3.5 bg-gradient-to-br from-[#2D9CFF] to-[#9B4DFF] text-white font-semibold rounded-xl text-base active:opacity-90 disabled:from-gray-300 disabled:to-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed"
+      >
+        {sending ? "Открываем MAX…" : "Отправить заказ в MAX"}
+      </button>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import CartIcon from "@/components/CartIcon";
 import TelegramButton from "@/components/TelegramButton";
+import MaxButton from "@/components/MaxButton";
 import CatalogSettingsProvider from "@/components/CatalogSettings";
 import SettingsButton from "@/components/SettingsButton";
 import SettingsPanel from "@/components/SettingsPanel";
@@ -73,6 +74,8 @@ export default async function CatalogLayout({
 
             {/* Контейнер витрины: ограничение ширины и центрирование на десктопе */}
             <main className="max-w-screen-2xl mx-auto w-full">{children}</main>
+            {/* Две плавающие иконки связи: MAX (выше) и Telegram (ниже), стопкой */}
+            <MaxButton />
             <TelegramButton />
           </InstallPromptProvider>
         </CatalogSyncProvider>

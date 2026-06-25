@@ -828,6 +828,11 @@ loadHistory();
 from admin import admin_bp
 app.register_blueprint(admin_bp)
 
+# Подключить интеграцию с MAX (приём заказов: /max/order, /max/webhook).
+# Маршруты публичные (вне секретного сегмента), защита вебхука — по X-Max-Bot-Api-Secret.
+from max_bot import max_bp
+app.register_blueprint(max_bp)
+
 
 def main() -> None:
     if not APP_SECRET:
