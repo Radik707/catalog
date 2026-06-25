@@ -5,6 +5,7 @@ import { useCartContext } from "@/components/CartProvider";
 import { useCatalogSettings } from "@/components/CatalogSettings";
 import { effectivePrice } from "@/lib/pricing";
 import { useOnlineStatus } from "@/lib/useOnlineStatus";
+import QuantityInput from "@/components/QuantityInput";
 
 const TELEGRAM_USERNAME = "ZhukOleh";
 // Параметры MAX: ник бота (для ссылки) и эндпоинт приёма заказа на daniella.
@@ -91,6 +92,26 @@ export default function CartPage({
             key={product.id}
             className="flex items-center gap-3 px-4 py-3 border-b border-gray-100"
           >
+            {/* Мини-фото слева */}
+            <div className="flex-shrink-0 w-12 h-12 rounded overflow-hidden border border-gray-100 bg-white">
+              {product.imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={product.imageUrl}
+                  alt={product.name}
+                  className="w-full h-full object-contain"
+                  loading="lazy"
+                  decoding="async"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-gray-300">
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v13.5a1.5 1.5 0 001.5 1.5z" />
+                  </svg>
+                </div>
+              )}
+            </div>
+
             {/* Название и цена */}
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-gray-900 leading-tight">
@@ -109,9 +130,12 @@ export default function CartPage({
               >
                 −
               </button>
-              <span className="w-6 text-center text-sm font-semibold text-gray-900">
-                {quantity}
-              </span>
+              <QuantityInput
+                value={quantity}
+                max={product.stock}
+                onCommit={(v) => updateQuantity(product.id, v)}
+                className="w-8 text-sm text-gray-900"
+              />
               <button
                 onClick={() => updateQuantity(product.id, quantity + 1)}
                 disabled={quantity >= product.stock}

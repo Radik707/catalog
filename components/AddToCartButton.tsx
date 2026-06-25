@@ -2,6 +2,7 @@
 
 import { useCartContext } from './CartProvider';
 import { Product } from '@/lib/types';
+import QuantityInput from './QuantityInput';
 
 interface AddToCartButtonProps {
   product: Product;
@@ -33,9 +34,12 @@ export default function AddToCartButton({ product, compact = false }: AddToCartB
         >
           −
         </button>
-        <span className="w-5 text-center text-sm font-semibold text-gray-900">
-          {qty}
-        </span>
+        <QuantityInput
+          value={qty}
+          max={product.stock}
+          onCommit={(v) => updateQuantity(product.id, v)}
+          className="w-7 text-sm text-gray-900"
+        />
         <button
           onClick={() => updateQuantity(product.id, qty + 1)}
           disabled={qty >= product.stock}
