@@ -100,7 +100,14 @@ export default function CatalogSettingsProvider({
     if (v === "list" || v === "grid" || v === "presentation") setViewMode(v);
 
     const p = localStorage.getItem("gridPreset");
-    if (p === "2x3" || p === "3x4" || p === "4x6") setGridPreset(p);
+    if (p === "2x3" || p === "3x4" || p === "4x6") {
+      setGridPreset(p);
+    } else if (window.matchMedia && window.matchMedia("(max-width: 767px)").matches) {
+      // На телефоне без сохранённого выбора — по умолчанию 2×3 (крупнее, с именем+описанием).
+      // Только состояние, без записи в localStorage: останется адаптивным, пока
+      // пользователь сам не выберет плотность в шестерёнке.
+      setGridPreset("2x3");
+    }
 
     if (localStorage.getItem("showPhotos") === "0") setShowPhotos(false);
     if (localStorage.getItem("showPrices") === "0") setShowPrices(false);

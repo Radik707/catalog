@@ -113,7 +113,6 @@ export default function ProductCard({
     const nameCls = isPresentation ? sizes.nameCls : "text-xs";
     const priceCls = isPresentation ? sizes.priceCls : "text-sm";
     const pkgCls = isPresentation ? sizes.pkgCls : "text-[10px]";
-    const nameLines = isPresentation ? sizes.nameLines : "line-clamp-2";
     const compactCart = isPresentation ? sizes.compactCart : false;
     const badgeCls = isPresentation ? "text-xs px-1.5 py-0.5" : "text-[9px] px-1 py-0.5";
     const badgePos = isPresentation ? "top-2 left-2" : "top-1 left-1";
@@ -176,15 +175,21 @@ export default function ProductCard({
                   {product.badge}
                 </span>
               )}
-              {/* Название: на телефоне (с фото) скрыто и переезжает на оборот;
-                  на планшете показывается. Без фото — показывается всегда. */}
+              {/* Название показывается на лицевой стороне всегда.
+                  На телефоне — полностью, без сокращений (line-clamp-none); карточка
+                  растёт по тексту. На планшете/ПК — в две строки (как раньше). */}
               <p
-                className={`${nameCls} font-medium text-gray-900 leading-tight ${nameLines} ${
-                  showPhotos ? "hidden sm:block" : ""
-                }`}
+                className={`${nameCls} font-medium text-gray-900 leading-tight line-clamp-none sm:line-clamp-2`}
               >
                 {product.name}
               </p>
+              {/* Описание — на лицевой стороне только на телефоне (презентация 2×3
+                  с описанием). На планшете/ПК описание остаётся на обороте. */}
+              {showPhotos && product.description && (
+                <p className="text-[11px] text-gray-500 leading-snug line-clamp-2 sm:hidden">
+                  {product.description}
+                </p>
+              )}
               <div className="flex items-end justify-between gap-1">
                 {showPrices ? (
                   <div className="min-w-0">
