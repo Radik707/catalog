@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { CartProvider } from "@/components/CartProvider";
+import { FavoritesProvider } from "@/components/FavoritesProvider";
 
 export const metadata: Metadata = {
   title: "Каталог товаров",
@@ -43,7 +44,9 @@ export default function RootLayout({
   return (
     <html lang="ru">
       <body className="bg-gray-50 antialiased">
-        <CartProvider>{children}</CartProvider>
+        <CartProvider>
+          <FavoritesProvider>{children}</FavoritesProvider>
+        </CartProvider>
       </body>
     </html>
   );
