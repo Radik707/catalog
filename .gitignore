@@ -46,6 +46,10 @@ uploader/*.db
 scripts/edit_memory_state.json
 scripts/edit_memory_orphans.json
 
+# авто-новинка: даты первого появления товаров, рантайм на сервере, не в git
+# (деплой не должен затирать накопленные даты — иначе сбросится окно новинок)
+scripts/novelty_dates.json
+
 # debug
 npm-debug.log*
 

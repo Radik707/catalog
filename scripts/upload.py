@@ -30,6 +30,7 @@ import glob
 import logging
 import argparse
 from pathlib import Path
+from datetime import date
 
 import openpyxl
 
@@ -429,6 +430,100 @@ def load_current_groups() -> dict:
             mapping[normalize_name(r[name_i])] = r[grp_i]
     log.info("Загружено групп из текущего каталога: %d", len(mapping))
     return mapping
+
+
+# ── Авто-новинка с истечением срока ──
+# Товар, появившийся впервые, помечается «новинка» только NOVELTY_WINDOW_DAYS дней
+# с даты первого появления, затем метка снимается автоматически. Дата хранится в
+# scripts/novelty_dates.json (серверное runtime-состояние, НЕ в git): { норм_имя: 'YYYY-MM-DD' }.
+NOVELTY_WINDOW_DAYS = 14   # сколько дней товар считается новинкой
+NOVELTY_PRUNE_DAYS = 60    # старше этого — запись удаляется из файла (чистка)
+NOVELTY_PATH = SCRIPT_DIR / "novelty_dates.json"
+
+
+def load_novelty_dates() -> dict:
+    """Загрузить даты первого появления { норм_имя: 'YYYY-MM-DD' }.
+
+    Отсутствие файла / битый JSON → пустой dict (graceful): скрипт не падает,
+    просто на этом прогоне ни у кого не будет авто-даты (метки выставит логика ниже).
+    """
+    try:
+        with open(NOVELTY_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except FileNotFoundError:
+        return {}
+    except Exception as e:  # noqa: BLE001
+        log.warning("Не удалось прочитать novelty_dates.json: %s — игнорирую", e)
+        return {}
+
+
+def save_novelty_dates(dates: dict) -> None:
+    """Сохранить даты первого появления (атомарно через временный файл)."""
+    try:
+        tmp = NOVELTY_PATH.with_suffix(".json.tmp")
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(dates, f, ensure_ascii=False, indent=0)
+        os.replace(tmp, NOVELTY_PATH)
+    except Exception as e:  # noqa: BLE001
+        log.warning("Не удалось сохранить novelty_dates.json: %s", e)
+
+
+def compute_novelty(all_products: list, new_names: set, persist: bool) -> set:
+    """Вычислить, какие товары сейчас «новинка» (дата первого появления ≤ 14 дней).
+
+    - У товаров из new_names, которых ещё нет в файле дат, фиксируем дату = сегодня.
+    - «Новинка» = есть дата И с неё прошло ≤ NOVELTY_WINDOW_DAYS дней.
+    - Записи старше NOVELTY_PRUNE_DAYS удаляем (чистка файла).
+    - persist=False (например, --dry-run) — состояние НЕ записывается на диск.
+
+    Возвращает множество РАЗОВЫХ имён товаров (p["name"]), которым положена метка «новинка».
+    """
+    dates = load_novelty_dates()
+    today = date.today()
+    today_str = today.isoformat()
+
+    # 1. Зафиксировать дату первого появления у новых товаров (если ещё не записана)
+    for name in new_names:
+        key = normalize_name(name)
+        if key not in dates:
+            dates[key] = today_str
+
+    # 2. Определить актуальные новинки + почистить устаревшие записи
+    fresh: set = set()
+    pruned: dict = {}
+    # Индекс присутствующих сейчас норм-имён — чтобы не хранить даты исчезнувших товаров вечно
+    present_keys = {normalize_name(p["name"]) for p in all_products}
+    for key, ds in dates.items():
+        try:
+            age = (today - date.fromisoformat(ds)).days
+        except (ValueError, TypeError):
+            continue  # битая дата — пропускаем (на следующем прогоне перезапишется)
+        # Чистка: очень старые ИЛИ исчезнувшие из каталога записи не храним
+        if age > NOVELTY_PRUNE_DAYS or key not in present_keys:
+            continue
+        pruned[key] = ds
+
+    # 3. Сопоставить актуальные даты с товарами (по норм-имени) → метка «новинка»
+    for p in all_products:
+        ds = pruned.get(normalize_name(p["name"]))
+        if not ds:
+            continue
+        try:
+            age = (today - date.fromisoformat(ds)).days
+        except (ValueError, TypeError):
+            continue
+        if age <= NOVELTY_WINDOW_DAYS:
+            fresh.add(p["name"])
+
+    if persist:
+        save_novelty_dates(pruned)
+
+    log.info(
+        "Авто-новинка: актуальных новинок %d (окно %d дн.), записей в файле %d",
+        len(fresh), NOVELTY_WINDOW_DAYS, len(pruned),
+    )
+    return fresh
 
 
 # ── Память правок: надёжность чтения (страховка от тихой потери фото/правок) ──
@@ -1260,8 +1355,12 @@ def main():
     else:
         log.info("structure_map.json не загружен — поля Подгруппа/Раздел будут пустыми")
 
-    # Подготовить строки для Google Sheet
-    rows = products_to_rows(all_products, badges, photo_data, new_names, url_index)
+    # Авто-новинка с истечением: метка «новинка» только в течение окна
+    # NOVELTY_WINDOW_DAYS с даты первого появления. В --dry-run состояние не пишем.
+    novelty_names = compute_novelty(all_products, new_names, persist=not args.dry_run)
+
+    # Подготовить строки для Google Sheet (метку «новинка» получают актуальные новинки)
+    rows = products_to_rows(all_products, badges, photo_data, novelty_names, url_index)
 
     # Статистика по группам
     groups = {}

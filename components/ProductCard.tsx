@@ -53,6 +53,13 @@ const BADGE_STYLES: Record<string, string> = {
   акция: "bg-orange-500 text-white",
 };
 
+// Подпись бейджа на карточке. Значение в данных — «новинка», но на карточке
+// показываем «NEW» (по просьбе владельца). Остальные метки — как есть.
+function badgeLabel(badge?: string): string | undefined {
+  if (!badge) return undefined;
+  return badge === "новинка" ? "NEW" : badge;
+}
+
 function PhotoPlaceholder({ iconSize = "w-6 h-6" }: { iconSize?: string }) {
   return (
     <div className="w-full h-full flex items-center justify-center bg-white">
@@ -156,7 +163,7 @@ export default function ProductCard({
                   <span
                     className={`absolute ${badgePos} font-medium rounded ${badgeCls} ${badgeStyle}`}
                   >
-                    {product.badge}
+                    {badgeLabel(product.badge)}
                   </span>
                 )}
                 {/* Угловая кнопка: стрелки (планшет) или сердечко (телефон/ПК) */}
@@ -172,7 +179,7 @@ export default function ProductCard({
             <div className={`flex flex-col ${bodyPad}`}>
               {!showPhotos && badgeStyle && (
                 <span className={`self-start font-medium rounded ${badgeCls} ${badgeStyle}`}>
-                  {product.badge}
+                  {badgeLabel(product.badge)}
                 </span>
               )}
               {/* Название показывается на лицевой стороне всегда.
@@ -284,7 +291,7 @@ export default function ProductCard({
         >
           {badgeStyle && (
             <span className={`absolute top-1.5 right-1.5 text-[10px] font-medium px-1.5 py-0.5 rounded ${badgeStyle}`}>
-              {product.badge}
+              {badgeLabel(product.badge)}
             </span>
           )}
 
