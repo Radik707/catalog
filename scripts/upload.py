@@ -602,6 +602,7 @@ def load_edit_memory() -> dict[str, dict[str, str]]:
 
     # --- Сборка словаря памяти ---
     mapping: dict[str, dict[str, str]] = {}
+    valid_rows = 0  # принятых строк-правок (для диагностики частичного чтения, см. лог ниже)
     min_cols = max(товар_i, тип_i, значение_i) + 1
     for row in values[1:]:
         if len(row) < min_cols:
@@ -626,13 +627,18 @@ def load_edit_memory() -> dict[str, dict[str, str]]:
         if key not in mapping:
             mapping[key] = {}
         mapping[key][raw_type] = raw_value
+        valid_rows += 1
 
     # Подушка для правок: резкое падение числа против эталона → подозрение на сбой, прерываем.
     _check_edit_memory_baseline(len(mapping))
     # Чтение успешно и не подозрительно — обновляем эталон для следующих запусков.
     _save_edit_memory_baseline(len(mapping))
 
-    log.info("Загружено правок из памяти: %d", len(mapping))
+    # Логируем И товары, И строки: расхождение/проседание помогает заметить частичное чтение.
+    log.info(
+        "Загружено правок из памяти: %d товаров / %d строк (всего строк на листе: %d)",
+        len(mapping), valid_rows, max(0, len(values) - 1),
+    )
     return mapping
 
 
