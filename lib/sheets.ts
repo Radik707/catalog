@@ -87,3 +87,28 @@ export async function getProducts(): Promise<Product[]> {
   // Применяется ПОСЛЕ fallback-блока восстановления section и сортировки.
   return products.filter((p) => !p.hidden);
 }
+
+/**
+ * Прочитать настройки сайта из вкладки «Настройки» (колонки A=ключ, B=значение).
+ * Управляются из админ-панели (раздел «Оформление»). Пример ключа: price_color.
+ * Graceful: при отсутствии вкладки / ошибке / отсутствии ключей → пустой объект {}.
+ */
+export async function getSiteSettings(): Promise<Record<string, string>> {
+  if (!SHEETS_ID || !API_KEY) return {};
+  const range = encodeURIComponent("Настройки!A2:B");
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEETS_ID}/values/${range}?key=${API_KEY}`;
+  try {
+    // no-store: смена настройки в админке должна отражаться на витрине сразу
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) return {}; // вкладки «Настройки» может ещё не быть — это норма
+    const data = await res.json();
+    const rows: string[][] = data.values || [];
+    const out: Record<string, string> = {};
+    for (const r of rows) {
+      if (r[0]) out[String(r[0]).trim()] = (r[1] ?? "").toString().trim();
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}

@@ -517,6 +517,61 @@ def admin_apply(token: str):
     )
 
 
+# ── Настройки оформления сайта ──
+
+# Белый список ключей цвета цены — синхронизирован с lib/priceColors.ts на фронте.
+ALLOWED_PRICE_COLORS = {"black", "violet", "green", "blue", "red"}
+
+
+@admin_bp.get("/<token>/settings")
+def admin_get_settings(token: str):
+    """Текущие настройки сайта (вкладка «Настройки») → JSON. Graceful: {} при ошибке."""
+    check_admin(token)
+    try:
+        rc, output = _run_py(SHEET_HELPER, "get_settings")
+    except Exception as e:  # noqa: BLE001
+        log.warning("admin /settings: ошибка запуска sheet_helper: %s", e)
+        return jsonify({})
+    if rc != 0:
+        log.warning("sheet_helper get_settings rc=%d: %s", rc, output.strip()[-200:])
+        return jsonify({})
+    try:
+        lines = [l.strip() for l in output.strip().splitlines() if l.strip().startswith("{")]
+        return jsonify(json.loads(lines[-1] if lines else "{}"))
+    except (json.JSONDecodeError, IndexError):
+        return jsonify({})
+
+
+@admin_bp.post("/<token>/setting")
+def admin_set_setting(token: str):
+    """Записать настройку оформления. Сейчас поддержан только price_color.
+
+    Принимает JSON: {key: "price_color", value: "violet"|...}.
+    Значение цвета проверяется по белому списку ALLOWED_PRICE_COLORS.
+    """
+    check_admin(token)
+
+    data = request.get_json(silent=True) or {}
+    key = str(data.get("key", "")).strip()
+    value = str(data.get("value", "")).strip()
+
+    if key != "price_color":
+        return jsonify(ok=False, message="Неизвестная настройка."), 400
+    if value not in ALLOWED_PRICE_COLORS:
+        return jsonify(ok=False, message="Недопустимый цвет."), 400
+
+    try:
+        rc, output = _run_py(SHEET_HELPER, "set_setting", "--key", key, "--value", value)
+    except Exception as e:  # noqa: BLE001
+        log.warning("admin /setting: ошибка запуска sheet_helper: %s", e)
+        return jsonify(ok=False, message="Не удалось сохранить. Попробуйте ещё раз."), 500
+    if rc != 0:
+        log.warning("sheet_helper set_setting rc=%d: %s", rc, output.strip()[-200:])
+        return jsonify(ok=False, message="Не удалось сохранить. Попробуйте ещё раз."), 500
+
+    return jsonify(ok=True, message="Цвет цены сохранён. На сайте обновится в течение минуты.")
+
+
 # ── Одностраничный HTML (PAGE) ──
 # Структура: Tabler CSS из CDN (только стили, без JS), mobile-first, адаптивный контейнер.
 # Один экран: сетка/список фото-карточек с инлайн-правкой группы, названия и фото.
@@ -861,6 +916,21 @@ PAGE = r"""<!doctype html>
   .pe-save   { background: #2563eb; color: #fff; border-color: #2563eb; }
   .pe-save:hover { background: #1d4ed8; }
   .pe-save:disabled { opacity: .6; cursor: default; }
+
+  /* ── Оформление: выбор цвета цены на карточках сайта ── */
+  .appearance-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
+                    padding: 10px 12px; margin-bottom: 12px; background: #fff;
+                    border: 1px solid #e5e7eb; border-radius: 12px; }
+  .appearance-label { font-size: 14px; color: #374151; font-weight: 600; }
+  .price-colors { display: flex; gap: 8px; flex-wrap: wrap; }
+  /* Кнопка-образец: цветной кружок + подпись, тач-цель ≥40px */
+  .pcolor { display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+            min-height: 40px; padding: 4px 12px 4px 8px; border-radius: 999px;
+            border: 2px solid #e5e7eb; background: #fff; font-size: 13px; color: #374151; }
+  .pcolor .dot { width: 18px; height: 18px; border-radius: 50%; flex-shrink: 0;
+                 border: 1px solid rgba(0,0,0,.1); }
+  /* Активный цвет — синяя обводка (как у других активных кнопок панели) */
+  .pcolor.active { border-color: #2563eb; background: #eff6ff; color: #1e40af; font-weight: 600; }
 </style>
 </head>
 <body>
@@ -911,6 +981,12 @@ PAGE = r"""<!doctype html>
         <button data-view="list">Список</button>
       </div>
     </div>
+  </div>
+
+  <!-- Оформление: цвет цены на карточках сайта (общая настройка) -->
+  <div class="appearance-bar">
+    <span class="appearance-label">Цвет цены на сайте</span>
+    <div id="price-colors" class="price-colors"></div>
   </div>
 
   <!-- Сетка/список карточек товаров -->
@@ -2068,10 +2144,65 @@ document.getElementById("search-input").addEventListener("input", () => {
   searchTimer = setTimeout(() => render(), 300);
 });
 
+/* ── Оформление: выбор цвета цены на карточках сайта ──
+   Палитра синхронизирована с lib/priceColors.ts на фронте. Текущее значение
+   тянем с сервера (вкладка «Настройки», ключ price_color), по клику сохраняем. */
+const PRICE_COLORS = [
+  { key: "violet", label: "Фиолетовый", hex: "#7c3aed" },
+  { key: "green",  label: "Зелёный",    hex: "#16a34a" },
+  { key: "blue",   label: "Синий",      hex: "#2563eb" },
+  { key: "red",    label: "Красный",    hex: "#dc2626" },
+  { key: "black",  label: "Чёрный",     hex: "#111827" },
+];
+let activePriceColor = "violet";  // дефолт совпадает с фронтом (DEFAULT_PRICE_COLOR)
+
+function renderPriceColors() {
+  const box = document.getElementById("price-colors");
+  box.innerHTML = "";
+  PRICE_COLORS.forEach(c => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "pcolor" + (c.key === activePriceColor ? " active" : "");
+    btn.innerHTML = '<span class="dot" style="background:' + c.hex + '"></span>' + esc(c.label);
+    btn.onclick = () => savePriceColor(c.key);
+    box.appendChild(btn);
+  });
+}
+
+async function savePriceColor(color) {
+  const prev = activePriceColor;
+  activePriceColor = color;           // оптимистично подсвечиваем
+  renderPriceColors();
+  const res = await apiCall("/" + TOKEN + "/setting", {
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ key: "price_color", value: color }),
+  });
+  if (res && res.ok) {
+    toast("ok", res.message || "Цвет цены сохранён.");
+  } else {
+    activePriceColor = prev;          // откат при ошибке
+    renderPriceColors();
+    toast("err", (res && res.message) || "Не удалось сохранить цвет.");
+  }
+}
+
+async function loadPriceColor() {
+  try {
+    const r = await fetch("/" + TOKEN + "/settings");
+    const s = await r.json();
+    if (s && typeof s.price_color === "string" && s.price_color) {
+      activePriceColor = s.price_color;
+    }
+  } catch (e) { /* офлайн/ошибка — остаёмся на дефолте */ }
+  renderPriceColors();
+}
+
 /* ── Инициализация ── */
 updateViewButtons();
 updateDensityUI();
 initPhotoEditor();   // привязать контролы редактора фото один раз
+renderPriceColors(); // мгновенно показать палитру (дефолт), затем уточнить с сервера
+loadPriceColor();
 loadProducts();
 </script>
 </body>

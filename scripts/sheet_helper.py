@@ -323,10 +323,63 @@ def append_edit(product_key: str, edit_type: str, value: str) -> None:
     log.info("Правка записана: %s | %s | %s", product_key, edit_type, value[:40])
 
 
+# ── Настройки сайта (вкладка «Настройки»: Ключ | Значение) ──
+
+# Белый список допустимых ключей настроек — защита от записи произвольных полей.
+ALLOWED_SETTINGS = {"price_color"}
+
+
+def load_settings() -> dict:
+    """Прочитать настройки сайта из вкладки «Настройки» → { ключ: значение }.
+
+    Graceful-fallback: нет вкладки / ошибка → пустой dict {}.
+    """
+    try:
+        ss = _get_spreadsheet()
+        values = ss.worksheet("Настройки").get_all_values()
+    except Exception:  # noqa: BLE001
+        return {}
+    out = {}
+    for row in values[1:]:  # пропускаем заголовок
+        if row and row[0]:
+            out[row[0].strip()] = (row[1].strip() if len(row) > 1 else "")
+    return out
+
+
+def set_setting(key: str, value: str) -> None:
+    """Записать настройку во вкладку «Настройки» (upsert по ключу в колонке A).
+
+    Создаёт вкладку с заголовком при WorksheetNotFound. Ключ — только из белого
+    списка ALLOWED_SETTINGS. При ошибке пробрасывает исключение (admin.py вернёт 500).
+    """
+    if key not in ALLOWED_SETTINGS:
+        raise ValueError(f"Недопустимый ключ настройки: {key!r}. Допустимые: {ALLOWED_SETTINGS}")
+
+    import gspread
+
+    ss = _get_spreadsheet()
+    try:
+        ws = ss.worksheet("Настройки")
+    except gspread.exceptions.WorksheetNotFound:
+        log.info("Вкладка «Настройки» не найдена — создаём с заголовком")
+        ws = ss.add_worksheet(title="Настройки", rows=100, cols=2)
+        ws.append_row(["Ключ", "Значение"])
+
+    # Ищем существующую строку с этим ключом → обновляем значение, иначе добавляем
+    col_a = ws.col_values(1)  # значения колонки A (ключи)
+    for idx, existing in enumerate(col_a, start=1):
+        if existing.strip() == key:
+            ws.update_cell(idx, 2, value)
+            log.info("Настройка обновлена: %s = %s", key, value)
+            return
+    ws.append_row([key, value])
+    log.info("Настройка добавлена: %s = %s", key, value)
+
+
 # ── Интерфейс командной строки (CLI) ──
 
 def main() -> None:
-    """Точка входа CLI: list / append_edit / normalize."""
+    """Точка входа CLI: list / append_edit / normalize / get_settings / set_setting."""
     # Загрузить переменные окружения из .env
     load_env()
 
@@ -335,8 +388,9 @@ def main() -> None:
     )
     parser.add_argument(
         "action",
-        choices=["list", "append_edit", "normalize"],
-        help="Действие: list — список товаров, append_edit — записать правку, normalize — нормализовать имя",
+        choices=["list", "append_edit", "normalize", "get_settings", "set_setting"],
+        help="Действие: list — товары, append_edit — правка, normalize — имя, "
+             "get_settings — настройки сайта (JSON), set_setting — записать настройку",
     )
     # Аргументы для append_edit
     parser.add_argument("--key", help="Нормализованный ключ товара (для append_edit)")
@@ -381,6 +435,24 @@ def main() -> None:
             print("Ошибка: --name обязателен для normalize", file=sys.stderr)
             sys.exit(1)
         print(normalize_name(args.name))
+
+    elif args.action == "get_settings":
+        # Настройки сайта → JSON в stdout; graceful: {} при любой ошибке
+        sys.stdout.buffer.write(json.dumps(load_settings(), ensure_ascii=False).encode("utf-8") + b"\n")
+
+    elif args.action == "set_setting":
+        # Записать настройку: --key <ключ> --value <значение>
+        if not args.key:
+            print("Ошибка: --key обязателен для set_setting", file=sys.stderr)
+            sys.exit(1)
+        if args.value is None:
+            print("Ошибка: --value обязателен для set_setting", file=sys.stderr)
+            sys.exit(1)
+        try:
+            set_setting(args.key, args.value)
+        except Exception as e:
+            print(f"Ошибка записи настройки: {e}", file=sys.stderr)
+            sys.exit(1)
 
 
 if __name__ == "__main__":

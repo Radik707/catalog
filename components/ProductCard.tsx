@@ -5,6 +5,7 @@ import Image from "next/image";
 import { Product } from "@/lib/types";
 import { getPackaging } from "@/lib/packaging";
 import { PriceForm, effectivePrice } from "@/lib/pricing";
+import { priceColorClass } from "@/lib/priceColors";
 import AddToCartButton from "./AddToCartButton";
 import CardCornerButton from "./CardCornerButton";
 
@@ -45,6 +46,8 @@ interface ProductCardProps {
   presentationSizes?: PresentationSizes;
   // Форма цен: "1" → +5% на товары Ефимовой; "2" → базовые цены (по умолчанию).
   priceForm?: PriceForm;
+  // Цвет цены на карточке (ключ из палитры priceColors) — настройка сайта из админки.
+  priceColor?: string;
 }
 
 const BADGE_STYLES: Record<string, string> = {
@@ -88,10 +91,13 @@ export default function ProductCard({
   onPhotoOpen,
   presentationSizes,
   priceForm = "2",
+  priceColor,
 }: ProductCardProps) {
   const [flipped, setFlipped] = useState(false);
   // Цена с учётом выбранной формы (для Ефимовой при форме «1» — +5%)
   const displayPrice = effectivePrice(product, priceForm);
+  // Класс цвета цены из настройки сайта (по умолчанию — фиолетовый)
+  const priceCol = priceColorClass(priceColor);
   // Флаг ошибки загрузки фото (D-06): при офлайн и незакэшированном фото
   // браузер не может загрузить изображение — показываем иконку-заглушку.
   const [imgError, setImgError] = useState(false);
@@ -213,7 +219,7 @@ export default function ProductCard({
               <div className="flex items-end justify-between gap-1">
                 {showPrices ? (
                   <div className="min-w-0">
-                    <p className={`${priceCls} font-bold text-gray-900 leading-none whitespace-nowrap`}>
+                    <p className={`${priceCls} font-bold ${priceCol} leading-none whitespace-nowrap`}>
                       {displayPrice.toFixed(2)} ₽
                     </p>
                     {packaging && (
@@ -267,7 +273,7 @@ export default function ProductCard({
             {/* Цена + корзина (на обороте цена видна всегда) */}
             <div className="flex items-end justify-between gap-1">
               <div className="min-w-0">
-                <p className={`${priceCls} font-bold text-gray-900 leading-none whitespace-nowrap`}>
+                <p className={`${priceCls} font-bold ${priceCol} leading-none whitespace-nowrap`}>
                   {displayPrice.toFixed(2)} ₽
                 </p>
                 {packaging && (
@@ -365,7 +371,7 @@ export default function ProductCard({
           <div className="flex items-center gap-3 flex-shrink-0">
             {showPrices && (
               <div className="text-right">
-                <span className="text-sm font-bold text-gray-900 whitespace-nowrap">
+                <span className={`text-sm font-bold ${priceCol} whitespace-nowrap`}>
                   {displayPrice.toFixed(2)} ₽
                 </span>
                 {packaging && (
@@ -408,7 +414,7 @@ export default function ProductCard({
           {/* Цена + корзина */}
           <div className="flex items-end justify-between gap-2">
             <div className="min-w-0">
-              <p className="text-sm font-bold text-gray-900 leading-none whitespace-nowrap">
+              <p className={`text-sm font-bold ${priceCol} leading-none whitespace-nowrap`}>
                 {displayPrice.toFixed(2)} ₽
               </p>
               {packaging && (

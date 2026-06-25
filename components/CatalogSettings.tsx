@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { PresentationSizes } from "./ProductCard";
 import { PriceForm } from "@/lib/pricing";
+import { DEFAULT_PRICE_COLOR } from "@/lib/priceColors";
 
 // Общие настройки отображения каталога. Живут в контексте, чтобы
 // кнопка-шестерёнка в шапке и сам каталог делили одно состояние.
@@ -68,6 +69,7 @@ interface CatalogSettings {
   setShowPrices: (v: boolean) => void;
   priceForm: PriceForm; // "2" — базовые цены; "1" — +5% на товары Ефимовой
   setPriceForm: (v: PriceForm) => void;
+  priceColor: string; // цвет цены на карточках — настройка сайта из админ-панели
   panelOpen: boolean; // открыта ли выпадающая панель настроек
   setPanelOpen: (v: boolean) => void;
 }
@@ -92,6 +94,9 @@ export default function CatalogSettingsProvider({
   const [showPrices, setShowPrices] = useState(true);
   // Форма цен: по умолчанию "2" (базовые цены как сейчас)
   const [priceForm, setPriceForm] = useState<PriceForm>("2");
+  // Цвет цены — настройка сайта (управляется в админ-панели). По умолчанию —
+  // фиолетовый; реальное значение подтянем с сервера, кэш в localStorage для офлайна.
+  const [priceColor, setPriceColor] = useState<string>(DEFAULT_PRICE_COLOR);
   const [panelOpen, setPanelOpen] = useState(false);
 
   // Загрузка сохранённых настроек из localStorage.
@@ -114,6 +119,21 @@ export default function CatalogSettingsProvider({
 
     const pf = localStorage.getItem("priceForm");
     if (pf === "1" || pf === "2") setPriceForm(pf);
+
+    // Цвет цены: сначала из кэша (мгновенно, работает офлайн), затем обновляем с сервера
+    const cachedColor = localStorage.getItem("priceColor");
+    if (cachedColor) setPriceColor(cachedColor);
+    fetch("/api/settings")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((s) => {
+        if (s && typeof s.price_color === "string" && s.price_color) {
+          setPriceColor(s.price_color);
+          localStorage.setItem("priceColor", s.price_color);
+        }
+      })
+      .catch(() => {
+        /* офлайн / ошибка — остаёмся на кэше или значении по умолчанию */
+      });
   }, []);
 
   // Обёртки сеттеров с сохранением в localStorage.
@@ -151,6 +171,7 @@ export default function CatalogSettingsProvider({
         setShowPrices: updateShowPrices,
         priceForm,
         setPriceForm: updatePriceForm,
+        priceColor,
         panelOpen,
         setPanelOpen,
       }}
