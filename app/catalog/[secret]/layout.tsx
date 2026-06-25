@@ -8,8 +8,8 @@ import { NavProvider } from "@/components/NavProvider";
 import CatalogNav from "@/components/CatalogNav";
 import SubgroupFlyout from "@/components/SubgroupFlyout";
 import OfflineBar from "@/components/OfflineBar";
-// Иконка-сердечко «Избранное» — заняла место кнопки ↻ в шапке
-import FavoritesIcon from "@/components/FavoritesIcon";
+// Главная кнопка шапки: планшет → ↻ «Обновить», телефон/ПК → ♥ «Избранное»
+import HeaderPrimaryAction from "@/components/HeaderPrimaryAction";
 // Провайдер единственного экземпляра useCatalogSync — шарится между SyncButton и CatalogView
 import CatalogSyncProvider from "@/components/CatalogSyncProvider";
 // Провайдер состояния установки PWA — шарится между баннером и кнопкой настроек (D-06)
@@ -52,8 +52,8 @@ export default async function CatalogLayout({
               <div className="flex items-center justify-between px-2 h-12 gap-2 max-w-screen-2xl mx-auto w-full">
                 <CatalogNav navData={navData} secret={params.secret} />
                 <div className="flex items-center gap-1 shrink-0">
-                  {/* Сердечко «Избранное» — слева от шестерёнки (кнопка ↻ переехала в панель настроек) */}
-                  <FavoritesIcon secret={params.secret} />
+                  {/* Планшет → ↻ «Обновить» (для торговых); телефон/ПК → ♥ «Избранное» */}
+                  <HeaderPrimaryAction secret={params.secret} />
                   <SettingsButton />
                   <CartIcon secret={params.secret} />
                 </div>
