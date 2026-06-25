@@ -9,6 +9,9 @@ out/
 .env
 .env.local
 .env*.local
+# резервные копии .env (могут содержать секреты — никогда не коммитить)
+*.env.bak*
+.env.bak*
 
 # credentials
 credentials.json
