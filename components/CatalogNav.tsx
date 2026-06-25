@@ -10,7 +10,12 @@ const MODE_LABELS: Record<NavMode, string> = {
   catalog: "Каталог",
   hit: "★ Хит",
   new: "✦ Новинка",
+  fav: "♥ Избранное",
 };
+
+// Режимы в выпадающем переключателе. «Избранное» (fav) сюда НЕ входит —
+// оно включается отдельной иконкой-сердечком в шапке.
+const DROPDOWN_MODES: NavMode[] = ["catalog", "hit", "new"];
 
 // Навигация в синей шапке:
 // 1) сворачивающийся переключатель режима (Каталог/Хит/Новинка),
@@ -41,7 +46,7 @@ export default function CatalogNav({ navData, secret }: { navData: SectionNav[];
       {expanded ? (
         // Развёрнутый список из трёх режимов — выбрал, и он схлопнется
         <div className="flex gap-1 shrink-0">
-          {(Object.keys(MODE_LABELS) as NavMode[]).map((m) => (
+          {DROPDOWN_MODES.map((m) => (
             <button
               key={m}
               onClick={() => pickMode(m)}

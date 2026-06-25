@@ -5,6 +5,7 @@ import Image from "next/image";
 import { Product } from "@/lib/types";
 import { getPackaging } from "@/lib/packaging";
 import AddToCartButton from "./AddToCartButton";
+import CardCornerButton from "./CardCornerButton";
 
 // Набор размеров для режима презентации — меняется вместе с плотностью сетки,
 // чтобы шрифт и цена уменьшались вслед за фото (пропорциональная карточка).
@@ -127,17 +128,10 @@ export default function ProductCard({
             {/* Фото — только если showPhotos. Тап по фото открывает
                 просмотрщик; если фото нет — клик уходит наверх и переворачивает карточку. */}
             {showPhotos && (
-              <div
-                className="relative bg-white w-full aspect-square"
-                onClick={
-                  product.imageUrl
-                    ? (e) => {
-                        e.stopPropagation();
-                        onPhotoOpen?.();
-                      }
-                    : undefined
-                }
-              >
+              // Тап по фото больше НЕ открывает Lightbox — клик уходит наверх и
+              // переворачивает карточку. Полноэкранный просмотр — через угловую
+              // кнопку-стрелки (планшет); на телефоне/ПК в углу — сердечко избранного.
+              <div className="relative bg-white w-full aspect-square">
                 {product.imageUrl && !imgError ? (
                   // unoptimized: браузер запрашивает прямой res.cloudinary.com/... URL
                   // (подход 1) — совпадает с matcher SW и prefetch, кэш работает корректно.
@@ -160,6 +154,12 @@ export default function ProductCard({
                     {product.badge}
                   </span>
                 )}
+                {/* Угловая кнопка: стрелки (планшет) или сердечко (телефон/ПК) */}
+                <CardCornerButton
+                  productId={product.id}
+                  onPhotoOpen={onPhotoOpen}
+                  canOpenPhoto={!!product.imageUrl}
+                />
               </div>
             )}
 
@@ -278,15 +278,12 @@ export default function ProductCard({
           )}
 
           {/* Миниатюра — только в режиме «С фото».
-              Есть фото → открыть просмотрщик; нет фото → перевернуть карточку. */}
+              Тап по миниатюре переворачивает карточку; полноэкранный просмотр —
+              угловой кнопкой-стрелками (планшет), на телефоне/ПК — сердечко. */}
           {showPhotos && (
-            <button
-              onClick={() => {
-                if (product.imageUrl) onPhotoOpen?.();
-                else setFlipped(true);
-              }}
-              className="flex-shrink-0 w-14 h-14 rounded overflow-hidden border border-gray-100 bg-white focus:outline-none"
-              aria-label={product.imageUrl ? "Открыть фото" : "Показать описание товара"}
+            <div
+              onClick={() => setFlipped(true)}
+              className="relative flex-shrink-0 w-14 h-14 rounded overflow-hidden border border-gray-100 bg-white cursor-pointer"
             >
               {product.imageUrl && !imgError ? (
                 // unoptimized: прямой Cloudinary URL — тот же, что ловит SW-matcher.
@@ -304,7 +301,13 @@ export default function ProductCard({
                 // Заглушка: нет фото ИЛИ фото не загрузилось (D-06 — офлайн без кэша)
                 <PhotoPlaceholder />
               )}
-            </button>
+              <CardCornerButton
+                productId={product.id}
+                onPhotoOpen={onPhotoOpen}
+                canOpenPhoto={!!product.imageUrl}
+                size="sm"
+              />
+            </div>
           )}
 
           {/* Название + мета — клик открывает флип */}

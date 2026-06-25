@@ -10,6 +10,8 @@ import { useCatalogSettings, PRESENTATION_PRESETS } from "./CatalogSettings";
 import { useNav, NavMode } from "./NavProvider";
 // Единый экземпляр sync из провайдера — разделяется с кнопкой ↻ в шапке (план 02)
 import { useCatalogSyncContext } from "@/components/CatalogSyncProvider";
+// Избранное клиента — для режима «fav» (фильтр только избранных товаров)
+import { useFavoritesContext } from "@/components/FavoritesProvider";
 
 interface CatalogViewProps {
   // products теперь опциональный: при отсутствии данные берутся из useCatalogSync (офлайн-режим)
@@ -23,6 +25,8 @@ export default function CatalogView({ products: productsProp, initialMode }: Cat
   const { viewMode, gridPreset, showPhotos, showPrices } = useCatalogSettings();
   // Состояние навигации (режим, раздел, подгруппа) — из общего контекста
   const { mode, section, subgroup, setMode } = useNav();
+  // Избранное — для режима «fav»
+  const { isFavorite } = useFavoritesContext();
 
   const [search, setSearch] = useState("");
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
@@ -61,10 +65,11 @@ export default function CatalogView({ products: productsProp, initialMode }: Cat
       if (p.stock <= 1) return false;
       if (mode === "hit" && p.badge !== "хит") return false;
       if (mode === "new" && p.badge !== "новинка") return false;
+      if (mode === "fav" && !isFavorite(p.id)) return false;
       if (q && !p.name.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [products, search, isFlat, mode]);
+  }, [products, search, isFlat, mode, isFavorite]);
 
   // Группировка раздел → подгруппа → товары (режим «Каталог»).
   // Учитывает выбранные раздел и подгруппу (фильтр). «Новинки» — первым разделом.
@@ -207,8 +212,19 @@ export default function CatalogView({ products: productsProp, initialMode }: Cat
             flatFiltered.map(renderCard)
           ) : (
             <div className="px-4 py-12 text-center text-gray-400">
-              <p className="text-lg">Ничего не найдено</p>
-              <p className="text-sm mt-1">Попробуйте изменить фильтр или поиск</p>
+              {mode === "fav" && !search.trim() ? (
+                <>
+                  <p className="text-lg">В избранном пока пусто</p>
+                  <p className="text-sm mt-1">
+                    Нажмите ♥ на карточке товара, чтобы добавить его сюда
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-lg">Ничего не найдено</p>
+                  <p className="text-sm mt-1">Попробуйте изменить фильтр или поиск</p>
+                </>
+              )}
             </div>
           )}
         </div>

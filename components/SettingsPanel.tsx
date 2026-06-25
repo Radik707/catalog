@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   useCatalogSettings,
   PRESENTATION_PRESETS,
@@ -8,6 +9,8 @@ import {
 } from "./CatalogSettings";
 // Контекст установки PWA — для пункта «Установить приложение» (D-05, PWA-02)
 import { useInstallPromptContext } from "@/components/InstallPromptProvider";
+// Синхронизация каталога — кнопка ↻ переехала из шапки сюда, в панель настроек
+import { useCatalogSyncContext } from "@/components/CatalogSyncProvider";
 
 // Выпадающая панель настроек отображения. Появляется под синей шапкой
 // при нажатии на шестерёнку, закрывается тапом мимо или повторным нажатием.
@@ -121,6 +124,9 @@ export default function SettingsPanel() {
             или Chrome на «паузе» после отказа) — покажет инструкцию-шторку про
             меню браузера. Так у пользователя всегда есть рабочий путь установки.
           */}
+          {/* Обновление каталога — переехало из шапки (кнопка ↻) сюда */}
+          <PanelSyncButton />
+
           {!isStandalone && (platform === "ios" || platform === "android") && (
             <button
               onClick={() => {
@@ -139,5 +145,61 @@ export default function SettingsPanel() {
         </div>
       </div>
     </>
+  );
+}
+
+// Кнопка «Обновить каталог» внутри панели настроек.
+// Логика та же, что у бывшей кнопки ↻ в шапке: refetch + индикатор busy/done.
+// Офлайн — кнопка неактивна (нечего тянуть без сети).
+function PanelSyncButton() {
+  const { refetch, isOnline } = useCatalogSyncContext();
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+
+  const handleRefresh = async () => {
+    if (!isOnline || busy) return;
+    setBusy(true);
+    try {
+      await refetch();
+    } finally {
+      setBusy(false);
+      setDone(true);
+      setTimeout(() => setDone(false), 1500);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleRefresh}
+      disabled={!isOnline || busy}
+      title={!isOnline ? "Нужен интернет для обновления" : "Обновить каталог"}
+      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+        !isOnline
+          ? "border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed"
+          : "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:border-blue-300"
+      }`}
+    >
+      {/* Иконка: галочка после успеха, иначе круговая стрелка (вращается при busy) */}
+      {done ? (
+        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+        </svg>
+      ) : (
+        <svg
+          className={`h-4 w-4${busy ? " animate-spin" : ""}`}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={1.8}
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"
+          />
+        </svg>
+      )}
+      <span>{busy ? "Обновляем…" : done ? "Готово" : "Обновить каталог"}</span>
+    </button>
   );
 }

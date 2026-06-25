@@ -7,8 +7,8 @@
 
 import { createContext, useContext, useState, useCallback, ReactNode } from "react";
 
-// Режим витрины: обычный каталог, только хиты, только новинки
-export type NavMode = "catalog" | "hit" | "new";
+// Режим витрины: обычный каталог, только хиты, только новинки, только избранное
+export type NavMode = "catalog" | "hit" | "new" | "fav";
 
 interface NavState {
   mode: NavMode;
