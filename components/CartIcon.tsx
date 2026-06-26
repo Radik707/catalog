@@ -3,8 +3,9 @@
 import { useCartContext } from './CartProvider';
 
 export default function CartIcon({ secret }: { secret: string }) {
-  const { totalItems } = useCartContext();
-  const count = totalItems;
+  const { items } = useCartContext();
+  // Бейдж показывает число ПОЗИЦИЙ (разных товаров), а не сумму количеств.
+  const count = items.length;
   return (
     <a href={`/catalog/${secret}/cart`} className="relative p-2">
       <svg
