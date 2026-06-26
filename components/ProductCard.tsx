@@ -205,7 +205,7 @@ export default function ProductCard({
                   На телефоне — полностью, без сокращений (line-clamp-none); карточка
                   растёт по тексту. На планшете/ПК — в две строки (как раньше). */}
               <p
-                className={`${phoneNameCls} ${smNameCls} font-medium text-gray-900 leading-tight overflow-hidden line-clamp-3 sm:line-clamp-2 h-[3.4rem] sm:h-auto`}
+                className={`${phoneNameCls} ${smNameCls} font-medium text-gray-900 leading-tight overflow-hidden line-clamp-3 sm:line-clamp-2 min-h-[2.2rem] sm:min-h-0`}
               >
                 {product.name}
               </p>
