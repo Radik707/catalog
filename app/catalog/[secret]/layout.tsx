@@ -1,6 +1,9 @@
 import CartIcon from "@/components/CartIcon";
 // Объединённая раскрывающаяся иконка связи: основная → Telegram + MAX
 import ContactFab from "@/components/ContactFab";
+// Провайдер роли (client/sales) — монтируется снаружи CatalogSettingsProvider,
+// чтобы CatalogSettings мог читать роль для дефолта gridPreset (D-10).
+import RoleProvider from "@/lib/useRole";
 import CatalogSettingsProvider from "@/components/CatalogSettings";
 import SettingsButton from "@/components/SettingsButton";
 import SettingsPanel from "@/components/SettingsPanel";
@@ -32,7 +35,8 @@ export default async function CatalogLayout({
   const navData = buildNavData(products);
 
   return (
-    <CatalogSettingsProvider>
+    <RoleProvider>
+      <CatalogSettingsProvider>
       <NavProvider>
         {/*
           CatalogSyncProvider обёртывает всё дерево (шапку + main), чтобы SyncButton
@@ -79,6 +83,7 @@ export default async function CatalogLayout({
           </InstallPromptProvider>
         </CatalogSyncProvider>
       </NavProvider>
-    </CatalogSettingsProvider>
+      </CatalogSettingsProvider>
+    </RoleProvider>
   );
 }
