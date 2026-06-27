@@ -6,8 +6,10 @@ import { useFavoritesContext } from "@/components/FavoritesProvider";
 // Кнопка в правом верхнем углу фото карточки.
 //   Агент (sales) + есть фото → стрелки «развернуть фото» (открывает Lightbox).
 //   Клиент (client)           → сердечко «в избранное» (toggle).
-// Решение по роли — из useRole; ready не нужен: до монтирования дефолт client
-// = сердечко, что является корректным безопасным поведением при гидратации.
+// Решение по роли — из useRole. До готовности роли (ready) держим место пустым
+// (тот же приём, что в HeaderPrimaryAction): иначе у агента на каждой загрузке
+// по всем карточкам сначала рисуется сердечко-дефолт, затем меняется на стрелки —
+// заметный «прыжок» иконок на витрине из сотен карточек.
 interface CardCornerButtonProps {
   productId: string;
   // Открыть полноэкранный просмотрщик (только при наличии фото) — для агента.
@@ -25,7 +27,7 @@ export default function CardCornerButton({
   canOpenPhoto = false,
   size = "md",
 }: CardCornerButtonProps) {
-  const { role } = useRole();
+  const { role, ready } = useRole();
   const { isFavorite, toggleFavorite } = useFavoritesContext();
 
   const box =
@@ -33,6 +35,11 @@ export default function CardCornerButton({
       ? "h-7 w-7"
       : "h-8 w-8";
   const icon = size === "sm" ? "h-4 w-4" : "h-5 w-5";
+
+  // ── До готовности роли: пустое место того же размера (без мелькания иконки) ──
+  if (!ready) {
+    return <div className={`absolute top-1 right-1 z-10 ${box}`} aria-hidden />;
+  }
 
   // ── Агент (sales) с фото: кнопка раскрытия фото ──
   if (role === "sales" && canOpenPhoto) {
