@@ -6,6 +6,9 @@ import { useCatalogSettings } from "@/components/CatalogSettings";
 import { effectivePrice } from "@/lib/pricing";
 import { useOnlineStatus } from "@/lib/useOnlineStatus";
 import QuantityInput from "@/components/QuantityInput";
+// История заказов — запись снимка при отправке (план 16-02)
+import { useOrderHistory } from "@/lib/useOrderHistory";
+import type { OrderHistoryEntry, OrderHistoryItem } from "@/lib/types";
 
 const TELEGRAM_USERNAME = "ZhukOleh";
 // Параметры MAX: ник бота (для ссылки) и эндпоинт приёма заказа на daniella.
@@ -55,6 +58,13 @@ export default function CartPage({
         >
           Вернуться в каталог
         </a>
+        {/* Ссылка на историю заказов видна и при пустой корзине (D-05) */}
+        <a
+          href={`/catalog/${params.secret}/orders`}
+          className="mt-2 text-blue-500 text-sm active:opacity-70"
+        >
+          Мои отправленные заказы →
+        </a>
       </div>
     );
   }
@@ -73,16 +83,25 @@ export default function CartPage({
         <h2 className="font-semibold text-gray-900 flex-1 text-center">
           {items.length} {pluralItems(items.length)}
         </h2>
-        <button
-          onClick={() => {
-            if (confirm("Вы действительно хотите очистить ВСЮ корзину?")) {
-              clearCart();
-            }
-          }}
-          className="text-xs text-red-500 font-medium active:opacity-70"
-        >
-          Очистить
-        </button>
+        <div className="flex items-center gap-3 flex-shrink-0">
+          {/* Ссылка на историю заказов из заполненной корзины (D-05) */}
+          <a
+            href={`/catalog/${params.secret}/orders`}
+            className="text-xs text-blue-500 font-medium active:opacity-70"
+          >
+            Заказы →
+          </a>
+          <button
+            onClick={() => {
+              if (confirm("Вы действительно хотите очистить ВСЮ корзину?")) {
+                clearCart();
+              }
+            }}
+            className="text-xs text-red-500 font-medium active:opacity-70"
+          >
+            Очистить
+          </button>
+        </div>
       </div>
 
       {/* Список товаров */}
@@ -179,6 +198,28 @@ export default function CartPage({
   );
 }
 
+/* ---------- Хелпер: сборка снимка заказа для истории ---------- */
+// Строит массив OrderHistoryItem из корзины с ценами через effectivePrice (D-07, D-08).
+// Снимок сохраняет «цену, которую видел клиент», совпадающую с текстом заказа (D-08).
+function buildOrderSnapshot(
+  items: Array<{ product: Parameters<typeof effectivePrice>[0]; quantity: number }>,
+  priceForm: Parameters<typeof effectivePrice>[1]
+): { snapshot: OrderHistoryItem[]; total: number } {
+  const snapshot: OrderHistoryItem[] = items.map(({ product, quantity }) => ({
+    id: product.id,
+    name: product.name,
+    quantity,
+    priceAtOrder: effectivePrice(product, priceForm), // цена «как видел клиент» (D-08)
+    unit: 'шт',
+    imageUrl: product.imageUrl,
+  }));
+  const total = snapshot.reduce(
+    (sum, item) => sum + item.priceAtOrder * item.quantity,
+    0
+  );
+  return { snapshot, total };
+}
+
 /* ---------- Кнопка Telegram ---------- */
 function TelegramButton() {
   const { items } = useCartContext();
@@ -187,6 +228,8 @@ function TelegramButton() {
   // Хук состояния сети — true при наличии подключения, false в офлайне.
   // Обновляется автоматически по событиям online/offline без перезагрузки страницы.
   const isOnline = useOnlineStatus();
+  // Хук истории заказов — addEntry записывает снимок при отправке (D-01, D-02)
+  const { addEntry } = useOrderHistory();
 
   // Сборка текста заказа и открытие Telegram (с учётом формы цен)
   const handleSend = () => {
@@ -207,6 +250,20 @@ function TelegramButton() {
 
     const url = `https://t.me/${TELEGRAM_USERNAME}?text=${encodeURIComponent(text)}`;
     window.open(url, "_blank");
+
+    // Записываем снимок заказа в историю ПОСЛЕ открытия Telegram (D-01, D-02, D-03).
+    // clearCart НЕ вызывается — корзина остаётся (D-03).
+    const { snapshot, total } = buildOrderSnapshot(items, priceForm);
+    const entry: OrderHistoryEntry = {
+      id: typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : Date.now().toString(),
+      items: snapshot,
+      total,
+      createdAt: new Date().toISOString(),
+      channel: 'telegram', // канал по нажатой кнопке (D-02)
+    };
+    addEntry(entry);
   };
 
   return (
@@ -239,6 +296,8 @@ function MaxOrderButton() {
   const isOnline = useOnlineStatus();
   // Локальное состояние «идёт отправка» — пока ждём короткий id от сервера.
   const [sending, setSending] = useState(false);
+  // Хук истории заказов — addEntry записывает снимок при отправке (D-01, D-02)
+  const { addEntry } = useOrderHistory();
 
   // Фича выключена, если не заданы ник бота и эндпоинт приёма заказа.
   if (!MAX_BOT || !MAX_ORDER_URL) return null;
@@ -263,6 +322,22 @@ function MaxOrderButton() {
     const catalogUrl =
       window.location.origin +
       window.location.pathname.replace(/\/cart\/?$/, "");
+
+    // Строим снимок заказа один раз до ветвления try/catch (D-01, D-02, D-03).
+    // Запись в историю происходит ровно один раз вне зависимости от успеха fetch.
+    // clearCart НЕ вызывается — корзина остаётся (D-03).
+    const { snapshot, total } = buildOrderSnapshot(items, priceForm);
+    const historyEntry: OrderHistoryEntry = {
+      id: typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : Date.now().toString(),
+      items: snapshot,
+      total,
+      createdAt: new Date().toISOString(),
+      channel: 'max', // канал по нажатой кнопке (D-02)
+    };
+    addEntry(historyEntry);
+
     setSending(true);
     try {
       // 1. Кладём заказ на сервер (daniella) и получаем короткий id.
