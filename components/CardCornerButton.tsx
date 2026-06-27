@@ -1,18 +1,18 @@
 "use client";
 
-import { useDeviceClass } from "@/lib/useDeviceClass";
+import { useRole } from "@/lib/useRole";
 import { useFavoritesContext } from "@/components/FavoritesProvider";
 
 // Кнопка в правом верхнем углу фото карточки.
-//   Планшет (сенсор + ширина ≥768px) → стрелки «развернуть фото» (открывает Lightbox).
-//   Телефон/ПК                       → сердечко «в избранное» (toggle).
-// Решение по устройству — из useDeviceClass; до готовности хука рисуем сердечко
-// (телефонный сценарий — основной для клиента).
+//   Агент (sales) + есть фото → стрелки «развернуть фото» (открывает Lightbox).
+//   Клиент (client)           → сердечко «в избранное» (toggle).
+// Решение по роли — из useRole; ready не нужен: до монтирования дефолт client
+// = сердечко, что является корректным безопасным поведением при гидратации.
 interface CardCornerButtonProps {
   productId: string;
-  // Открыть полноэкранный просмотрщик (только при наличии фото) — для планшета.
+  // Открыть полноэкранный просмотрщик (только при наличии фото) — для агента.
   onPhotoOpen?: () => void;
-  // Есть ли что разворачивать. На планшете без фото показываем сердечко,
+  // Есть ли что разворачивать. У агента без фото показываем сердечко,
   // чтобы избранное оставалось доступным (разворачивать нечего).
   canOpenPhoto?: boolean;
   // Размер кнопки: компактный для миниатюр списка.
@@ -25,7 +25,7 @@ export default function CardCornerButton({
   canOpenPhoto = false,
   size = "md",
 }: CardCornerButtonProps) {
-  const { isTabletLike } = useDeviceClass();
+  const { role } = useRole();
   const { isFavorite, toggleFavorite } = useFavoritesContext();
 
   const box =
@@ -34,8 +34,8 @@ export default function CardCornerButton({
       : "h-8 w-8";
   const icon = size === "sm" ? "h-4 w-4" : "h-5 w-5";
 
-  // ── Планшет с фото: кнопка раскрытия фото ──
-  if (isTabletLike && canOpenPhoto) {
+  // ── Агент (sales) с фото: кнопка раскрытия фото ──
+  if (role === "sales" && canOpenPhoto) {
     return (
       <button
         type="button"
@@ -58,7 +58,7 @@ export default function CardCornerButton({
     );
   }
 
-  // ── Телефон/ПК: сердечко избранного ──
+  // ── Клиент: сердечко избранного ──
   const fav = isFavorite(productId);
   return (
     <button
