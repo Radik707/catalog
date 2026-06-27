@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.3
-milestone_name: Оффлайн-режим (PWA)
-status: Awaiting next milestone
-last_updated: "2026-06-13T19:03:57.873Z"
-last_activity: 2026-06-13 — Milestone v1.3 completed and archived
+milestone: v1.4
+milestone_name: Фундамент разделения аудиторий
+status: planning
+last_updated: "2026-06-27T07:15:10.258Z"
+last_activity: 2026-06-27
 progress:
-  total_phases: 7
-  completed_phases: 5
-  total_plans: 12
-  completed_plans: 12
-  percent: 71
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Состояние проекта
@@ -234,10 +234,10 @@ progress:
 
 ## Current Position
 
-Phase: Milestone v1.3 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-06-13 — Milestone v1.3 completed and archived
+Status: Defining requirements
+Last activity: 2026-06-27 — Milestone v1.4 started
 
 ## Operator Next Steps
 
