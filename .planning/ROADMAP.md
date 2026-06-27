@@ -302,7 +302,7 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 15-01-PLAN.md — Ядро роли: lib/useRole.ts (контекст+persist+SSR-safe ready, дефолт client), монтаж RoleProvider в layout, переключатель «Клиент | Агент» в настройках (ROLE-01, ROLE-02, ROLE-04)
+- [x] 15-01-PLAN.md — Ядро роли: lib/useRole.ts (контекст+persist+SSR-safe ready, дефолт client), монтаж RoleProvider в layout, переключатель «Клиент | Агент» в настройках (ROLE-01, ROLE-02, ROLE-04)
 
 **Wave 2** *(blocked on Wave 1)*
 
@@ -370,7 +370,7 @@ Plans:
 | 12. Офлайн-UX (индикаторы и корзина) | v1.3 | 2/2 | Complete    | 2026-06-12 |
 | 13. Синхронизация фото | v1.3 | 2/2 | Complete (⏸ iPhone-UAT отложена) | 2026-06-13 |
 | 14. Install Prompt | v1.3 | 3/3 | Complete    | 2026-06-13 |
-| 15. Роль «Торговый / Клиент» | v1.4 | 0/2 | Planned | — |
+| 15. Роль «Торговый / Клиент» | v1.4 | 1/2 | In Progress|  |
 | 16. Локальная история заказов | v1.4 | 0/? | Not started | — |
 | 17. Сортировка + стикеры акций | v1.4 | 0/? | Not started | — |
 
