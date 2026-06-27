@@ -84,12 +84,13 @@ export default function CartPage({
           {items.length} {pluralItems(items.length)}
         </h2>
         <div className="flex items-center gap-3 flex-shrink-0">
-          {/* Ссылка на историю заказов из заполненной корзины (D-05) */}
+          {/* Ссылка на историю заказов из заполненной корзины (D-05).
+              Овальная «таблетка» с бирюзовым фоном — выделяем как отдельный вход в историю. */}
           <a
             href={`/catalog/${params.secret}/orders`}
-            className="text-xs text-blue-500 font-medium active:opacity-70"
+            className="text-xs font-medium text-white bg-teal-500 rounded-full px-3 py-1 active:opacity-70 whitespace-nowrap"
           >
-            Заказы →
+            История заказов
           </a>
           <button
             onClick={() => {
