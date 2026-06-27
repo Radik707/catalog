@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Фундамент разделения аудиторий
 status: planning
-last_updated: "2026-06-27T10:00:00.000Z"
-last_activity: 2026-06-27
+last_updated: "2026-06-27T08:52:48.537Z"
+last_activity: 2026-06-27 — Roadmap for milestone v1.4 created (phases 15–17)
 progress:
-  total_phases: 3
+  total_phases: 10
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
