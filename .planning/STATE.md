@@ -2,16 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Фундамент разделения аудиторий
-status: ready_to_plan
-last_updated: 2026-06-27T13:26:31.501Z
-last_activity: 2026-06-27 -- Выполнен план 15-02 (HeaderPrimaryAction+CardCornerButton+CatalogSettings → role; useDeviceClass удалён)
+status: planning
+last_updated: "2026-06-27T14:16:41.052Z"
+last_activity: 2026-06-27
 progress:
   total_phases: 10
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
   completed_plans: 2
-  percent: 0
-stopped_at: Phase 15 complete (2/2) — ready to discuss Phase 16
+  percent: 10
 ---
 
 # Состояние проекта
