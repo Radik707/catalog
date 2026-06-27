@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { CartProvider } from "@/components/CartProvider";
 import { FavoritesProvider } from "@/components/FavoritesProvider";
+import { OrderHistoryProvider } from "@/components/OrderHistoryProvider";
 
 export const metadata: Metadata = {
   title: "Каталог товаров",
@@ -45,7 +46,10 @@ export default function RootLayout({
     <html lang="ru">
       <body className="bg-gray-50 antialiased">
         <CartProvider>
-          <FavoritesProvider>{children}</FavoritesProvider>
+          <FavoritesProvider>
+            {/* Единый экземпляр истории заказов на всё дерево — без гонки кнопок отправки (CR-01) */}
+            <OrderHistoryProvider>{children}</OrderHistoryProvider>
+          </FavoritesProvider>
         </CartProvider>
       </body>
     </html>

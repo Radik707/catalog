@@ -6,8 +6,9 @@ import { useCatalogSettings } from "@/components/CatalogSettings";
 import { effectivePrice } from "@/lib/pricing";
 import { useOnlineStatus } from "@/lib/useOnlineStatus";
 import QuantityInput from "@/components/QuantityInput";
-// История заказов — запись снимка при отправке (план 16-02)
-import { useOrderHistory } from "@/lib/useOrderHistory";
+// История заказов — запись снимка при отправке (план 16-02).
+// Через общий провайдер (а не прямой хук) — иначе две кнопки отправки затирают записи друг друга (CR-01).
+import { useOrderHistoryContext } from "@/components/OrderHistoryProvider";
 import type { OrderHistoryEntry, OrderHistoryItem } from "@/lib/types";
 
 const TELEGRAM_USERNAME = "ZhukOleh";
@@ -229,8 +230,9 @@ function TelegramButton() {
   // Хук состояния сети — true при наличии подключения, false в офлайне.
   // Обновляется автоматически по событиям online/offline без перезагрузки страницы.
   const isOnline = useOnlineStatus();
-  // Хук истории заказов — addEntry записывает снимок при отправке (D-01, D-02)
-  const { addEntry } = useOrderHistory();
+  // Хук истории заказов — addEntry записывает снимок при отправке (D-01, D-02).
+  // Общий экземпляр через контекст: обе кнопки делят одно состояние истории (CR-01).
+  const { addEntry } = useOrderHistoryContext();
 
   // Сборка текста заказа и открытие Telegram (с учётом формы цен)
   const handleSend = () => {
@@ -297,8 +299,9 @@ function MaxOrderButton() {
   const isOnline = useOnlineStatus();
   // Локальное состояние «идёт отправка» — пока ждём короткий id от сервера.
   const [sending, setSending] = useState(false);
-  // Хук истории заказов — addEntry записывает снимок при отправке (D-01, D-02)
-  const { addEntry } = useOrderHistory();
+  // Хук истории заказов — addEntry записывает снимок при отправке (D-01, D-02).
+  // Общий экземпляр через контекст: обе кнопки делят одно состояние истории (CR-01).
+  const { addEntry } = useOrderHistoryContext();
 
   // Фича выключена, если не заданы ник бота и эндпоинт приёма заказа.
   if (!MAX_BOT || !MAX_ORDER_URL) return null;

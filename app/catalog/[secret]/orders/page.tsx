@@ -4,11 +4,12 @@
 // Данные хранятся в localStorage устройства (HIST-02, офлайн-совместимость).
 // Не содержит слов «статус», «принято», «в доставке» — это история отправки, не статус поставщика (HIST-03, инвариант v1.4).
 
-import { useOrderHistory } from '@/lib/useOrderHistory';
+// Через общий провайдер истории — единое состояние с кнопками отправки в корзине (CR-01)
+import { useOrderHistoryContext } from '@/components/OrderHistoryProvider';
 import type { OrderHistoryEntry, OrderHistoryItem } from '@/lib/types';
 
 export default function OrdersPage({ params }: { params: { secret: string } }) {
-  const { entries, isLoaded, removeEntry, clearHistory } = useOrderHistory();
+  const { entries, isLoaded, removeEntry, clearHistory } = useOrderHistoryContext();
 
   // Пока localStorage не загружен — не рендерим список, чтобы не было мелькания пустого состояния
   if (!isLoaded) {
