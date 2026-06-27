@@ -306,7 +306,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1)*
 
-- [ ] 15-02-PLAN.md — Перенос ветвлений device→role: HeaderPrimaryAction, CardCornerButton, дефолт gridPreset по роли в CatalogSettings; решение по useDeviceClass (ROLE-03)
+- [x] 15-02-PLAN.md — Перенос ветвлений device→role: HeaderPrimaryAction, CardCornerButton, дефолт gridPreset по роли в CatalogSettings; решение по useDeviceClass (ROLE-03)
 
 **UI hint:** yes
 
@@ -370,7 +370,7 @@ Plans:
 | 12. Офлайн-UX (индикаторы и корзина) | v1.3 | 2/2 | Complete    | 2026-06-12 |
 | 13. Синхронизация фото | v1.3 | 2/2 | Complete (⏸ iPhone-UAT отложена) | 2026-06-13 |
 | 14. Install Prompt | v1.3 | 3/3 | Complete    | 2026-06-13 |
-| 15. Роль «Торговый / Клиент» | v1.4 | 1/2 | In Progress|  |
+| 15. Роль «Торговый / Клиент» | v1.4 | 2/2 | Complete    | 2026-06-27 |
 | 16. Локальная история заказов | v1.4 | 0/? | Not started | — |
 | 17. Сортировка + стикеры акций | v1.4 | 0/? | Not started | — |
 
