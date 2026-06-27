@@ -11,6 +11,8 @@ import {
 import { useInstallPromptContext } from "@/components/InstallPromptProvider";
 // Синхронизация каталога — кнопка ↻ переехала из шапки сюда, в панель настроек
 import { useCatalogSyncContext } from "@/components/CatalogSyncProvider";
+// Роль пользователя: client (покупатель) | sales (торговый агент) — D-06, D-07
+import { useRole } from "@/lib/useRole";
 
 // Выпадающая панель настроек отображения. Появляется под синей шапкой
 // при нажатии на шестерёнку, закрывается тапом мимо или повторным нажатием.
@@ -29,6 +31,9 @@ export default function SettingsPanel() {
     panelOpen,
     setPanelOpen,
   } = useCatalogSettings();
+
+  // Роль пользователя — первый элемент панели настроек (D-07)
+  const { role, setRole } = useRole();
 
   // Состояние установки PWA: платформа, standalone-режим, функция открытия (D-05)
   const { platform, isStandalone, openFromSettings } = useInstallPromptContext();
@@ -52,6 +57,29 @@ export default function SettingsPanel() {
       {/* Сама панель — закреплена под шапкой (высота шапки 48px = top-12) */}
       <div className="fixed top-12 left-0 right-0 z-40 border-b border-gray-200 bg-white shadow-lg">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
+          {/* Роль: Клиент | Агент — первый элемент панели, самая влиятельная настройка (D-07) */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500">Роль</span>
+            <div className="flex rounded-lg overflow-hidden border border-gray-200 text-xs">
+              <button
+                onClick={() => setRole("client")}
+                className={`px-3 py-1.5 transition-colors ${
+                  role === "client" ? "bg-blue-500 text-white" : "bg-white text-gray-500"
+                }`}
+              >
+                Клиент
+              </button>
+              <button
+                onClick={() => setRole("sales")}
+                className={`px-3 py-1.5 transition-colors ${
+                  role === "sales" ? "bg-blue-500 text-white" : "bg-white text-gray-500"
+                }`}
+              >
+                Агент
+              </button>
+            </div>
+          </div>
+
           {/* Вид отображения */}
           <div className="flex rounded-lg overflow-hidden border border-gray-200 text-xs">
             {views.map((v) => (
