@@ -332,7 +332,7 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 16-01-PLAN.md — Тип OrderHistoryEntry + хук useOrderHistory (localStorage, FIFO 20, мягкая деградация) (HIST-01, HIST-02, HIST-04)
+- [x] 16-01-PLAN.md — Тип OrderHistoryEntry + хук useOrderHistory (localStorage, FIFO 20, мягкая деградация) (HIST-01, HIST-02, HIST-04)
 
 **Wave 2**
 
@@ -380,7 +380,7 @@ Plans:
 | 13. Синхронизация фото | v1.3 | 2/2 | Complete (⏸ iPhone-UAT отложена) | 2026-06-13 |
 | 14. Install Prompt | v1.3 | 3/3 | Complete    | 2026-06-13 |
 | 15. Роль «Торговый / Клиент» | v1.4 | 2/2 | Complete    | 2026-06-27 |
-| 16. Локальная история заказов | v1.4 | 0/? | Not started | — |
+| 16. Локальная история заказов | v1.4 | 1/2 | In Progress|  |
 | 17. Сортировка + стикеры акций | v1.4 | 0/? | Not started | — |
 
 ---

@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Фундамент разделения аудиторий
 status: executing
-last_updated: "2026-06-27T14:37:56.367Z"
-last_activity: 2026-06-27 -- Phase 16 planning complete
+last_updated: "2026-06-27T14:50:37.904Z"
+last_activity: 2026-06-27
 progress:
   total_phases: 10
   completed_phases: 1
   total_plans: 4
-  completed_plans: 2
+  completed_plans: 3
   percent: 10
 ---
 
@@ -25,9 +25,9 @@ progress:
 ## Текущая позиция
 
 **Веха:** v1.4 «Фундамент разделения аудиторий»
-**Этап:** 15 — «Роль Торговый / Клиент» — ЗАВЕРШЁН
-**План:** 2 of 2 (оба плана выполнены)
-**Статус:** Этап 15 полностью завершён; следующий — Этап 16 или 17
+**Этап:** 16 — «Локальная история заказов» — ВЫПОЛНЯЕТСЯ
+**План:** 1 of 2 — ЗАВЕРШЁН
+**Статус:** План 16-01 выполнен (типы + хук); следующий — план 16-02 (страница /orders + встройка в корзину)
 
 Прогресс: [██████████] 100% (этап 15 завершён)
 
@@ -173,6 +173,9 @@ progress:
 - [15-02] CardCornerButton: ready не деструктурируется — дефолт client=сердечко безопасен при гидратации
 - [15-02] CatalogSettings: роль для дефолта сетки читается из localStorage напрямую (не через useRole()), оба useEffect монтируются независимо
 - [15-02] useDeviceClass.ts удалён: grep подтвердил отсутствие активных потребителей; восстановим из git при необходимости (D-05)
+- [16-01] Типы OrderHistoryItem/OrderHistoryEntry в lib/types.ts — общий контракт; total не обязателен в isValidEntry (обратная совместимость)
+- [16-01] MAX_HISTORY_ENTRIES = 20 + FIFO через slice(next.length - MAX) в addEntry (D-13)
+- [16-01] channel строго 'telegram' | 'max' в isValidEntry — неизвестные каналы молча отбрасываются (D-14)
 
 ### Ожидающие задачи
 
@@ -243,17 +246,17 @@ progress:
 ## Непрерывность сессий
 
 Последняя сессия: 2026-06-27
-Остановились на: Собран контекст этапа 16 (Локальная история заказов) — 16-CONTEXT.md + 16-DISCUSSION-LOG.md. Решения D-01..D-14: запись по нажатию кнопки (оба канала), корзину не чистим; отдельная страница /orders со ссылкой из корзины; урезанный снимок + id товара + URL фото, цена через effectivePrice; очистка всё+по одной, потолок 20 заказов (FIFO).
-Следующий шаг: /clear → /gsd-plan-phase 16
+Остановились на: Выполнен план 16-01 — типы OrderHistoryItem/OrderHistoryEntry в lib/types.ts + хук useOrderHistory с FIFO-потолком 20 и мягкой деградацией. HIST-01, HIST-02, HIST-04 выполнены.
+Следующий шаг: /gsd-execute-phase 16 (план 02 — страница /orders + встройка записи в корзину)
 
 ## Current Position
 
-Phase: 16
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-06-27 -- Phase 16 planning complete
+Phase: 16 (order-history) — EXECUTING
+Plan: 2 of 2
+Status: Executing Plan 02
+Last activity: 2026-06-27
 
 ## Operator Next Steps
 
-- git push origin main → деплой этапа 15 на Vercel
-- Запустить этап 16 (История заказов) или 17 (Сортировка + стикеры)
+- Выполнить план 16-02: страница /orders + встройка записи в cart/page.tsx
+- git push origin main → деплой на Vercel после завершения этапа 16
