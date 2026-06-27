@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Фундамент разделения аудиторий
 status: executing
-last_updated: "2026-06-27T14:00:00.000Z"
-last_activity: 2026-06-27 -- Выполнен план 15-01 (lib/useRole.tsx + RoleProvider + переключатель)
+last_updated: "2026-06-27T15:00:00.000Z"
+last_activity: 2026-06-27 -- Выполнен план 15-02 (HeaderPrimaryAction+CardCornerButton+CatalogSettings → role; useDeviceClass удалён)
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 2
-  completed_plans: 1
-  percent: 50
+  completed_plans: 2
+  percent: 100
 ---
 
 # Состояние проекта
@@ -25,21 +25,21 @@ progress:
 ## Текущая позиция
 
 **Веха:** v1.4 «Фундамент разделения аудиторий»
-**Этап:** 15 — «Роль Торговый / Клиент» — выполнение
-**План:** 2 of 2 (план 15-01 выполнен, 15-02 следующий)
-**Статус:** Executing — план 15-01 завершён
+**Этап:** 15 — «Роль Торговый / Клиент» — ЗАВЕРШЁН
+**План:** 2 of 2 (оба плана выполнены)
+**Статус:** Этап 15 полностью завершён; следующий — Этап 16 или 17
 
-Прогресс: [█████░░░░░] 50% (план 15-01 выполнен)
+Прогресс: [██████████] 100% (этап 15 завершён)
 
 **Этапы вехи v1.4:**
 
-- [ ] Этап 15: Роль «Торговый / Клиент» — ROLE-01, ROLE-02, ROLE-03, ROLE-04
+- [x] Этап 15: Роль «Торговый / Клиент» — ROLE-01, ROLE-02, ROLE-03, ROLE-04 ✅ 2026-06-27
 - [ ] Этап 16: Локальная история заказов — HIST-01, HIST-02, HIST-03, HIST-04
 - [ ] Этап 17: Сортировка + стикеры акций — SORT-01, SORT-02, SORT-03, MERCH-01
 
 ## Что дальше
 
-1. Запустить планирование этапа 15: `/gsd-plan-phase 15`
+1. Деплой этапа 15: `git push origin main` → Vercel автодеплой.
 2. Этапы 16 и 17 можно планировать и выполнять параллельно — оба не блокируются этапом 15.
 3. Деплой вехи: только `git push` → Vercel автодеплой. Серверная часть (daniella) не трогается.
 
@@ -169,6 +169,10 @@ progress:
 - [15-01] lib/useRole.tsx (.tsx не .ts) — JSX-провайдер требует .tsx; резолвится через @/lib/useRole без расширения
 - [15-01] setReady(true) последней строкой useEffect — гарантирует что роль загружена до флага ready (паттерн useDeviceClass)
 - [15-01] Валидация localStorage: принимать только строго "sales"/"client" — повреждённое значение молча игнорируется (STRIDE T-15-01)
+- [15-02] HeaderPrimaryAction: ready-флаг сохранён — SyncButton и FavoritesIcon заметно разные, мелькание нежелательно
+- [15-02] CardCornerButton: ready не деструктурируется — дефолт client=сердечко безопасен при гидратации
+- [15-02] CatalogSettings: роль для дефолта сетки читается из localStorage напрямую (не через useRole()), оба useEffect монтируются независимо
+- [15-02] useDeviceClass.ts удалён: grep подтвердил отсутствие активных потребителей; восстановим из git при необходимости (D-05)
 
 ### Ожидающие задачи
 
@@ -239,16 +243,17 @@ progress:
 ## Непрерывность сессий
 
 Последняя сессия: 2026-06-27
-Остановились на: Выполнен план 15-01 (lib/useRole.tsx + RoleProvider в layout + переключатель «Клиент|Агент» в SettingsPanel). 3 коммита: 60ad9dc, a6aee75, a514f9a.
-Следующий шаг: Выполнить план 15-02 (перенос ветвлений device→role)
+Остановились на: Выполнен план 15-02 (HeaderPrimaryAction+CardCornerButton на role; CatalogSettings дефолт сетки по роли; useDeviceClass.ts удалён). 2 коммита: 7eabf34, 62c5115.
+Следующий шаг: git push origin main (деплой этапа 15), затем планировать этап 16 или 17
 
 ## Current Position
 
-Phase: 15 (role-sales-client) — EXECUTING
-Plan: 2 of 2 (план 15-01 выполнен)
-Status: Executing Phase 15 — ready for plan 15-02
-Last activity: 2026-06-27 -- Plan 15-01 completed (useRole.tsx + RoleProvider + toggle)
+Phase: 15 (role-sales-client) — COMPLETED
+Plan: 2 of 2 (оба плана выполнены)
+Status: Phase 15 complete — ready for Phase 16 or 17
+Last activity: 2026-06-27 -- Plan 15-02 completed (HeaderPrimaryAction+CardCornerButton+CatalogSettings on role; useDeviceClass deleted)
 
 ## Operator Next Steps
 
-- Выполнить план 15-02: перенос ветвлений isTabletLike → role
+- git push origin main → деплой этапа 15 на Vercel
+- Запустить этап 16 (История заказов) или 17 (Сортировка + стикеры)
