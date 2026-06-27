@@ -1,8 +1,9 @@
 ---
 phase: 15-role-sales-client
 verified: 2026-06-27T18:00:00Z
-status: human_needed
-score: 4/4 must-haves verified
+human_verified: 2026-06-27
+status: passed
+score: 4/4 must-haves verified (живая приёмка SC-1/SC-2 пройдена на проде 2026-06-27)
 overrides_applied: 0
 human_verification:
   - test: "Открыть каталог на новом устройстве (или после очистки localStorage), убедиться что панель настроек показывает «Клиент» активным, в шапке стоит ♥ (FavoritesIcon), на карточках с фото — сердечко"
