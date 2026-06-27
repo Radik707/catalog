@@ -243,14 +243,14 @@ progress:
 ## Непрерывность сессий
 
 Последняя сессия: 2026-06-27
-Остановились на: Выполнен план 15-02 (HeaderPrimaryAction+CardCornerButton на role; CatalogSettings дефолт сетки по роли; useDeviceClass.ts удалён). 2 коммита: 7eabf34, 62c5115.
-Следующий шаг: git push origin main (деплой этапа 15), затем планировать этап 16 или 17
+Остановились на: Собран контекст этапа 16 (Локальная история заказов) — 16-CONTEXT.md + 16-DISCUSSION-LOG.md. Решения D-01..D-14: запись по нажатию кнопки (оба канала), корзину не чистим; отдельная страница /orders со ссылкой из корзины; урезанный снимок + id товара + URL фото, цена через effectivePrice; очистка всё+по одной, потолок 20 заказов (FIFO).
+Следующий шаг: /clear → /gsd-plan-phase 16
 
 ## Current Position
 
 Phase: 16
 Plan: Not started
-Status: Ready to plan
+Status: Context gathered — ready to plan
 Last activity: 2026-06-27
 
 ## Operator Next Steps
