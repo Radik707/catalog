@@ -179,4 +179,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-06-27 — этап 15 «Роль Торговый/Клиент» выполнен (4/4 в коде, ⏳ живая приёмка); веха v1.4 в работе (этапы 15–17)*
+*Last updated: 2026-06-27 — этап 16 «Локальная история заказов» выполнен и в проде (HIST-01..04; приёмка владельцем пройдена; CR-01 исправлен — общий OrderHistoryProvider); веха v1.4 в работе (остался этап 17)*
