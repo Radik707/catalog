@@ -10,6 +10,8 @@ interface CartContextValue {
   totalPrice: number;
   isLoaded: boolean;
   addToCart: (product: Product) => void;
+  /** Добавить товар в заданном количестве с капом по текущему остатку (D-05, этап 19). */
+  addToCartWithQuantity: (product: Product, quantity: number) => void;
   removeFromCart: (productId: string) => void;
   updateQuantity: (productId: string, quantity: number) => void;
   clearCart: () => void;

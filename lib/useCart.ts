@@ -90,6 +90,30 @@ export function useCart() {
     );
   }, []);
 
+  // Добавить товар в заданном количестве с капом по текущему остатку (D-05).
+  // Если товар уже в корзине — увеличивает количество на qty (не сбрасывает текущее).
+  // Если товар отсутствует — добавляет новую позицию.
+  // При остатке <= 0 или quantity <= 0 — ничего не делает.
+  const addToCartWithQuantity = useCallback((product: Product, quantity: number) => {
+    if (product.stock <= 0 || quantity <= 0) return;
+
+    setItems((prev) => {
+      const existing = prev.find((item) => item.product.id === product.id);
+      if (existing) {
+        // Увеличиваем текущее количество на qty, капая по остатку
+        const newQty = Math.min(existing.quantity + quantity, product.stock);
+        return prev.map((item) =>
+          item.product.id === product.id
+            ? { ...item, quantity: newQty }
+            : item
+        );
+      }
+      // Новая позиция — количество капается по остатку
+      const cappedQty = Math.min(quantity, product.stock);
+      return [...prev, { product, quantity: cappedQty }];
+    });
+  }, []);
+
   // Очистить корзину
   const clearCart = useCallback(() => {
     setItems([]);
@@ -125,6 +149,7 @@ export function useCart() {
     items,
     isLoaded,
     addToCart,
+    addToCartWithQuantity,
     removeFromCart,
     updateQuantity,
     clearCart,
