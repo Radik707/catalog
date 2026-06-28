@@ -59,10 +59,12 @@ export default function CartPage({
         >
           Вернуться в каталог
         </a>
-        {/* Ссылка на историю заказов видна и при пустой корзине (D-05) */}
+        {/* Заметная зелёная кнопка-рамка по центру: переход в отправленные заказы.
+            После очистки корзины это главный понятный путь «куда дальше» — выделяем
+            рамкой, крупным шрифтом и фоном, чтобы было явно видно, что сюда можно нажать. */}
         <a
           href={`/catalog/${params.secret}/orders`}
-          className="mt-2 text-blue-500 text-sm active:opacity-70"
+          className="mt-6 inline-flex items-center justify-center gap-2 border-2 border-green-500 bg-green-50 text-green-700 text-base font-semibold rounded-xl px-6 py-3 shadow-sm active:opacity-70"
         >
           Мои отправленные заказы →
         </a>
