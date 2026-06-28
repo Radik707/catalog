@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import Image from "next/image";
 import { Product } from "@/lib/types";
 import { getPackaging } from "@/lib/packaging";
@@ -53,14 +53,57 @@ interface ProductCardProps {
 const BADGE_STYLES: Record<string, string> = {
   хит: "bg-red-500 text-white",
   новинка: "bg-green-500 text-white",
+  // «акция» переопределяется в renderBadge() — здесь оставлено для совместимости
+  // (чтобы badgeStyle оставался truthy при badge === "акция").
   акция: "bg-orange-500 text-white",
 };
+
+// Классы усиленного стикера акции: яркий красный фон, скругление «пилюля», тень.
+// Намеренно крупнее обычного бейджа (text-[11px] / text-xs vs text-[9px] / text-[10px]).
+const PROMO_STICKER_BASE = "bg-red-600 text-white font-semibold rounded-full shadow";
+const PROMO_STICKER_GRID = `${PROMO_STICKER_BASE} text-[11px] px-2 py-0.5`; // сетка (мелкая)
+const PROMO_STICKER_PRES = `${PROMO_STICKER_BASE} text-xs px-2.5 py-0.5`; // презентация
+const PROMO_STICKER_LIST = `${PROMO_STICKER_BASE} text-[10px] px-2 py-0.5`; // список
+// Текст стикера акции — иконка + слово.
+const PROMO_STICKER_TEXT = "🔥 Акция";
 
 // Подпись бейджа на карточке. Значение в данных — «новинка», но на карточке
 // показываем «NEW» (по просьбе владельца). Остальные метки — как есть.
 function badgeLabel(badge?: string): string | undefined {
   if (!badge) return undefined;
   return badge === "новинка" ? "NEW" : badge;
+}
+
+// Отрисовка метки товара (хит / новинка / акция).
+// Для «акции» рендерим усиленный стикер-«пилюлю» с иконкой 🔥;
+// для остальных меток — обычный <span> с текущими стилями (без изменений).
+//
+// Параметры:
+//   badge      — значение product.badge (строка или undefined)
+//   badgeStyle — класс из BADGE_STYLES или null (если метки нет)
+//   extraCls   — позиционирование и прочие классы снаружи (absolute, top-*, self-start…)
+//   sizeCls    — размерные классы для обычного бейджа (badgeCls: text-[9px] px-1 py-0.5)
+//   promoStk   — размерные классы для стикера акции (PROMO_STICKER_*)
+function renderBadge(
+  badge: string | undefined,
+  badgeStyle: string | null,
+  extraCls: string,
+  sizeCls: string,
+  promoStk: string,
+): React.ReactNode {
+  if (!badgeStyle) return null;
+  if (badge === "акция") {
+    // Усиленный стикер: яркая «пилюля» с иконкой — заметно крупнее обычного бейджа.
+    return (
+      <span className={`${extraCls} ${promoStk}`}>{PROMO_STICKER_TEXT}</span>
+    );
+  }
+  // Хит / новинка — стиль без изменений.
+  return (
+    <span className={`${extraCls} font-medium rounded ${sizeCls} ${badgeStyle}`}>
+      {badgeLabel(badge)}
+    </span>
+  );
 }
 
 function PhotoPlaceholder({ iconSize = "w-6 h-6" }: { iconSize?: string }) {
@@ -178,12 +221,14 @@ export default function ProductCard({
                   // Заглушка: нет фото ИЛИ фото не загрузилось (D-06 — офлайн без кэша)
                   <PhotoPlaceholder iconSize={placeholderIcon} />
                 )}
-                {badgeStyle && (
-                  <span
-                    className={`absolute ${badgePos} font-medium rounded ${badgeCls} ${badgeStyle}`}
-                  >
-                    {badgeLabel(product.badge)}
-                  </span>
+                {/* Метка товара (хит / новинка / акция).
+                    Акция — усиленный стикер-«пилюля» 🔥; остальные — стандартный бейдж. */}
+                {renderBadge(
+                  product.badge,
+                  badgeStyle,
+                  `absolute ${badgePos}`,
+                  badgeCls,
+                  isPresentation ? PROMO_STICKER_PRES : PROMO_STICKER_GRID,
                 )}
                 {/* Угловая кнопка: стрелки (планшет) или сердечко (телефон/ПК) */}
                 <CardCornerButton
@@ -196,11 +241,16 @@ export default function ProductCard({
 
             {/* Название + цена + кнопка */}
             <div className={`flex flex-col ${bodyPad}`}>
-              {!showPhotos && badgeStyle && (
-                <span className={`self-start font-medium rounded ${badgeCls} ${badgeStyle}`}>
-                  {badgeLabel(product.badge)}
-                </span>
-              )}
+              {/* Бейдж в режиме «без фото» — над названием, без угловой привязки.
+                  Акция — стикер-«пилюля» 🔥; остальные — стандартный бейдж. */}
+              {!showPhotos &&
+                renderBadge(
+                  product.badge,
+                  badgeStyle,
+                  "self-start",
+                  badgeCls,
+                  isPresentation ? PROMO_STICKER_PRES : PROMO_STICKER_GRID,
+                )}
               {/* Название показывается на лицевой стороне всегда.
                   На телефоне — полностью, без сокращений (line-clamp-none); карточка
                   растёт по тексту. На планшете/ПК — в две строки (как раньше). */}
@@ -308,10 +358,14 @@ export default function ProductCard({
           style={{ backfaceVisibility: "hidden" }}
           className={`flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors duration-100${inStock ? " bg-white" : " bg-gray-50"}`}
         >
-          {badgeStyle && (
-            <span className={`absolute top-1.5 right-1.5 text-[10px] font-medium px-1.5 py-0.5 rounded ${badgeStyle}`}>
-              {badgeLabel(product.badge)}
-            </span>
+          {/* Метка в режиме списка — абсолютно в правом верхнем углу строки.
+              Акция — стикер-«пилюля» 🔥; остальные — стандартный бейдж. */}
+          {renderBadge(
+            product.badge,
+            badgeStyle,
+            "absolute top-1.5 right-1.5",
+            "text-[10px] px-1.5 py-0.5",
+            PROMO_STICKER_LIST,
           )}
 
           {/* Миниатюра — только в режиме «С фото».
