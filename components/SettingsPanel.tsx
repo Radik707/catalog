@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { usePathname } from "next/navigation";
 import {
   useCatalogSettings,
   PRESENTATION_PRESETS,
@@ -37,6 +38,15 @@ export default function SettingsPanel() {
 
   // Состояние установки PWA: платформа, standalone-режим, функция открытия (D-05)
   const { platform, isStandalone, openFromSettings } = useInstallPromptContext();
+
+  // Текущий путь — нужен для вычисления базового URL каталога (D-08, REORD-04)
+  const pathname = usePathname();
+
+  // Базовый путь каталога: срезаем хвосты /cart, /orders и т.п.
+  // Паттерн как у MaxOrderButton в cart/page.tsx через replace.
+  // Например: /catalog/uuid/cart → /catalog/uuid
+  const catalogBasePath = pathname.replace(/\/(cart|orders)(\/.*)?$/, "");
+  const ordersPath = `${catalogBasePath}/orders`;
 
   if (!panelOpen) return null;
 
@@ -79,6 +89,20 @@ export default function SettingsPanel() {
               </button>
             </div>
           </div>
+
+          {/* Вход на экран «Мои заказы» (D-08, REORD-04).
+              Показывается безусловно — экран доступен в обеих ролях и безвреден (D-10).
+              Путь формируется из текущего pathname через срезку хвоста, без захардкоженного секрета. */}
+          <a
+            href={ordersPath}
+            onClick={() => setPanelOpen(false)}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 text-xs font-medium transition-colors hover:bg-blue-100 hover:border-blue-300"
+          >
+            <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <span>Мои заказы</span>
+          </a>
 
           {/* Вид отображения */}
           <div className="flex rounded-lg overflow-hidden border border-gray-200 text-xs">
