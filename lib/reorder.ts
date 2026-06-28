@@ -86,10 +86,21 @@ export function classifyReorder(
   // Строим индекс каталога по id для O(1) матчинга (D-02, шаг 1)
   const catalogById = new Map<string, Product>(catalog.map((p) => [p.id, p]));
 
-  // Строим индекс каталога по нормализованному имени для фолбэк-матчинга (D-02, шаг 2)
-  const catalogByName = new Map<string, Product>(
-    catalog.map((p) => [normalizeName(p.name), p]),
-  );
+  // Строим индекс каталога по нормализованному имени для фолбэк-матчинга (D-02, шаг 2).
+  // WR-02: храним МАССИВ кандидатов на каждое имя, а не один товар. Если в каталоге
+  // два товара с одинаковым нормализованным именем (разные поставщики/фасовки), Map<…,Product>
+  // молча оставлял бы только последний и мог подставить чужой SKU. Фолбэк по имени применяем
+  // только при единственном кандидате (см. ниже) — при коллизии честнее оставить unavailable.
+  const catalogByName = new Map<string, Product[]>();
+  for (const p of catalog) {
+    const key = normalizeName(p.name);
+    const arr = catalogByName.get(key);
+    if (arr) {
+      arr.push(p);
+    } else {
+      catalogByName.set(key, [p]);
+    }
+  }
 
   let addedCount = 0;
 
@@ -108,8 +119,13 @@ export function classifyReorder(
     let matched: Product | undefined = catalogById.get(historyItem.id);
 
     // ── Шаг 2: фолбэк по нормализованному имени, если по id не нашли ──────
+    // WR-02: матчим только при ЕДИНСТВЕННОМ кандидате с таким именем. Если имя
+    // неоднозначно (несколько товаров) — не угадываем, оставляем unavailable.
     if (!matched) {
-      matched = catalogByName.get(normalizeName(historyItem.name));
+      const candidates = catalogByName.get(normalizeName(historyItem.name));
+      if (candidates && candidates.length === 1) {
+        matched = candidates[0];
+      }
     }
 
     // ── Исход: не найдено ни по id, ни по имени → unavailable (D-02) ──────
