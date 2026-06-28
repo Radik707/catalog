@@ -60,7 +60,9 @@ const BADGE_STYLES: Record<string, string> = {
 
 // Классы усиленного стикера акции: яркий красный фон, скругление «пилюля», тень.
 // Намеренно крупнее обычного бейджа (text-[11px] / text-xs vs text-[9px] / text-[10px]).
-const PROMO_STICKER_BASE = "bg-red-600 text-white font-semibold rounded-full shadow";
+// inline-flex + whitespace-nowrap: текст «🔥 Акция» из двух слов держим в одну строку,
+// чтобы пилюля не разорвалась и не налезла на цену в узком углу (режим списка на телефоне).
+const PROMO_STICKER_BASE = "inline-flex items-center whitespace-nowrap bg-red-600 text-white font-semibold rounded-full shadow";
 const PROMO_STICKER_GRID = `${PROMO_STICKER_BASE} text-[11px] px-2 py-0.5`; // сетка (мелкая)
 const PROMO_STICKER_PRES = `${PROMO_STICKER_BASE} text-xs px-2.5 py-0.5`; // презентация
 const PROMO_STICKER_LIST = `${PROMO_STICKER_BASE} text-[10px] px-2 py-0.5`; // список
@@ -92,7 +94,8 @@ function renderBadge(
   promoStk: string,
 ): React.ReactNode {
   if (!badgeStyle) return null;
-  if (badge === "акция") {
+  // Сравнение регистронезависимо (правило проекта для меток): «Акция»/«АКЦИЯ» тоже сработают.
+  if (badge?.trim().toLowerCase() === "акция") {
     // Усиленный стикер: яркая «пилюля» с иконкой — заметно крупнее обычного бейджа.
     return (
       <span className={`${extraCls} ${promoStk}`}>{PROMO_STICKER_TEXT}</span>
@@ -146,7 +149,10 @@ export default function ProductCard({
   const [imgError, setImgError] = useState(false);
   const inStock = product.stock > 0;
   const packaging = getPackaging(product.group, product.name);
-  const badgeStyle = product.badge ? BADGE_STYLES[product.badge] : null;
+  // Ключ ищем в нижнем регистре без пробелов — метки регистронезависимы (правило проекта).
+  const badgeStyle = product.badge
+    ? BADGE_STYLES[product.badge.trim().toLowerCase()]
+    : null;
 
   const flipStyle = {
     transformStyle: "preserve-3d" as const,
