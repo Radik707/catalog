@@ -2,16 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Фундамент разделения аудиторий
-status: milestone_complete
-last_updated: 2026-06-28T13:50:22.818Z
-last_activity: 2026-06-28
+status: Awaiting next milestone
+last_updated: "2026-06-28T14:02:47.421Z"
+last_activity: 2026-06-28 — Milestone v1.4 completed and archived
 progress:
   total_phases: 10
   completed_phases: 3
   total_plans: 6
   completed_plans: 6
   percent: 30
-stopped_at: Milestone complete (Phase 17 was final phase)
 ---
 
 # Состояние проекта
@@ -257,12 +256,11 @@ stopped_at: Milestone complete (Phase 17 was final phase)
 
 ## Current Position
 
-Phase: 17
-Plan: Not started
-Status: Milestone complete
-Last activity: 2026-06-28
+Phase: Milestone v1.4 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-06-28 — Milestone v1.4 completed and archived
 
 ## Operator Next Steps
 
-- /gsd-execute-phase 17 (сортировка + стикеры акций — SORT-01, SORT-02, SORT-03, MERCH-01)
-- git push origin main → деплой на Vercel
+- Start the next milestone with /gsd-new-milestone
