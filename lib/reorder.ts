@@ -94,7 +94,15 @@ export function classifyReorder(
   let addedCount = 0;
 
   const lines: ReorderLineResult[] = historyItems.map((historyItem) => {
-    const oldPrice = historyItem.priceAtOrder;
+    // Нормализуем замороженную цену на входе (WR-01): в старых/повреждённых
+    // записях localStorage priceAtOrder может быть undefined/строкой/NaN.
+    // Остальной экран истории уже обороняется через typeof === 'number' —
+    // здесь делаем то же, иначе roundPrice(undefined) → NaN (ложный
+    // price_changed), а oldPrice.toFixed() в модалке сводки бросает TypeError.
+    const oldPrice =
+      typeof historyItem.priceAtOrder === 'number' && Number.isFinite(historyItem.priceAtOrder)
+        ? historyItem.priceAtOrder
+        : 0;
 
     // ── Шаг 1: матчинг по id (основной путь) ──────────────────────────────
     let matched: Product | undefined = catalogById.get(historyItem.id);

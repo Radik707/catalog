@@ -409,7 +409,7 @@ function ReorderSummaryModal({
                         // Добавлен в корзину, но цена изменилась — показываем было/стало
                         <>
                           добавлен · цена изменилась:{' '}
-                          <span className="line-through text-gray-400">{line.oldPrice.toFixed(2)} ₽</span>
+                          <span className="line-through text-gray-400">{(line.oldPrice ?? 0).toFixed(2)} ₽</span>
                           {' → '}
                           <span className="font-medium text-blue-600">{line.currentPrice.toFixed(2)} ₽</span>
                         </>
