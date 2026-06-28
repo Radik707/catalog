@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Фундамент разделения аудиторий
-status: planning
-last_updated: "2026-06-28T12:19:24.123Z"
-last_activity: 2026-06-27
+status: executing
+last_updated: "2026-06-28T12:54:21.829Z"
+last_activity: 2026-06-28
 progress:
   total_phases: 10
   completed_phases: 2
-  total_plans: 4
-  completed_plans: 4
+  total_plans: 6
+  completed_plans: 5
   percent: 20
 ---
 
@@ -25,9 +25,9 @@ progress:
 ## Текущая позиция
 
 **Веха:** v1.4 «Фундамент разделения аудиторий»
-**Этап:** 17 — «Карточка витрины: стикер акции + раскрытие фото» — КОНТЕКСТ СОБРАН
-**План:** ещё не создан
-**Статус:** Контекст этапа 17 собран (2026-06-28). При обсуждении сортировка снята (SORT-01..03 отклонены), вместо неё добавлено раскрытие фото клиентом (CARD-01). Следующий шаг — `/gsd-plan-phase 17`.
+**Этап:** 17 — «Карточка витрины: стикер акции + раскрытие фото» — ВЫПОЛНЯЕТСЯ
+**План:** 2 из 2 (план 01 выполнен, checkpoint:human-verify ожидает деплоя)
+**Статус:** План 17-01 выполнен (2026-06-28). Кнопка раскрытия фото для клиента добавлена, build зелёный. Ожидает `git push` → приёмки на проде (Vercel). После приёмки — план 17-02 (стикер акции MERCH-01).
 
 Прогресс: [██████████] 100% (этапы 15–16 завершены)
 
@@ -254,10 +254,10 @@ progress:
 
 ## Current Position
 
-Phase: 17
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-06-27
+Phase: 17 (card-promo-photo) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
+Last activity: 2026-06-28
 
 ## Operator Next Steps
 
