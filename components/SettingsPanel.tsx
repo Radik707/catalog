@@ -33,8 +33,11 @@ export default function SettingsPanel() {
     setPanelOpen,
   } = useCatalogSettings();
 
-  // Роль пользователя — первый элемент панели настроек (D-07)
-  const { role, setRole } = useRole();
+  // Роль пользователя — первый элемент панели настроек (D-07).
+  // WR-03: берём ещё и SSR-safe флаг ready (контракт useRole, D-04). До монтирования
+  // role всегда 'client'; подсвечивать активную кнопку до ready нельзя — иначе при
+  // сохранённой роли 'sales' первый кадр мигает «Клиент». Подсветку гейтим на ready.
+  const { role, setRole, ready } = useRole();
 
   // Состояние установки PWA: платформа, standalone-режим, функция открытия (D-05)
   const { platform, isStandalone, openFromSettings } = useInstallPromptContext();
@@ -74,7 +77,7 @@ export default function SettingsPanel() {
               <button
                 onClick={() => setRole("client")}
                 className={`px-3 py-1.5 transition-colors ${
-                  role === "client" ? "bg-blue-500 text-white" : "bg-white text-gray-500"
+                  ready && role === "client" ? "bg-blue-500 text-white" : "bg-white text-gray-500"
                 }`}
               >
                 Клиент
@@ -82,7 +85,7 @@ export default function SettingsPanel() {
               <button
                 onClick={() => setRole("sales")}
                 className={`px-3 py-1.5 transition-colors ${
-                  role === "sales" ? "bg-blue-500 text-white" : "bg-white text-gray-500"
+                  ready && role === "sales" ? "bg-blue-500 text-white" : "bg-white text-gray-500"
                 }`}
               >
                 Агент
