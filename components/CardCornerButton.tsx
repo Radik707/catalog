@@ -65,35 +65,66 @@ export default function CardCornerButton({
     );
   }
 
-  // ── Клиент: сердечко избранного ──
+  // ── Клиент: вертикальный стек кнопок в правом верхнем углу ──
+  // Сердечко — всегда сверху. Стрелки раскрытия — под ним, только при наличии фото.
+  // В режиме списка (size="sm") стрелки не показываем: миниатюра 14×14 слишком мелкая
+  // для двух кнопок; в сетке и презентации — обязательны (D-05, discretion по size=sm).
   const fav = isFavorite(productId);
+  const showExpandBtn = canOpenPhoto && size !== "sm";
+
   return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation();
-        toggleFavorite(productId);
-      }}
-      aria-label={fav ? "Убрать из избранного" : "В избранное"}
-      aria-pressed={fav}
-      className={`absolute top-1 right-1 z-10 flex ${box} items-center justify-center rounded-full bg-white/80 shadow-sm backdrop-blur-sm active:bg-white ${
-        fav ? "text-red-500" : "text-gray-500"
-      }`}
-    >
-      {/* Сердце: залитое когда в избранном, контур — когда нет */}
-      <svg
-        className={icon}
-        viewBox="0 0 24 24"
-        fill={fav ? "currentColor" : "none"}
-        stroke="currentColor"
-        strokeWidth={2}
+    // Стек кнопок: обёртка занимает позицию top-right, кнопки идут вертикально
+    <div className={`absolute top-1 right-1 z-10 flex flex-col gap-1`}>
+      {/* Кнопка сердечка — избранное */}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          toggleFavorite(productId);
+        }}
+        aria-label={fav ? "Убрать из избранного" : "В избранное"}
+        aria-pressed={fav}
+        className={`flex ${box} items-center justify-center rounded-full bg-white/80 shadow-sm backdrop-blur-sm active:bg-white ${
+          fav ? "text-red-500" : "text-gray-500"
+        }`}
       >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z"
-        />
-      </svg>
-    </button>
+        {/* Сердце: залитое когда в избранном, контур — когда нет */}
+        <svg
+          className={icon}
+          viewBox="0 0 24 24"
+          fill={fav ? "currentColor" : "none"}
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z"
+          />
+        </svg>
+      </button>
+
+      {/* Кнопка раскрытия фото — только при наличии фото и не в режиме списка */}
+      {showExpandBtn && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onPhotoOpen?.();
+          }}
+          aria-label="Открыть фото на весь экран"
+          className={`flex ${box} items-center justify-center rounded-full bg-white/80 text-gray-700 shadow-sm backdrop-blur-sm active:bg-white`}
+        >
+          {/* Стрелки в разные стороны (arrows-pointing-out, heroicons) — тот же SVG что у агента */}
+          <svg className={icon} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15"
+            />
+          </svg>
+        </button>
+      )}
+    </div>
   );
 }
