@@ -1,7 +1,9 @@
 ---
 phase: 17-card-promo-photo
 verified: 2026-06-28T16:30:00Z
-status: human_needed
+status: passed
+human_verified: 2026-06-28
+human_verified_note: "Ручная приёмка на проде пройдена владельцем — 9/9 пунктов приняты (см. 17-HUMAN-UAT.md)"
 score: 7/7
 overrides_applied: 0
 human_verification:
