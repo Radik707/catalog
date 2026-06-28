@@ -445,7 +445,7 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 19-01-PLAN.md — Ядро повтора: чистый хелпер `lib/reorder.ts` (4 исхода added/price_changed/out_of_stock/unavailable, актуальная цена, порог наличия) + метод `addToCartWithQuantity` в useCart/CartProvider (REORD-03)
+- [x] 19-01-PLAN.md — Ядро повтора: чистый хелпер `lib/reorder.ts` (4 исхода added/price_changed/out_of_stock/unavailable, актуальная цена, порог наличия) + метод `addToCartWithQuantity` в useCart/CartProvider (REORD-03) ✅ 2026-06-28
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
