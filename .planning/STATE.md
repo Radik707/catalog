@@ -2,16 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Фундамент разделения аудиторий
-status: ready_to_plan
-last_updated: 2026-06-27T16:33:39.619Z
+status: planning
+last_updated: "2026-06-28T12:19:24.123Z"
 last_activity: 2026-06-27
 progress:
   total_phases: 10
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 4
   completed_plans: 4
-  percent: 10
-stopped_at: Phase 16 complete (2/2) — ready to discuss Phase 17
+  percent: 20
 ---
 
 # Состояние проекта
