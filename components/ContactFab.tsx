@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useOnlineStatus } from "@/lib/useOnlineStatus";
+// Роль пользователя: для «Клиента» поднимаем FAB выше нижней панели вкладок (D-10)
+import { useRole } from "@/lib/useRole";
 
 // Ники каналов из окружения (как было у отдельных кнопок).
 const BOT_USERNAME = process.env.NEXT_PUBLIC_BOT_USERNAME; // Telegram
@@ -31,6 +33,9 @@ export default function ContactFab() {
   const [pulse, setPulse] = useState(false);
   // Состояние сети: офлайн → FAB приглушён и не раскрывается (как раньше у кнопок).
   const isOnline = useOnlineStatus();
+  // Роль: для «Клиента» поднимаем контейнер выше нижней панели вкладок (D-10, план 18-02).
+  // До ready флаг не критичен — кнопка просто остаётся на bottom-6 (без мелькания).
+  const { role } = useRole();
 
   useEffect(() => {
     // Пульсация основной иконки при первом визите
@@ -79,6 +84,11 @@ export default function ContactFab() {
       shown ? "opacity-100 translate-y-0 pointer-events-auto" : "opacity-0 translate-y-3 pointer-events-none"
     }`;
 
+  // Позиция контейнера: для «Клиента» поднимаем выше панели вкладок (64px + запас),
+  // для «Торгового» оставляем исходный bottom-6. Дочерние иконки позиционированы
+  // относительно контейнера, поэтому смещаются вместе с ним автоматически (D-10).
+  const fabBottomClass = role === "client" ? "bottom-24" : "bottom-6";
+
   return (
     <>
       {/* Прозрачная подложка: тап мимо — свернуть. Только когда раскрыто. */}
@@ -90,7 +100,7 @@ export default function ContactFab() {
         />
       )}
 
-      <div className="fixed bottom-6 right-4 z-50">
+      <div className={`fixed ${fabBottomClass} right-4 z-50`}>
         {/* Дочерняя иконка MAX — выше всех */}
         {MAX_BOT && (
           <button
