@@ -38,10 +38,13 @@ export default function OrdersPage({ params }: { params: { secret: string } }) {
       // Классифицируем позиции прошлого заказа против актуального каталога (D-01..D-04)
       const result = classifyReorder(entry.items, products, priceForm);
 
-      // Добавляем в корзину позиции с исходом added и price_changed (D-06)
+      // Добавляем в корзину позиции с исходом added и price_changed (D-06).
+      // WR-04: количество берём из line.addedQty (уже с капом по остатку) — то же
+      // число показывает сводка, поэтому факт корзины совпадает с отчётом.
+      // addToCartWithQuantity дополнительно капает сам — двойной кап безопасен.
       for (const line of result.lines) {
         if ((line.outcome === 'added' || line.outcome === 'price_changed') && line.product) {
-          addToCartWithQuantity(line.product, line.historyItem.quantity);
+          addToCartWithQuantity(line.product, line.addedQty ?? line.historyItem.quantity);
         }
       }
 
@@ -316,10 +319,16 @@ function ReorderSummaryModal({
 }) {
   const { lines, addedCount } = result;
 
-  // Позиции, которые нужно показать в сводке (пропущенные/изменённые)
-  // Показываем price_changed (добавлены, но цена изменилась) и пропущенные (out_of_stock, unavailable)
+  // Позиции, которые нужно показать в сводке (пропущенные/изменённые/усечённые)
+  // Показываем price_changed (добавлены, но цена изменилась), пропущенные (out_of_stock,
+  // unavailable) и усечённые по остатку (capped) — WR-04: молчаливое урезание объёма
+  // теперь честно отображается («добавлено N из M — ограничено остатком»).
   const notableLines = lines.filter(
-    (l) => l.outcome === 'price_changed' || l.outcome === 'out_of_stock' || l.outcome === 'unavailable',
+    (l) =>
+      l.outcome === 'price_changed' ||
+      l.outcome === 'out_of_stock' ||
+      l.outcome === 'unavailable' ||
+      l.capped,
   );
 
   return (
@@ -372,7 +381,7 @@ function ReorderSummaryModal({
             </div>
           )}
 
-          {/* Список позиций с нотабельными исходами (price_changed / out_of_stock / unavailable) */}
+          {/* Список позиций с нотабельными исходами (price_changed / out_of_stock / unavailable / усечённые по остатку) */}
           {notableLines.length > 0 && (
             <div className="flex flex-col gap-2">
               {notableLines.map((line, idx) => (
@@ -397,6 +406,13 @@ function ReorderSummaryModal({
                         <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                       </svg>
                     )}
+                    {/* WR-04: товар добавлен без смены цены, но усечён по остатку —
+                        своя янтарная иконка, чтобы строка не осталась без значка */}
+                    {line.capped && line.outcome === 'added' && (
+                      <svg className="w-4 h-4 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                      </svg>
+                    )}
                   </div>
 
                   {/* Описание исхода */}
@@ -416,6 +432,18 @@ function ReorderSummaryModal({
                       )}
                       {line.outcome === 'out_of_stock' && 'нет в наличии'}
                       {line.outcome === 'unavailable' && 'товар больше недоступен'}
+                      {/* WR-04: усечение по остатку для строки added (без смены цены) */}
+                      {line.capped && line.outcome === 'added' && (
+                        <span className="text-amber-600 font-medium">
+                          добавлено {line.addedQty} из {line.requestedQty} — ограничено остатком
+                        </span>
+                      )}
+                      {/* WR-04: усечение для строки с изменённой ценой — отдельной строкой ниже */}
+                      {line.capped && line.outcome === 'price_changed' && (
+                        <span className="block text-amber-600 font-medium mt-0.5">
+                          добавлено {line.addedQty} из {line.requestedQty} — ограничено остатком
+                        </span>
+                      )}
                     </p>
                   </div>
                 </div>

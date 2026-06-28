@@ -34,6 +34,22 @@ export interface ReorderLineResult {
   currentPrice?: number;
   /** Замороженная цена из истории — только для сравнения «было → стало». */
   oldPrice: number;
+  /**
+   * Запрошенное количество из истории заказа (WR-04).
+   * Заполняется только для добавляемых исходов (added / price_changed).
+   */
+  requestedQty?: number;
+  /**
+   * Фактически добавленное количество с учётом капа по текущему остатку (WR-04).
+   * Совпадает с requestedQty, когда остатка хватает; меньше — когда был усечён.
+   * Заполняется только для добавляемых исходов (added / price_changed).
+   */
+  addedQty?: number;
+  /**
+   * true — количество было урезано остатком (addedQty < requestedQty), WR-04.
+   * Модалка сводки показывает по этому флагу «добавлено N из M — ограничено остатком».
+   */
+  capped?: boolean;
 }
 
 /** Агрегированный результат повтора всего заказа. */
@@ -159,12 +175,25 @@ export function classifyReorder(
     // Позиции added и price_changed попадают в корзину → учитываем счётчик
     addedCount++;
 
+    // WR-04: вычисляем фактически добавляемое количество с капом по остатку —
+    // тем же правилом, что addToCartWithQuantity для НОВОЙ позиции (Math.min(qty, stock)).
+    // requestedQty нормализуем: в повреждённой истории quantity может быть не числом.
+    const requestedQty =
+      typeof historyItem.quantity === 'number' && Number.isFinite(historyItem.quantity)
+        ? historyItem.quantity
+        : 0;
+    const addedQty = Math.min(requestedQty, matched.stock);
+    const capped = addedQty < requestedQty;
+
     return {
       outcome,
       historyItem,
       product: matched,
       currentPrice,
       oldPrice,
+      requestedQty,
+      addedQty,
+      capped,
     } satisfies ReorderLineResult;
   });
 
