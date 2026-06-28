@@ -19,6 +19,10 @@ import CatalogSyncProvider from "@/components/CatalogSyncProvider";
 import InstallPromptProvider from "@/components/InstallPromptProvider";
 // Баннер установки Android + bottom-sheet инструкции iOS (PWA-02)
 import InstallPrompt from "@/components/InstallPrompt";
+// Нижняя панель вкладок (Каталог · Избранное · Корзина) — только для роли «Клиент» (план 18-02, D-12)
+import BottomTabBar from "@/components/BottomTabBar";
+// Резерв нижнего отступа под панелью вкладок — только для роли «Клиент» (план 18-02, D-09)
+import ClientBottomSpacer from "@/components/ClientBottomSpacer";
 import { getProducts } from "@/lib/sheets";
 import { buildNavData } from "@/lib/nav";
 
@@ -77,9 +81,15 @@ export default async function CatalogLayout({
             <SettingsPanel />
 
             {/* Контейнер витрины: ограничение ширины и центрирование на десктопе */}
-            <main className="max-w-screen-2xl mx-auto w-full">{children}</main>
+            <main className="max-w-screen-2xl mx-auto w-full">
+              {children}
+              {/* Резерв высоты под панелью вкладок — только для роли «Клиент» (D-09) */}
+              <ClientBottomSpacer />
+            </main>
             {/* Раскрывающаяся иконка связи: основная (Telegram+MAX) → две иконки */}
             <ContactFab />
+            {/* Нижняя панель вкладок: Каталог · Избранное · Корзина (только client, D-12) */}
+            <BottomTabBar secret={params.secret} />
           </InstallPromptProvider>
         </CatalogSyncProvider>
       </NavProvider>
