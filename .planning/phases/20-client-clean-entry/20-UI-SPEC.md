@@ -1,10 +1,11 @@
 ---
 phase: 20
 slug: client-clean-entry
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 created: 2026-06-29
+reviewed_at: 2026-06-29
 ---
 
 # Этап 20 — Дизайн-контракт UI: «Чистый вход клиента + история поиска»
