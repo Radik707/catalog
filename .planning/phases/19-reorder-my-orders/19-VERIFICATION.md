@@ -1,7 +1,7 @@
 ---
 phase: 19-reorder-my-orders
 verified: 2026-06-28T23:00:00Z
-status: human_needed
+status: passed
 score: 11/11
 overrides_applied: 0
 human_verification:
@@ -29,7 +29,7 @@ human_verification:
 
 **Phase Goal:** Клиент видит список отправленных заказов и в один тап повторяет любой — позиции подставляются в корзину с проверкой актуальной цены/наличия. Локальная история честно подписана «Отправленные заказы», исчезнувшие товары помечаются прямо, а не подменяются молча.
 **Verified:** 2026-06-28T23:00:00Z
-**Status:** human_needed
+**Status:** passed (приёмка владельца 2026-06-29)
 **Re-verification:** No — initial verification
 
 ---

@@ -1,47 +1,47 @@
 ---
-status: partial
+status: passed
 phase: 19-reorder-my-orders
 source: [19-VERIFICATION.md]
 started: "2026-06-28T23:10:00Z"
-updated: "2026-06-28T23:10:00Z"
+updated: "2026-06-29T00:00:00Z"
 ---
 
 ## Current Test
 
-[awaiting human testing on Vercel prod]
+[приёмка пройдена — владелец подтвердил «принято» на проде 2026-06-29]
 
 ## Tests
 
 ### 1. Кнопка «Повторить» на карточке заказа — визуальный рендер
 expected: Синяя кнопка «Повторить заказ» на всю ширину карточки, под списком позиций.
-result: [pending]
+result: passed
 
 ### 2. Bottom-sheet сводки при успешном повторе
 expected: Снизу появляется bottom-sheet «Результат повтора» с зелёной галочкой «Добавлено N товаров» и кнопкой «Перейти в корзину →». Панель не прячется под нижними табами клиента (safe-area + 5rem padding).
-result: [pending]
+result: passed
 
 ### 3. Сводка при нулевом результате повтора
 expected: «Ни одного товара из заказа сейчас нельзя добавить» (янтарный значок); кнопки «Перейти в корзину» нет.
-result: [pending]
+result: passed
 
 ### 4. Пункт «Мои заказы» в меню настроек
 expected: Пункт с иконкой документа и текстом «Мои заказы» присутствует в панели ⚙. Тап закрывает панель и переходит на экран заказов.
-result: [pending]
+result: passed
 
 ### 5. Пустое состояние экрана «Отправленные заказы»
 expected: Иконка документа, текст «Вы пока не отправляли заказов», ссылки «Вернуться в каталог» и «Перейти в корзину →».
-result: [pending]
+result: passed
 
 ### 6. Нет мигания подсветки роли (Клиент/Агент) в SettingsPanel
 expected: Активная кнопка роли подсвечена корректно с первого кадра — нет flash до гидратации.
-result: [pending]
+result: passed
 
 ## Summary
 
 total: 6
-passed: 0
+passed: 6
 issues: 0
-pending: 6
+pending: 0
 skipped: 0
 blocked: 0
 
