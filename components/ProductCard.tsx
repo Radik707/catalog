@@ -48,6 +48,11 @@ interface ProductCardProps {
   priceForm?: PriceForm;
   // Цвет цены на карточке (ключ из палитры priceColors) — настройка сайта из админки.
   priceColor?: string;
+  // Управляемый переворот: когда переданы оба пропа, состояние переворота
+  // ведёт родитель (CatalogView) — это нужно для правила «максимум 2 перевёрнутых».
+  // Если пропы не переданы — карточка хранит переворот сама (обратная совместимость).
+  flipped?: boolean;
+  onFlipChange?: (next: boolean) => void;
 }
 
 const BADGE_STYLES: Record<string, string> = {
@@ -138,8 +143,17 @@ export default function ProductCard({
   presentationSizes,
   priceForm = "2",
   priceColor,
+  flipped: flippedProp,
+  onFlipChange,
 }: ProductCardProps) {
-  const [flipped, setFlipped] = useState(false);
+  // Переворот карточки. Управляемый режим (родитель ведёт состояние) включается,
+  // когда передан onFlipChange; иначе — собственное состояние карточки.
+  const [localFlipped, setLocalFlipped] = useState(false);
+  const flipped = flippedProp !== undefined ? flippedProp : localFlipped;
+  const setFlipped = (next: boolean) => {
+    if (onFlipChange) onFlipChange(next);
+    else setLocalFlipped(next);
+  };
   // Цена с учётом выбранной формы (для Ефимовой при форме «1» — +5%)
   const displayPrice = effectivePrice(product, priceForm);
   // Класс цвета цены из настройки сайта (по умолчанию — фиолетовый)

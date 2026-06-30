@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { usePathname } from "next/navigation";
 import { Product } from "@/lib/types";
 import ProductCard from "./ProductCard";
@@ -57,6 +57,27 @@ export default function CatalogView({ products: productsProp, initialMode }: Cat
   // ВАЖНО: хук вызывается БЕЗУСЛОВНО и ВЫШЕ ранних return (правило хуков).
   const { entries: searchEntries, addQuery, removeQuery, clearHistory } = useSearchHistory();
 
+  // ─── Очередь перевёрнутых карточек: максимум 2 одновременно ──────────────────
+  // Состояние переворота поднято из карточки на уровень списка, чтобы можно было
+  // ограничить число открытых оборотов. При перевороте третьей карточки самая
+  // старая (FIFO) автоматически возвращается лицевой стороной.
+  const [flippedIds, setFlippedIds] = useState<string[]>([]);
+  const handleFlipChange = useCallback((id: string, next: boolean) => {
+    setFlippedIds((prev) => {
+      if (next) {
+        if (prev.includes(id)) return prev;
+        // Добавляем в конец и оставляем только две последние — старую закрываем.
+        return [...prev, id].slice(-2);
+      }
+      // Ручное закрытие оборота (тап по обороту) — убираем из очереди.
+      return prev.filter((x) => x !== id);
+    });
+  }, []);
+
+  // Ref памяти прокрутки — объявлен здесь (выше ранних return); эффекты,
+  // зависящие от status, заданы ниже, после вычисления самого status.
+  const scrollRestoredRef = useRef(false);
+
   // Читаем единственный экземпляр sync из провайдера (CatalogSyncProvider в layout).
   // Хук вызывается БЕЗУСЛОВНО (правило хуков — нельзя в ветке условия).
   // Когда проп передан — данные хука игнорируются, используется проп.
@@ -72,6 +93,43 @@ export default function CatalogView({ products: productsProp, initialMode }: Cat
   // Статус загрузки берём из хука только когда проп не передан.
   // Когда проп передан — данные уже готовы, статус "ready".
   const status = productsProp !== undefined ? "ready" : sync.status;
+
+  // ─── Память места прокрутки (возврат из корзины) ────────────────────────────
+  // При переходе в корзину CatalogView размонтируется, при возврате — создаётся
+  // заново, и браузер теряет позицию прокрутки. Сохраняем её в sessionStorage и
+  // восстанавливаем при возврате, чтобы клиент вернулся на то же место списка.
+  // Восстановление позиции один раз, как только данные готовы.
+  useEffect(() => {
+    if (status !== "ready" || scrollRestoredRef.current) return;
+    let saved: string | null = null;
+    try {
+      saved = sessionStorage.getItem("catalog-scroll");
+    } catch {
+      // sessionStorage недоступен (приватный режим и т.п.) — просто без восстановления
+    }
+    // Флаг ставим ПОСЛЕ чтения: до этого момента сохранение запрещено, чтобы
+    // авто-скролл Next.js «вверх» при монтировании не затёр сохранённое значение.
+    scrollRestoredRef.current = true;
+    const y = saved ? parseInt(saved, 10) : 0;
+    if (y > 0) {
+      // Два кадра — чтобы карточки успели отрисоваться и страница набрала высоту.
+      requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo(0, y)));
+    }
+  }, [status]);
+
+  // Непрерывное сохранение текущей позиции прокрутки (после восстановления).
+  useEffect(() => {
+    const onScroll = () => {
+      if (!scrollRestoredRef.current) return;
+      try {
+        sessionStorage.setItem("catalog-scroll", String(window.scrollY));
+      } catch {
+        // молча игнорируем — память места не критична
+      }
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   // Однократно применяем режим из URL (например, ссылка ?filter=hit)
   useEffect(() => {
@@ -259,6 +317,8 @@ export default function CatalogView({ products: productsProp, initialMode }: Cat
       presentationSizes={viewMode === "presentation" ? preset.sizes : undefined}
       priceForm={priceForm}
       priceColor={priceColor}
+      flipped={flippedIds.includes(product.id)}
+      onFlipChange={(next) => handleFlipChange(product.id, next)}
     />
   );
 
