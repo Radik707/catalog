@@ -3,11 +3,11 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: Опыт клиента (телефон)
 status: ready_to_plan
-last_updated: "2026-06-29T14:59:31.618Z"
+last_updated: "2026-06-30T16:05:00.482Z"
 progress:
   total_phases: 13
   completed_phases: 2
-  total_plans: 4
+  total_plans: 7
   completed_plans: 4
   percent: 15
 ---
