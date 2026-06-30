@@ -131,6 +131,29 @@ export default function CatalogView({ products: productsProp, initialMode }: Cat
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  // ─── Выезжающая строка поиска (reveal-on-scroll-up) ─────────────────────────
+  // Чтобы клиенту не приходилось листать в самый верх ради поиска: при прокрутке
+  // ВНИЗ тонкая панель поиска прячется (уезжает под шапку), при прокрутке ВВЕРХ —
+  // снова выезжает. У самого верха страницы — всегда видна.
+  const [searchVisible, setSearchVisible] = useState(true);
+  const lastScrollYRef = useRef(0);
+  useEffect(() => {
+    const onScroll = () => {
+      const y = window.scrollY;
+      const last = lastScrollYRef.current;
+      if (y < 80) {
+        setSearchVisible(true); // у верха — всегда показываем
+      } else if (y > last + 6) {
+        setSearchVisible(false); // листают вниз — прячем
+      } else if (y < last - 6) {
+        setSearchVisible(true); // листают вверх — показываем
+      }
+      lastScrollYRef.current = y;
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
   // Однократно применяем режим из URL (например, ссылка ?filter=hit)
   useEffect(() => {
     if (initialMode && initialMode !== "catalog") setMode(initialMode);
@@ -331,16 +354,22 @@ export default function CatalogView({ products: productsProp, initialMode }: Cat
     <div className="min-h-screen flex flex-col">
       <ScrollToTop viewMode={viewMode === "list" ? "list" : "grid"} />
 
-      {/* Строка поиска — с пропсами истории (SRCH-01) */}
-      <SearchBar
-        value={search}
-        onChange={setSearch}
-        count={visibleCount}
-        history={searchEntries}
-        onPickHistory={(q) => setSearch(q)}
-        onRemoveHistory={removeQuery}
-        onClearHistory={clearHistory}
-      />
+      {/* Строка поиска — липкая под шапкой (top-12) с выездом при прокрутке вверх.
+          z-40 ниже синей шапки (z-50): спрятанная панель уезжает под неё. */}
+      <div
+        className="sticky top-12 z-40 transition-transform duration-200 will-change-transform"
+        style={{ transform: searchVisible ? "translateY(0)" : "translateY(-130%)" }}
+      >
+        <SearchBar
+          value={search}
+          onChange={setSearch}
+          count={visibleCount}
+          history={searchEntries}
+          onPickHistory={(q) => setSearch(q)}
+          onRemoveHistory={removeQuery}
+          onClearHistory={clearHistory}
+        />
+      </div>
 
       {/* Строка «↻ Повторить последний заказ» — компактная одна строка, только client (HOME-02) */}
       {showRepeatRow && (
