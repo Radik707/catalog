@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
+import { usePathname } from "next/navigation";
 import { Product } from "@/lib/types";
 import ProductCard from "./ProductCard";
 import SearchBar from "./SearchBar";
@@ -12,6 +13,18 @@ import { useNav, NavMode } from "./NavProvider";
 import { useCatalogSyncContext } from "@/components/CatalogSyncProvider";
 // Избранное клиента — для режима «fav» (фильтр только избранных товаров)
 import { useFavoritesContext } from "@/components/FavoritesProvider";
+// Роль пользователя (client/sales) — гейт строки повтора (D-06, HOME-02)
+import { useRole } from "@/lib/useRole";
+// История заказов клиента — для строки «↻ Повторить последний заказ» (HOME-02)
+import { useOrderHistoryContext } from "@/components/OrderHistoryProvider";
+// Корзина — addToCartWithQuantity для повтора (D-05, план 19-01)
+import { useCartContext } from "@/components/CartProvider";
+// Чистый хелпер классификации позиций повтора (план 19-01)
+import { classifyReorder, ReorderResult } from "@/lib/reorder";
+// Общая модалка-сводка повтора (вынесена в план 20-02)
+import ReorderSummaryModal from "@/components/ReorderSummaryModal";
+// Хук истории поиска — localStorage, офлайн-безопасно (SRCH-01, D-07/D-08)
+import { useSearchHistory } from "@/lib/useSearchHistory";
 
 interface CatalogViewProps {
   // products теперь опциональный: при отсутствии данные берутся из useCatalogSync (офлайн-режим)
@@ -31,10 +44,26 @@ export default function CatalogView({ products: productsProp, initialMode }: Cat
   const [search, setSearch] = useState("");
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
+  // ─── Хуки для строки повтора (D-06, HOME-02) ────────────────────────────────
+  // ВАЖНО: все хуки вызываются БЕЗУСЛОВНО и ВЫШЕ ранних return (правило хуков).
+  const { role, ready } = useRole();
+  const { entries: orderEntries } = useOrderHistoryContext();
+  const { addToCartWithQuantity } = useCartContext();
+
+  // Состояние сводки повтора: null — не показана; заполнена после нажатия кнопки
+  const [reorderSummary, setReorderSummary] = useState<(ReorderResult & { secret: string }) | null>(null);
+
+  // ─── Хук истории поиска (SRCH-01, D-07/D-08) ────────────────────────────────
+  // ВАЖНО: хук вызывается БЕЗУСЛОВНО и ВЫШЕ ранних return (правило хуков).
+  const { entries: searchEntries, addQuery, removeQuery, clearHistory } = useSearchHistory();
+
   // Читаем единственный экземпляр sync из провайдера (CatalogSyncProvider в layout).
   // Хук вызывается БЕЗУСЛОВНО (правило хуков — нельзя в ветке условия).
   // Когда проп передан — данные хука игнорируются, используется проп.
   const sync = useCatalogSyncContext();
+
+  // Текущий путь — нужен для извлечения secret без его хардкода (паттерн SettingsPanel)
+  const pathname = usePathname();
 
   // Рабочий массив: проп имеет приоритет (обратная совместимость / тесты);
   // при отсутствии пропа — данные приходят из IndexedDB через хук (офлайн-источник).
@@ -49,6 +78,39 @@ export default function CatalogView({ products: productsProp, initialMode }: Cat
     if (initialMode && initialMode !== "catalog") setMode(initialMode);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Запись поискового запроса в историю — по debounce 800мс на непустое значение
+  useEffect(() => {
+    if (!search.trim()) return;
+    const timer = setTimeout(() => {
+      addQuery(search.trim());
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [search, addQuery]);
+
+  // ─── Обработчик кнопки «↻ Повторить последний заказ» ────────────────────────
+  // Логика по образцу handleRepeat в orders/page.tsx (строки 40-58)
+  const handleRepeatLast = useCallback(() => {
+    const entry = orderEntries[orderEntries.length - 1];
+    if (!entry) return;
+
+    // Классифицируем позиции прошлого заказа против актуального каталога
+    const result = classifyReorder(entry.items, products, priceForm);
+
+    // Добавляем в корзину позиции с исходом added и price_changed
+    for (const line of result.lines) {
+      if ((line.outcome === "added" || line.outcome === "price_changed") && line.product) {
+        addToCartWithQuantity(line.product, line.addedQty ?? line.historyItem.quantity);
+      }
+    }
+
+    // Извлекаем secret из pathname: /catalog/<uuid>/... → <uuid>
+    const secretMatch = pathname.match(/\/catalog\/([^/]+)/);
+    const secret = secretMatch ? secretMatch[1] : "";
+
+    // Открываем сводку результата (D-07)
+    setReorderSummary({ ...result, secret });
+  }, [orderEntries, products, priceForm, addToCartWithQuantity, pathname]);
 
   // Плоский список — при активном поиске ИЛИ в режимах Хит/Новинка
   const isFlat = Boolean(search.trim()) || mode !== "catalog";
@@ -121,7 +183,7 @@ export default function CatalogView({ products: productsProp, initialMode }: Cat
   if (status === "loading") {
     return (
       <div className="min-h-screen flex flex-col">
-        {/* Строка поиска — отображаем, но неактивна пока нет данных */}
+        {/* Строка поиска — отображаем, но неактивна пока нет данных; пропсы истории опущены (опциональны) */}
         <SearchBar value="" onChange={() => {}} count={0} />
         {/* Сетка скелетон-карточек: те же классы что у обычной сетки */}
         <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 p-2">
@@ -200,12 +262,37 @@ export default function CatalogView({ products: productsProp, initialMode }: Cat
     />
   );
 
+  // Гейт строки повтора (D-06, HOME-02, T-20-10):
+  // показываем только при ready + роль client + непустая история заказов.
+  // До ready — строки нет (нет сдвига раскладки при гидратации).
+  const showRepeatRow = ready && role === "client" && orderEntries.length > 0;
+
   return (
     <div className="min-h-screen flex flex-col">
       <ScrollToTop viewMode={viewMode === "list" ? "list" : "grid"} />
 
-      {/* Строка поиска */}
-      <SearchBar value={search} onChange={setSearch} count={visibleCount} />
+      {/* Строка поиска — с пропсами истории (SRCH-01) */}
+      <SearchBar
+        value={search}
+        onChange={setSearch}
+        count={visibleCount}
+        history={searchEntries}
+        onPickHistory={(q) => setSearch(q)}
+        onRemoveHistory={removeQuery}
+        onClearHistory={clearHistory}
+      />
+
+      {/* Строка «↻ Повторить последний заказ» — компактная одна строка, только client (HOME-02) */}
+      {showRepeatRow && (
+        <div className="bg-white border-b border-gray-100 px-4 py-2 flex items-center">
+          <button
+            onClick={handleRepeatLast}
+            className="w-full py-2 bg-blue-600 text-white text-sm font-semibold rounded-xl active:bg-blue-700 transition-colors"
+          >
+            ↻ Повторить последний заказ
+          </button>
+        </div>
+      )}
 
       {isFlat ? (
         // Плоский список: поиск или режимы Хит/Новинка
@@ -260,6 +347,15 @@ export default function CatalogView({ products: productsProp, initialMode }: Cat
           onIndexChange={setLightboxIndex}
           onClose={() => setLightboxIndex(null)}
           priceForm={priceForm}
+        />
+      )}
+
+      {/* Сводка повтора — общая модалка (вынесена в план 20-02) */}
+      {reorderSummary && (
+        <ReorderSummaryModal
+          result={reorderSummary}
+          secret={reorderSummary.secret}
+          onClose={() => setReorderSummary(null)}
         />
       )}
     </div>
