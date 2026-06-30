@@ -1,11 +1,26 @@
 "use client";
 
+import { useRole } from "@/lib/useRole";
 import { useCartContext } from './CartProvider';
 
+// Иконка корзины в правой части шапки с бейджем числа позиций.
+// Гейт роли: у client корзина продублирована в нижних табах (D-03),
+// поэтому верхняя иконка у client скрыта — показывается только у sales.
+// До готовности роли (ready=false) держим резерв места, чтобы шапка
+// агента (sales) не дёргалась при гидратации (SSR-safe паттерн).
 export default function CartIcon({ secret }: { secret: string }) {
+  // Хуки вызываются БЕЗУСЛОВНО (правило хуков — выше любого раннего return)
+  const { role, ready } = useRole();
   const { items } = useCartContext();
+
   // Бейдж показывает число ПОЗИЦИЙ (разных товаров), а не сумму количеств.
   const count = items.length;
+
+  // До готовности роли — резерв места, чтобы шапка sales не прыгала
+  if (!ready) return <span className="w-9 h-9" />;
+  // У client корзина есть в нижних табах — верхнюю скрываем
+  if (role === "client") return null;
+
   return (
     <a href={`/catalog/${secret}/cart`} className="relative p-2">
       <svg
