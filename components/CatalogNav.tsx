@@ -5,30 +5,25 @@ import { usePathname, useRouter } from "next/navigation";
 import { useNav, NavMode } from "./NavProvider";
 import { SectionNav } from "@/lib/nav";
 
-// Подписи режимов в свёрнутом/развёрнутом переключателе
-const MODE_LABELS: Record<NavMode, string> = {
-  catalog: "Каталог",
-  hit: "★ Хит",
-  new: "✦ Новинка",
-  fav: "♥ Избранное",
-};
-
-// Режимы в выпадающем переключателе. «Избранное» (fav) сюда НЕ входит —
-// оно включается отдельной иконкой-сердечком в шапке.
-const DROPDOWN_MODES: NavMode[] = ["catalog", "hit", "new"];
+// Три видимых чипа-фильтра в шапке: «Все · Хиты · Новинки».
+// «Избранное» (fav) сюда НЕ входит — оно включается отдельной иконкой-сердечком
+// и нижним табом. «Все» — это режим catalog (показать всё); название «Все»
+// (а не «Каталог») убирает путаницу с нижним табом «Каталог».
+const CHIP_MODES: { mode: NavMode; label: string }[] = [
+  { mode: "catalog", label: "Все" },
+  { mode: "hit", label: "Хиты" },
+  { mode: "new", label: "Новинки" },
+];
 
 // Навигация в синей шапке:
-// 1) сворачивающийся переключатель режима (Каталог/Хит/Новинка),
-// 2) иконки разделов с подписями (только в режиме «Каталог»).
+// 1) три видимых чипа-фильтра (Все/Хиты/Новинки) — тап в один клик, ничего не прячется,
+// 2) иконки разделов с подписями (только в режиме «Все»/catalog).
 //
 // После этапа 20 (план 01): у роли «Клиент» из правой части шапки убраны
 // ♥ Избранное и 🛒 Корзина (они перенесены в нижние табы, D-03/D-04).
-// Освободившееся место автоматически отдаётся этому компоненту через flex-1 —
-// ряд разделов «дышит» и не теснится со свёрнутой кнопкой режима.
+// Чипы держим компактными, ряд разделов — прокручиваемый (flex-1), берёт остаток места.
 export default function CatalogNav({ navData, secret }: { navData: SectionNav[]; secret: string }) {
   const { mode, section, setMode, selectSection } = useNav();
-  // Развёрнут ли список режимов (выезжает вбок по тапу на кнопку режима)
-  const [expanded, setExpanded] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
   const catalogPath = `/catalog/${secret}`;
@@ -52,7 +47,7 @@ export default function CatalogNav({ navData, secret }: { navData: SectionNav[];
     updateEdges();
     window.addEventListener("resize", updateEdges);
     return () => window.removeEventListener("resize", updateEdges);
-  }, [updateEdges, navData, mode, expanded]);
+  }, [updateEdges, navData, mode]);
 
   // Если мы не на странице каталога (например, в корзине) — вернуться в каталог.
   // Состояние навигации (NavProvider) живёт в общем layout и переживёт переход,
@@ -63,41 +58,30 @@ export default function CatalogNav({ navData, secret }: { navData: SectionNav[];
 
   const pickMode = (m: NavMode) => {
     setMode(m);
-    setExpanded(false);
     goCatalogIfNeeded();
   };
 
   return (
     <div className="flex items-center gap-2 min-w-0 flex-1">
-      {expanded ? (
-        // Развёрнутый список из трёх режимов — выбрал, и он схлопнется
-        <div className="flex gap-1 shrink-0">
-          {DROPDOWN_MODES.map((m) => (
-            <button
-              key={m}
-              onClick={() => pickMode(m)}
-              className={`px-2.5 py-1 rounded text-sm font-medium whitespace-nowrap transition-colors ${
-                mode === m
-                  ? "bg-white text-blue-600"
-                  : "bg-blue-500 text-white active:bg-blue-400 hover:bg-blue-400"
-              }`}
-            >
-              {MODE_LABELS[m]}
-            </button>
-          ))}
-        </div>
-      ) : (
-        // Свёрнутая кнопка текущего режима
-        <button
-          onClick={() => setExpanded(true)}
-          className="shrink-0 px-2.5 py-1 rounded text-sm font-semibold bg-white text-blue-600 flex items-center gap-1"
-        >
-          {MODE_LABELS[mode]} <span className="text-[10px]">▾</span>
-        </button>
-      )}
+      {/* Три видимых чипа-фильтра: Все · Хиты · Новинки (компактные) */}
+      <div className="flex gap-1 shrink-0">
+        {CHIP_MODES.map(({ mode: m, label }) => (
+          <button
+            key={m}
+            onClick={() => pickMode(m)}
+            className={`px-2 py-1 rounded text-xs font-semibold whitespace-nowrap transition-colors ${
+              mode === m
+                ? "bg-white text-blue-600"
+                : "bg-blue-500 text-white active:bg-blue-400 hover:bg-blue-400"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
 
-      {/* Иконки разделов — только в «Каталоге» и только когда переключатель свёрнут */}
-      {!expanded && mode === "catalog" && (
+      {/* Иконки разделов — только в режиме «Все» (catalog) */}
+      {mode === "catalog" && (
         <div className="relative min-w-0 flex-1">
           {/* Прокручиваемый ряд иконок */}
           <div
