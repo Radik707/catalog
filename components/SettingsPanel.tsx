@@ -78,20 +78,22 @@ export default function SettingsPanel() {
 
   if (!panelOpen) return null;
 
-  // Базовые режимы — доступны всем ролям.
-  const views: { key: ViewMode; label: string }[] = [
+  // Режимы по роли.
+  //   Клиент: Список / Сетка / Презентация — как раньше.
+  //   Агент (sales): только Презентация и Набор — «Список» по сути дублирует
+  //   «Набор» (плотные строки), а «Сетка» торговому не нужна (по просьбе владельца).
+  // Гейт строго ready && role === "sales": до монтирования (до ready) роль неопределена,
+  // клиент на первом кадре не должен видеть агентский набор (иначе риск гидратации).
+  const clientViews: { key: ViewMode; label: string }[] = [
     { key: "list", label: "☰ Список" },
     { key: "grid", label: "⊞ Сетка" },
     { key: "presentation", label: "◳ Презентация" },
   ];
-
-  // Режим «Быстрый набор» доступен только торговому агенту (D-01/D-02/QORD-04).
-  // Гейт строго ready && role === "sales": до монтирования (до ready) роль неопределена,
-  // клиент на первом кадре не должен видеть пункт агента (иначе риск гидратации).
-  const visibleViews =
-    ready && role === "sales"
-      ? [...views, { key: "quick" as ViewMode, label: "⚡ Набор" }]
-      : views;
+  const salesViews: { key: ViewMode; label: string }[] = [
+    { key: "presentation", label: "◳ Презентация" },
+    { key: "quick", label: "⚡ Набор" },
+  ];
+  const visibleViews = ready && role === "sales" ? salesViews : clientViews;
 
   return (
     <>

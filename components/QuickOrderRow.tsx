@@ -16,6 +16,8 @@ import { Product } from "@/lib/types";
 import { effectivePrice, PriceForm } from "@/lib/pricing";
 import { getUnit } from "@/lib/getUnit";
 import AddToCartButton from "@/components/AddToCartButton";
+// Увеличение фото «поближе» по тапу — показать клиенту / рассмотреть (не на весь экран)
+import ImagePeek from "@/components/ImagePeek";
 
 interface QuickOrderRowProps {
   product: Product;
@@ -48,6 +50,10 @@ function PhotoPlaceholder() {
 export default function QuickOrderRow({ product, priceForm }: QuickOrderRowProps) {
   // Локальный флаг ошибки загрузки фото (офлайн без кэша или нет фото).
   const [imgError, setImgError] = useState(false);
+  // Открыт ли увеличенный просмотр фото (по тапу на миниатюру).
+  const [peekOpen, setPeekOpen] = useState(false);
+  // Есть ли что показывать крупно (фото загрузилось).
+  const hasImage = Boolean(product.imageUrl) && !imgError;
 
   const inStock = product.stock > 0;
   // Эффективная цена с учётом формы (наценка +5% для Ефимовой при priceForm="1").
@@ -61,12 +67,21 @@ export default function QuickOrderRow({ product, priceForm }: QuickOrderRowProps
         inStock ? " bg-white" : " bg-gray-50 opacity-60"
       }`}
     >
-      {/* Миниатюра 56×56. Без клика на флип и без галереи (D-03). */}
-      <div className="relative flex-shrink-0 w-14 h-14 rounded overflow-hidden border border-gray-100 bg-white">
-        {product.imageUrl && !imgError ? (
+      {/* Миниатюра 56×56. Тап по фото → увеличение «поближе» (ImagePeek), не флип
+          и не полноэкранная галерея. Набор заявки идёт кнопками «− N +» справа —
+          они фото не увеличивают. */}
+      <button
+        type="button"
+        onClick={() => hasImage && setPeekOpen(true)}
+        aria-label={hasImage ? "Показать фото крупнее" : undefined}
+        className={`relative flex-shrink-0 w-14 h-14 p-0 rounded overflow-hidden border border-gray-100 bg-white${
+          hasImage ? " cursor-zoom-in" : " cursor-default"
+        }`}
+      >
+        {hasImage ? (
           // unoptimized: прямой Cloudinary URL — тот же, что ловит SW-matcher (офлайн).
           <Image
-            src={product.imageUrl}
+            src={product.imageUrl!}
             alt={product.name}
             width={56}
             height={56}
@@ -78,7 +93,12 @@ export default function QuickOrderRow({ product, priceForm }: QuickOrderRowProps
           // Заглушка при отсутствии фото или ошибке загрузки.
           <PhotoPlaceholder />
         )}
-      </div>
+      </button>
+
+      {/* Увеличенный просмотр фото (по тапу на миниатюру) */}
+      {peekOpen && hasImage && (
+        <ImagePeek src={product.imageUrl!} alt={product.name} onClose={() => setPeekOpen(false)} />
+      )}
 
       {/* Центр: название + скромный показ остатка (как в режиме «Список», без нового фильтра — это этап 22). */}
       <div className="flex-1 min-w-0">

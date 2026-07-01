@@ -8,6 +8,10 @@ import { PriceForm, effectivePrice } from "@/lib/pricing";
 import { priceColorClass } from "@/lib/priceColors";
 import AddToCartButton from "./AddToCartButton";
 import CardCornerButton from "./CardCornerButton";
+// Сердечко избранного вынесено ЗА картинку (режим «Список», клиент)
+import FavoriteButton from "./FavoriteButton";
+// Увеличение фото «поближе» по тапу (не на весь экран — это Lightbox)
+import ImagePeek from "./ImagePeek";
 
 // Набор размеров для режима презентации — меняется вместе с плотностью сетки,
 // чтобы шрифт и цена уменьшались вслед за фото (пропорциональная карточка).
@@ -161,6 +165,10 @@ export default function ProductCard({
   // Флаг ошибки загрузки фото (D-06): при офлайн и незакэшированном фото
   // браузер не может загрузить изображение — показываем иконку-заглушку.
   const [imgError, setImgError] = useState(false);
+  // Открыт ли увеличенный просмотр фото (режим «Список», тап по миниатюре).
+  const [peekOpen, setPeekOpen] = useState(false);
+  // Есть ли что показать крупно (фото загрузилось).
+  const hasImage = Boolean(product.imageUrl) && !imgError;
   const inStock = product.stock > 0;
   const packaging = getPackaging(product.group, product.name);
   // Ключ ищем в нижнем регистре без пробелов — метки регистронезависимы (правило проекта).
@@ -388,36 +396,40 @@ export default function ProductCard({
             PROMO_STICKER_LIST,
           )}
 
-          {/* Миниатюра — только в режиме «С фото».
-              Тап по миниатюре переворачивает карточку; полноэкранный просмотр —
-              угловой кнопкой-стрелками (планшет), на телефоне/ПК — сердечко. */}
+          {/* Миниатюра + сердечко — только в режиме «С фото».
+              Тап по миниатюре → увеличение фото «поближе» (ImagePeek); если фото
+              нет — тап переворачивает карточку (как раньше). Сердечко избранного
+              вынесено ОТДЕЛЬНОЙ кнопкой справа от миниатюры — рядом, касается её,
+              но не перекрывает фото (только роль Клиент, через FavoriteButton). */}
           {showPhotos && (
-            <div
-              onClick={() => setFlipped(true)}
-              className="relative flex-shrink-0 w-14 h-14 rounded overflow-hidden border border-gray-100 bg-white cursor-pointer"
-            >
-              {product.imageUrl && !imgError ? (
-                // unoptimized: прямой Cloudinary URL — тот же, что ловит SW-matcher.
-                // onError: при офлайн + незакэшированном фото → иконка-заглушка (D-06).
-                <Image
-                  src={product.imageUrl}
-                  alt={product.name}
-                  width={56}
-                  height={56}
-                  className="w-full h-full object-contain"
-                  unoptimized
-                  onError={() => setImgError(true)}
-                />
-              ) : (
-                // Заглушка: нет фото ИЛИ фото не загрузилось (D-06 — офлайн без кэша)
-                <PhotoPlaceholder />
-              )}
-              <CardCornerButton
-                productId={product.id}
-                onPhotoOpen={onPhotoOpen}
-                canOpenPhoto={!!product.imageUrl}
-                size="sm"
-              />
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => (hasImage ? setPeekOpen(true) : setFlipped(true))}
+                aria-label={hasImage ? "Показать фото крупнее" : "Открыть карточку"}
+                className={`relative w-14 h-14 p-0 rounded overflow-hidden border border-gray-100 bg-white${
+                  hasImage ? " cursor-zoom-in" : " cursor-pointer"
+                }`}
+              >
+                {hasImage ? (
+                  // unoptimized: прямой Cloudinary URL — тот же, что ловит SW-matcher.
+                  // onError: при офлайн + незакэшированном фото → иконка-заглушка (D-06).
+                  <Image
+                    src={product.imageUrl!}
+                    alt={product.name}
+                    width={56}
+                    height={56}
+                    className="w-full h-full object-contain"
+                    unoptimized
+                    onError={() => setImgError(true)}
+                  />
+                ) : (
+                  // Заглушка: нет фото ИЛИ фото не загрузилось (D-06 — офлайн без кэша)
+                  <PhotoPlaceholder />
+                )}
+              </button>
+              {/* Сердечко ВНЕ картинки — рядом с миниатюрой (клиент) */}
+              <FavoriteButton productId={product.id} />
             </div>
           )}
 
@@ -501,6 +513,11 @@ export default function ProductCard({
           </div>
         </div>
       </div>
+
+      {/* Увеличенный просмотр фото (тап по миниатюре списка) */}
+      {peekOpen && hasImage && (
+        <ImagePeek src={product.imageUrl!} alt={product.name} onClose={() => setPeekOpen(false)} />
+      )}
     </div>
   );
 }
