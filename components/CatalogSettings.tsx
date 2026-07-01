@@ -7,7 +7,7 @@ import { DEFAULT_PRICE_COLOR } from "@/lib/priceColors";
 
 // Общие настройки отображения каталога. Живут в контексте, чтобы
 // кнопка-шестерёнка в шапке и сам каталог делили одно состояние.
-export type ViewMode = "list" | "grid" | "presentation";
+export type ViewMode = "list" | "grid" | "presentation" | "quick"; // + быстрый набор (роль sales)
 export type GridPreset = "2x3" | "3x4" | "4x6";
 
 // Пресеты плотности сетки для режима презентации.
@@ -108,7 +108,8 @@ export default function CatalogSettingsProvider({
   // пересчёт ради редкого сценария живой смены роли — лишняя сложность.
   useEffect(() => {
     const v = localStorage.getItem("viewMode");
-    if (v === "list" || v === "grid" || v === "presentation") setViewMode(v);
+    // Добавлено "quick" — режим быстрого набора (доступен только роли sales, D-01/D-02)
+    if (v === "list" || v === "grid" || v === "presentation" || v === "quick") setViewMode(v);
 
     const p = localStorage.getItem("gridPreset");
     if (p === "2x3" || p === "3x4" || p === "4x6") {
