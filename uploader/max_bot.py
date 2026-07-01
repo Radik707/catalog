@@ -246,9 +246,31 @@ def max_answer(callback_id: str, text: "str | None" = None,
 
 # ── Приём прайсов от оператора (мост загрузки каталога) ──
 
+# Дебаунс: оператор обычно кидает 3 прайса подряд, каждый приходит отдельным
+# событием. Копим пачку и через паузу шлём ОДИН ответ с одной кнопкой — иначе
+# оператор видит три кнопки и путается, какую жать.
+_PRICE_DEBOUNCE_SECS = float(os.environ.get("MAX_PRICE_DEBOUNCE", "5"))
+_price_pending: dict = {}          # chat_id -> {saved, bad, failed, timer}
+_price_lock = threading.Lock()
+
+
 def _raw_filename(att: dict) -> str:
     payload = att.get("payload") or {}
     return (att.get("filename") or payload.get("filename") or att.get("name") or "").strip()
+
+
+def _att_log(att: dict) -> str:
+    """Краткое БЕЗОПАСНОЕ описание вложения для лога — без подписанного url и токена."""
+    payload = att.get("payload") or {}
+    url = payload.get("url") or ""
+    return json.dumps({
+        "type": att.get("type"),
+        "filename": att.get("filename"),
+        "size": att.get("size"),
+        "fileId": payload.get("fileId"),
+        "url_host": url.split("?", 1)[0] if url else "",
+        "has_token": bool(payload.get("token")),
+    }, ensure_ascii=False)
 
 
 def _download_max_file(att: dict) -> "bytes | None":
@@ -256,7 +278,7 @@ def _download_max_file(att: dict) -> "bytes | None":
     payload = att.get("payload") or {}
     url = payload.get("url") or att.get("url")
     if not url:
-        log.warning("У вложения нет url для скачивания: %s", json.dumps(att, ensure_ascii=False)[:300])
+        log.warning("У вложения нет url для скачивания: %s", _att_log(att))
         return None
     last = None
     for params in ({}, {"access_token": MAX_BOT_TOKEN}):  # вторая попытка — с токеном
@@ -283,21 +305,52 @@ def _price_keyboard(n: int) -> dict:
     ]])
 
 
+def _flush_price(chat_id) -> None:
+    """Отправить ОДИН итог по накопленной пачке прайсов (после паузы дебаунса)."""
+    with _price_lock:
+        st = _price_pending.pop(chat_id, None)
+    if not st:
+        return
+    saved, bad_format, dl_failed = st["saved"], st["bad"], st["failed"]
+
+    if saved == 0:
+        reasons = []
+        if bad_format:
+            reasons.append(f"{bad_format} не в формате .xlsx")
+        if dl_failed:
+            reasons.append(f"{dl_failed} не удалось скачать")
+        reason = "; ".join(reasons) or "неизвестная причина"
+        max_send(chat_id, f"Не принял ни одного файла ({reason}). Пришлите прайсы .xlsx ещё раз.")
+        return
+
+    from app import list_files
+    queue = list_files()
+    note = f"Принял {saved} файл(ов). В очереди: {len(queue)}."
+    extra = []
+    if bad_format:
+        extra.append(f"{bad_format} не .xlsx")
+    if dl_failed:
+        extra.append(f"{dl_failed} не скачались")
+    if extra:
+        note += " Пропущено: " + ", ".join(extra) + "."
+    note += "\nКогда пришлёте все прайсы — нажмите «Обновить каталог»."
+    max_send(chat_id, note, attachments=[_price_keyboard(len(queue))])
+
+
 def _handle_price_files(chat_id, file_atts: list) -> None:
-    """Приём прайсов от доверенного отправителя: скачать в очередь + показать кнопку."""
+    """Приём прайсов: скачать в очередь; итоговый ответ с кнопкой — один на пачку (дебаунс)."""
     if str(chat_id) not in MAX_UPLOAD_CHAT_IDS:
         max_send(chat_id, "Извините, приём прайсов доступен только оператору каталога.")
         log.warning("Отклонён файл от chat_id=%s (не в allowlist загрузки)", chat_id)
         return
 
     # Ленивый импорт — избегаем циклической зависимости с app.py
-    from app import INCOMING_DIR, sanitize_filename, unique_path, list_files
+    from app import INCOMING_DIR, sanitize_filename, unique_path
 
     INCOMING_DIR.mkdir(parents=True, exist_ok=True)
-    # Раздельные счётчики отказов, чтобы не путать «не тот формат» и «не скачалось»
     saved, bad_format, dl_failed = 0, 0, 0
     for att in file_atts:
-        log.info("Входящий файл MAX: %s", json.dumps(att, ensure_ascii=False)[:600])  # разведка структуры
+        log.info("Входящий файл MAX: %s", _att_log(att))
         fname = _raw_filename(att) or "price.xlsx"
         if not fname.lower().endswith(".xlsx"):
             bad_format += 1
@@ -316,27 +369,22 @@ def _handle_price_files(chat_id, file_atts: list) -> None:
             log.warning("Не удалось сохранить файл MAX %s: %s", fname, e)
             dl_failed += 1
 
-    if saved == 0:
-        reasons = []
-        if bad_format:
-            reasons.append(f"{bad_format} не в формате .xlsx")
-        if dl_failed:
-            reasons.append(f"{dl_failed} не удалось скачать")
-        reason = "; ".join(reasons) or "неизвестная причина"
-        max_send(chat_id, f"Не принял ни одного файла ({reason}). Пришлите прайс .xlsx ещё раз.")
-        return
-
-    queue = list_files()
-    note = f"Принял {saved} файл(ов). В очереди: {len(queue)}."
-    extra = []
-    if bad_format:
-        extra.append(f"{bad_format} не .xlsx")
-    if dl_failed:
-        extra.append(f"{dl_failed} не скачались")
-    if extra:
-        note += " Пропущено: " + ", ".join(extra) + "."
-    note += "\nКогда пришлёте все прайсы — нажмите «Обновить каталог»."
-    max_send(chat_id, note, attachments=[_price_keyboard(len(queue))])
+    # Накопить пачку и перезапустить таймер — итог уйдёт ОДНИМ сообщением через паузу.
+    # Каждый новый файл сбрасывает таймер, поэтому 3 файла подряд дадут один ответ.
+    with _price_lock:
+        st = _price_pending.get(chat_id)
+        if st and st.get("timer"):
+            st["timer"].cancel()
+        if not st:
+            st = {"saved": 0, "bad": 0, "failed": 0, "timer": None}
+            _price_pending[chat_id] = st
+        st["saved"] += saved
+        st["bad"] += bad_format
+        st["failed"] += dl_failed
+        timer = threading.Timer(_PRICE_DEBOUNCE_SECS, _flush_price, args=[chat_id])
+        timer.daemon = True
+        st["timer"] = timer
+        timer.start()
 
 
 # ── CORS ──
