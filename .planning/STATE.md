@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Опыт торгового (планшет)
 status: executing
-last_updated: "2026-07-01T06:01:56.815Z"
-last_activity: 2026-07-01 -- Phase 21 planning complete
+last_updated: "2026-07-01T18:30:00.000Z"
+last_activity: 2026-07-01 -- Plan 21-01 completed (getUnit + QuickOrderRow)
 progress:
   total_phases: 13
   completed_phases: 0
   total_plans: 2
-  completed_plans: 0
-  percent: 0
+  completed_plans: 1
+  percent: 50
 ---
 
 # Состояние проекта
@@ -20,12 +20,12 @@ progress:
 См.: .planning/PROJECT.md (обновлён 2026-06-30)
 
 **Суть:** Каталог всегда актуален — вечером залили прайсы, утром витрина корректна; клиент быстро находит нужное.
-**Текущий фокус:** Веха **v1.6 «Опыт торгового (планшет)»** — дорожная карта готова (этапы 21–23, 13/13 требований привязаны). Следующий шаг — планирование этапа 21: `/gsd-plan-phase 21`.
+**Текущий фокус:** Веха **v1.6 «Опыт торгового (планшет)»** — этап 21 выполняется, план 21-01 завершён (getUnit + QuickOrderRow). Следующий шаг — выполнить план 21-02 (подключение QuickOrderRow в витрину).
 
 ## Текущая позиция
 
-**Веха:** v1.6 «Опыт торгового (планшет)» (этапы 21–23) — дорожная карта составлена, этапы заведены.
-**Статус:** Планирование. Дорожная карта (`.planning/ROADMAP.md`) и требования (`.planning/REQUIREMENTS.md`, прослеживаемость) заполнены. Ни один этап ещё не спланирован детально.
+**Веха:** v1.6 «Опыт торгового (планшет)» (этапы 21–23) — этап 21, план 1 из 2 выполнен.
+**Статус:** Выполнение. Этап 21, план 21-01 завершён: `lib/getUnit.ts` и `components/QuickOrderRow.tsx` созданы и собраны (npm run build ✓). Следующий — план 21-02 (подключение к витрине: CatalogView, CatalogSettings, SettingsPanel).
 
 Финальная веха мастер-плана разделения аудиторий (v1.4 → v1.5 → v1.6). Все этапы ветвятся по роли «Торговый» (`role==='sales'`); клиентский опыт v1.4/v1.5 не задеваем.
 
@@ -274,7 +274,7 @@ progress:
 
 ## Current Position
 
-Phase: 21 (Quick-order набор + кратность упаковки) — не спланирован
-Plan: —
+Phase: 21 (quick-order) — EXECUTING
+Plan: 2 of 2
 Status: Ready to execute
-Last activity: 2026-07-01 -- Phase 21 planning complete
+Last activity: 2026-07-01
