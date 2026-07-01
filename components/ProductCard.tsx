@@ -12,6 +12,8 @@ import CardCornerButton from "./CardCornerButton";
 import FavoriteButton from "./FavoriteButton";
 // Увеличение фото «поближе» по тапу (не на весь экран — это Lightbox)
 import ImagePeek from "./ImagePeek";
+// Чтение количества в корзине — для итоговой (суммирующейся) цены в списке
+import { useCartContext } from "./CartProvider";
 
 // Набор размеров для режима презентации — меняется вместе с плотностью сетки,
 // чтобы шрифт и цена уменьшались вслед за фото (пропорциональная карточка).
@@ -169,6 +171,9 @@ export default function ProductCard({
   const [peekOpen, setPeekOpen] = useState(false);
   // Есть ли что показать крупно (фото загрузилось).
   const hasImage = Boolean(product.imageUrl) && !imgError;
+  // Количество этого товара в корзине — для итоговой цены в списке (цена × qty).
+  const { getQuantity } = useCartContext();
+  const qty = getQuantity(product.id);
   const inStock = product.stock > 0;
   const packaging = getPackaging(product.group, product.name);
   // Ключ ищем в нижнем регистре без пробелов — метки регистронезависимы (правило проекта).
@@ -384,14 +389,15 @@ export default function ProductCard({
         {/* ── ЛИЦЕВАЯ СТОРОНА ── */}
         <div
           style={{ backfaceVisibility: "hidden" }}
-          className={`flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors duration-100${inStock ? " bg-white" : " bg-gray-50"}`}
+          className={`flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 transition-colors duration-100${inStock ? " bg-white" : " bg-gray-50"}`}
         >
-          {/* Метка в режиме списка — абсолютно в правом верхнем углу строки.
+          {/* Метка в режиме списка — в левом верхнем углу строки (над фото), чтобы
+              не сталкиваться с кнопкой «В корзину», которая теперь справа сверху.
               Акция — стикер-«пилюля» 🔥; остальные — стандартный бейдж. */}
           {renderBadge(
             product.badge,
             badgeStyle,
-            "absolute top-1.5 right-1.5",
+            "absolute top-1 left-1 z-10",
             "text-[10px] px-1.5 py-0.5",
             PROMO_STICKER_LIST,
           )}
@@ -433,39 +439,43 @@ export default function ProductCard({
             </div>
           )}
 
-          {/* Название + мета — клик открывает флип */}
+          {/* Название + мета — клик открывает флип.
+              Название мельче (13px) и на всю освободившуюся ширину, до 3 строк —
+              строка стала компактнее, на экран помещается больше товаров. */}
           <button
             onClick={() => setFlipped(true)}
             className="flex-1 min-w-0 text-left focus:outline-none"
           >
-            <p className="text-sm font-medium text-gray-900 leading-tight">
+            <p className="text-[13px] font-medium text-gray-900 leading-snug line-clamp-3">
               {product.name}
             </p>
             <div className="flex items-center gap-2 mt-0.5">
-              <span className="text-xs text-gray-400">{product.category}</span>
+              <span className="text-[11px] text-gray-400 truncate">{product.category}</span>
               {inStock ? (
-                <span className="text-xs text-emerald-600 font-medium">
+                <span className="text-[11px] text-emerald-600 font-medium whitespace-nowrap">
                   {product.stock} шт
                 </span>
               ) : (
-                <span className="text-xs text-gray-400">Нет в наличии</span>
+                <span className="text-[11px] text-gray-400 whitespace-nowrap">Нет в наличии</span>
               )}
             </div>
           </button>
 
-          {/* Цена + кнопка — НЕ триггерят флип */}
-          <div className="flex items-center gap-3 flex-shrink-0">
+          {/* Кнопка сверху, цена ПОД ней (компактнее, по просьбе владельца).
+              Цена суммируется: нет в корзине → цена за единицу; добавлен (qty>0) →
+              итог (цена × количество), обновляется при нажатии «+»/«−». НЕ триггерят флип. */}
+          <div className="flex flex-col items-end gap-1 flex-shrink-0">
+            <AddToCartButton product={product} />
             {showPrices && (
-              <div className="text-right">
+              <div className="text-right leading-none">
                 <span className={`text-sm font-bold ${priceCol} whitespace-nowrap`}>
-                  {displayPrice.toFixed(2)} ₽
+                  {(qty > 0 ? displayPrice * qty : displayPrice).toFixed(2)} ₽
                 </span>
-                {packaging && (
-                  <p className="text-xs text-gray-400">{packaging}</p>
-                )}
+                <p className="text-[10px] text-gray-400 mt-0.5 whitespace-nowrap">
+                  {qty > 0 ? `итого · ${qty} шт` : packaging || "за шт"}
+                </p>
               </div>
             )}
-            <AddToCartButton product={product} />
           </div>
         </div>
 

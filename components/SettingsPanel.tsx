@@ -78,22 +78,31 @@ export default function SettingsPanel() {
 
   if (!panelOpen) return null;
 
-  // Режимы по роли.
-  //   Клиент: Список / Сетка / Презентация — как раньше.
-  //   Агент (sales): только Презентация и Набор — «Список» по сути дублирует
-  //   «Набор» (плотные строки), а «Сетка» торговому не нужна (по просьбе владельца).
+  // Режимы по роли (по просьбе владельца — без дублей).
+  //   Клиент: Список / Сетка (презентация убрана — визуально дублирует сетку).
+  //   Агент (sales): Презентация / Набор («Список» дублирует «Набор», «Сетка» не нужна).
   // Гейт строго ready && role === "sales": до монтирования (до ready) роль неопределена,
   // клиент на первом кадре не должен видеть агентский набор (иначе риск гидратации).
+  const isSales = ready && role === "sales";
   const clientViews: { key: ViewMode; label: string }[] = [
     { key: "list", label: "☰ Список" },
     { key: "grid", label: "⊞ Сетка" },
-    { key: "presentation", label: "◳ Презентация" },
   ];
   const salesViews: { key: ViewMode; label: string }[] = [
     { key: "presentation", label: "◳ Презентация" },
     { key: "quick", label: "⚡ Набор" },
   ];
-  const visibleViews = ready && role === "sales" ? salesViews : clientViews;
+  const visibleViews = isSales ? salesViews : clientViews;
+
+  // Активная вкладка для подсветки. Если сохранённый режим недоступен текущей роли
+  // (напр. дефолтная «presentation» у клиента), подсвечиваем тот, что реально
+  // показывается на витрине: агенту — presentation, клиенту — grid (см. effectiveMode
+  // в CatalogView, логика совпадает), чтобы не было «немой» вкладки без подсветки.
+  const activeView: ViewMode = visibleViews.some((v) => v.key === viewMode)
+    ? viewMode
+    : isSales
+    ? "presentation"
+    : "grid";
 
   return (
     <>
@@ -150,7 +159,7 @@ export default function SettingsPanel() {
                 key={v.key}
                 onClick={() => setViewMode(v.key)}
                 className={`px-3 py-1.5 transition-colors ${
-                  viewMode === v.key ? "bg-blue-500 text-white" : "bg-white text-gray-500"
+                  activeView === v.key ? "bg-blue-500 text-white" : "bg-white text-gray-500"
                 }`}
               >
                 {v.label}
@@ -214,8 +223,8 @@ export default function SettingsPanel() {
             </div>
           </div>
 
-          {/* Плотность сетки — только в режиме презентации */}
-          {viewMode === "presentation" && (
+          {/* Плотность сетки — только в режиме презентации (по активной вкладке) */}
+          {activeView === "presentation" && (
             <div className="flex rounded-lg overflow-hidden border border-gray-200 text-xs">
               {(Object.keys(PRESENTATION_PRESETS) as GridPreset[]).map((key) => (
                 <button

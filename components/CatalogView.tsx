@@ -321,20 +321,21 @@ export default function CatalogView({ products: productsProp, initialMode }: Cat
   const preset = PRESENTATION_PRESETS[gridPreset];
 
   // Эффективный режим с SSR-safe гейтом роли (D-02, QORD-04, T-21-03).
-  // Доступные режимы по роли:
-  //   client → list | grid | presentation (quick недоступен);
-  //   sales  → presentation | quick (список/сетка убраны из меню по просьбе владельца).
-  // Если сохранён режим, недоступный текущей роли, — откатываемся к presentation,
-  // чтобы в меню всегда была подсвечена активная вкладка, а не «немой» режим.
-  // SSR-safe: до ready роль считается client, поэтому агентский quick не покажется на первом кадре.
+  // Доступные режимы по роли (по просьбе владельца — без дублей):
+  //   client → list | grid (презентация убрана — дублирует сетку);
+  //   sales  → presentation | quick (список/сетка убраны).
+  // Если сохранён режим, недоступный текущей роли, — откатываемся к дефолту роли
+  // (client → grid, sales → presentation), чтобы в меню всегда была подсвечена
+  // активная вкладка, а не «немой» режим (совпадает с activeView в SettingsPanel).
+  // SSR-safe: до ready роль считается client, поэтому агентские режимы не покажутся на первом кадре.
   const isSales = ready && role === "sales";
   const effectiveMode = isSales
     ? viewMode === "quick"
       ? "quick"
       : "presentation"
-    : viewMode === "quick"
-    ? "presentation"
-    : viewMode;
+    : viewMode === "list" || viewMode === "grid"
+    ? viewMode
+    : "grid";
 
   // Класс контейнера товаров — зависит от effectiveMode (не viewMode напрямую).
   // quick: тот же flex-1 что и list — плотный список без сетки (D-09, QORD-05).
