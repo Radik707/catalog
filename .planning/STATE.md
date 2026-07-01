@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Опыт торгового (планшет)
 status: planning
-last_updated: "2026-06-30T19:30:00.000Z"
-last_activity: 2026-06-30
+last_updated: "2026-07-01T05:44:41.444Z"
+last_activity: 2026-06-30 — Roadmap v1.6 created (этапы 21–23)
 progress:
-  total_phases: 3
+  total_phases: 13
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
