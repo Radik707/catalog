@@ -9,6 +9,8 @@ import ScrollToTop from "./ScrollToTop";
 import Lightbox from "./Lightbox";
 import { useCatalogSettings, PRESENTATION_PRESETS } from "./CatalogSettings";
 import { useNav, NavMode } from "./NavProvider";
+// Плотная строка режима «Быстрый набор» — рендерится вместо ProductCard в effectiveMode === "quick"
+import QuickOrderRow from "@/components/QuickOrderRow";
 // Единый экземпляр sync из провайдера — разделяется с кнопкой ↻ в шапке (план 02)
 import { useCatalogSyncContext } from "@/components/CatalogSyncProvider";
 // Избранное клиента — для режима «fav» (фильтр только избранных товаров)
@@ -318,32 +320,53 @@ export default function CatalogView({ products: productsProp, initialMode }: Cat
 
   const preset = PRESENTATION_PRESETS[gridPreset];
 
-  // Класс контейнера товаров — зависит от режима отображения
+  // Эффективный режим с SSR-safe гейтом роли (D-02, QORD-04, T-21-03):
+  // если сохранён quick, но роль не sales или ready ещё не пришёл — откатываемся
+  // к presentation, чтобы клиент не видел агентский режим даже на первом кадре.
+  const effectiveMode =
+    viewMode === "quick" && !(ready && role === "sales") ? "presentation" : viewMode;
+
+  // Класс контейнера товаров — зависит от effectiveMode (не viewMode напрямую).
+  // quick: тот же flex-1 что и list — плотный список без сетки (D-09, QORD-05).
+  // Виртуализацию ~800 строк НЕ вводим заранее (D-09) — рендерим как режим «Список»;
+  // при реальных тормозах следующий шаг — react-virtual или аналог.
   const containerClass =
-    viewMode === "list"
+    effectiveMode === "list" || effectiveMode === "quick"
       ? "flex-1"
-      : viewMode === "presentation"
+      : effectiveMode === "presentation"
       ? `flex-1 grid ${preset.cols} gap-1.5 p-1.5`
       : "flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 p-2"; // десктоп xl/2xl
 
   const visibleCount = isFlat ? flatFiltered.length : groupedCount;
 
-  // Карточка товара (общий рендер для обеих веток)
-  const renderCard = (product: Product) => (
-    <ProductCard
-      key={product.id}
-      product={product}
-      showPhotos={showPhotos}
-      showPrices={showPrices}
-      viewMode={viewMode}
-      onPhotoOpen={() => openLightbox(product)}
-      presentationSizes={viewMode === "presentation" ? preset.sizes : undefined}
-      priceForm={priceForm}
-      priceColor={priceColor}
-      flipped={flippedIds.includes(product.id)}
-      onFlipChange={(next) => handleFlipChange(product.id, next)}
-    />
-  );
+  // Карточка товара (общий рендер для обеих веток).
+  // В режиме quick рендерим QuickOrderRow вместо ProductCard (QORD-01, D-03).
+  const renderCard = (product: Product) => {
+    if (effectiveMode === "quick") {
+      return (
+        <QuickOrderRow
+          key={product.id}
+          product={product}
+          priceForm={priceForm}
+        />
+      );
+    }
+    return (
+      <ProductCard
+        key={product.id}
+        product={product}
+        showPhotos={showPhotos}
+        showPrices={showPrices}
+        viewMode={effectiveMode === "list" ? "list" : effectiveMode === "grid" ? "grid" : "presentation"}
+        onPhotoOpen={() => openLightbox(product)}
+        presentationSizes={effectiveMode === "presentation" ? preset.sizes : undefined}
+        priceForm={priceForm}
+        priceColor={priceColor}
+        flipped={flippedIds.includes(product.id)}
+        onFlipChange={(next) => handleFlipChange(product.id, next)}
+      />
+    );
+  };
 
   // Гейт строки повтора (D-06, HOME-02, T-20-10):
   // показываем только при ready + роль client + непустая история заказов.
@@ -352,7 +375,8 @@ export default function CatalogView({ products: productsProp, initialMode }: Cat
 
   return (
     <div className="min-h-screen flex flex-col">
-      <ScrollToTop viewMode={viewMode === "list" ? "list" : "grid"} />
+      {/* В режиме quick ScrollToTop ведёт себя как list (плотный список без сетки) */}
+      <ScrollToTop viewMode={effectiveMode === "list" || effectiveMode === "quick" ? "list" : "grid"} />
 
       {/* Строка поиска — липкая под шапкой (top-12) с выездом при прокрутке вверх.
           z-40 ниже синей шапки (z-50): спрятанная панель уезжает под неё. */}
