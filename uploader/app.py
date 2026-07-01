@@ -155,12 +155,13 @@ def update_history(entry_id: str, **fields) -> None:
 
 # ── Фоновая обработка ──
 
-def _process_async(entry_id: str) -> None:
+def _process_async(entry_id: str, max_chat_id=None) -> None:
     """Фоновая обработка: бэкап → upload.py → warn/stash/rollback → notify → история.
 
     Выполняется в отдельном потоке (threading.Thread daemon).
     Все подробные сообщения уходят ТОЛЬКО владельцу через notify().
     Оператор видит только нейтральный result_text в таблице истории.
+    max_chat_id — если задан (запуск из MAX-бота), дублируем краткий итог оператору в MAX.
     Lock освобождается в finally — гарантированно, даже при исключении.
     """
     try:
@@ -168,6 +169,7 @@ def _process_async(entry_id: str) -> None:
         b_ok, b_rows = backup_catalog()
         if not b_ok:
             notify("error", "❌ Не удалось сохранить резервную копию каталога — обновление отменено.")
+            _notify_max(max_chat_id, "❌ Не удалось сохранить резервную копию — обновление отменено.")
             update_history(
                 entry_id,
                 status="error",
@@ -188,6 +190,7 @@ def _process_async(entry_id: str) -> None:
                 "❌ Обновление каталога не удалось — файлы не распознались.\n"
                 f"{err}\nВернул прошлую версию. Нажмите, чтобы посмотреть файлы.",
             )
+            _notify_max(max_chat_id, "❌ Не получилось разобрать файлы — вернул прошлую версию каталога. Проверьте прайсы.")
             update_history(
                 entry_id,
                 status="error",
@@ -209,6 +212,11 @@ def _process_async(entry_id: str) -> None:
                 f"⚠️ Загрузка дала {count} товаров, а было {b_rows} — это сильно меньше обычного.\n"
                 "Я вернул прошлую версию каталога. Что делать?",
             )
+            _notify_max(
+                max_chat_id,
+                f"⚠️ Получилось {count} товаров — подозрительно мало (было {b_rows}). "
+                "Вернул прошлую версию каталога, проверьте файлы.",
+            )
             update_history(
                 entry_id,
                 status="warn",
@@ -219,6 +227,7 @@ def _process_async(entry_id: str) -> None:
 
         # 4. Всё хорошо
         notify("plain", f"✅ Каталог обновлён: {count} товаров.")
+        _notify_max(max_chat_id, f"✅ Каталог обновлён: {count} товаров. Сайт обновится за минуту.")
         update_history(
             entry_id,
             status="ok",
@@ -231,6 +240,7 @@ def _process_async(entry_id: str) -> None:
         log.exception("Необработанное исключение в _process_async: %s", exc)
         try:
             notify("error", f"❌ Непредвиденная ошибка обновления каталога: {exc}")
+            _notify_max(max_chat_id, "❌ Непредвиденная ошибка при обновлении каталога.")
         except Exception:
             pass
         try:
@@ -402,6 +412,21 @@ def notify(mode: str, text: str) -> None:
         log.warning("Уведомление не отправлено: %s", e)
 
 
+def _notify_max(chat_id, text: str) -> None:
+    """Уведомление оператору в MAX (когда обновление запущено из MAX-бота).
+
+    chat_id=None → ничего не делаем (обычная загрузка с сайта). Импорт max_send
+    ленивый, чтобы не создавать циклическую зависимость с max_bot.
+    """
+    if not chat_id:
+        return
+    try:
+        from max_bot import max_send
+        max_send(chat_id, text)
+    except Exception as e:  # noqa: BLE001 — уведомление не должно ронять обновление
+        log.warning("MAX-уведомление не отправлено: %s", e)
+
+
 # ── Маршруты (всё под секретным сегментом /<token>) ──
 
 def check(token: str) -> None:
@@ -516,6 +541,36 @@ def update(token: str):
 
     # Немедленный нейтральный ответ — оператор не ждёт
     return jsonify(ok=True, message="Файлы отправлены, обработка идёт.")
+
+
+def start_update_from_max(chat_id) -> "tuple[bool, str]":
+    """Запуск обновления каталога по файлам из очереди — вызывается из MAX-бота.
+
+    Использует ТОТ ЖЕ конвейер и защиту от двойного запуска (PROCESS_LOCK), что и
+    веб-загрузчик. Возвращает (запущено?, текст оператору). Итог обработки уедет
+    оператору в MAX по завершении фонового потока (_notify_max в _process_async).
+    """
+    if not list_files():
+        return False, "Нет файлов для обновления."
+    if not PROCESS_LOCK.acquire(blocking=False):
+        return False, "Обработка уже идёт, подождите."
+    try:
+        entry_id = append_history({
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "status": "processing",
+            "count": None,
+            "result_text": "обрабатывается… (из MAX)",
+            "files": list_files(),
+        })
+        threading.Thread(
+            target=_process_async, args=(entry_id,),
+            kwargs={"max_chat_id": chat_id}, daemon=True,
+        ).start()
+    except Exception:
+        PROCESS_LOCK.release()  # поток не стартовал — освобождаем замок сами
+        log.exception("Не удалось запустить обработку из MAX")
+        return False, "Не удалось запустить обработку, попробуйте ещё раз."
+    return True, "Обновляю каталог…"
 
 
 @app.get("/<token>/history")

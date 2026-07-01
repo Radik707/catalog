@@ -11,6 +11,12 @@ max_bot.py — Blueprint интеграции с мессенджером MAX (�
     6. Нажатия на кнопки приходят событием message_callback → обрабатываем
        (отмена с подтверждением, уведомление владельцу).
 
+Мост прайсов: оператор из allowlist (MAX_UPLOAD_CHAT_IDS) шлёт боту .xlsx →
+бот скачивает их в очередь загрузчика и показывает кнопку «Обновить каталог» →
+по нажатию запускается ТОТ ЖЕ безопасный конвейер, что и на сайте (app.py:
+бэкап → upload.py → откат при подозрительно малом числе товаров), итог уходит
+оператору в MAX. Приём файлов от посторонних отклоняется.
+
 Почему короткий id, а не весь заказ в ссылке: в диплинк ?start= помещается лишь
 128 символов. Заказ лежит на сервере (живёт MAX_ORDER_TTL секунд), боту идёт только id.
 
@@ -26,6 +32,8 @@ max_bot.py — Blueprint интеграции с мессенджером MAX (�
     MAX_API_BASE           — база API (по умолч. https://platform-api2.max.ru).
     MAX_WEBHOOK_SECRET     — секрет вебхука (сверяется с X-Max-Bot-Api-Secret).
     MAX_CORS_ORIGIN        — разрешённые origin витрины через запятую (по умолч. *).
+    MAX_UPLOAD_CHAT_IDS    — chat_id операторов, кому разрешено слать прайсы (через запятую).
+                             Владелец (MAX_OWNER_CHAT_ID) разрешён всегда.
     MAX_ORDER_TTL          — время жизни заказа в секундах (по умолч. 86400 — сутки,
                              чтобы кнопка «Отменить» работала какое-то время).
     MAX_CA_BUNDLE          — путь к доверенному CA (Минцифры) для TLS к API, если нужно.
@@ -33,6 +41,7 @@ max_bot.py — Blueprint интеграции с мессенджером MAX (�
 
 import os
 import time
+import json
 import hmac
 import sqlite3
 import logging
@@ -59,6 +68,12 @@ MAX_CA_BUNDLE = os.environ.get("MAX_CA_BUNDLE", "")
 _VERIFY = MAX_CA_BUNDLE if MAX_CA_BUNDLE else True
 
 _ALLOWED_ORIGINS = [o.strip() for o in MAX_CORS_ORIGIN.split(",") if o.strip()]
+
+# Кто может присылать боту прайсы (запускать обновление каталога) — allowlist chat_id.
+# Владелец разрешён всегда; операторов добавляем в MAX_UPLOAD_CHAT_IDS (через запятую).
+MAX_UPLOAD_CHAT_IDS = {x.strip() for x in os.environ.get("MAX_UPLOAD_CHAT_IDS", "").split(",") if x.strip()}
+if MAX_OWNER_CHAT_ID:
+    MAX_UPLOAD_CHAT_IDS.add(MAX_OWNER_CHAT_ID)
 
 # ── Хранилище заказов (SQLite на диске) ──
 # Постоянное хранилище: заказ переживает перезапуск службы и перезагрузку сервера
@@ -229,6 +244,88 @@ def max_answer(callback_id: str, text: "str | None" = None,
         return False
 
 
+# ── Приём прайсов от оператора (мост загрузки каталога) ──
+
+def _raw_filename(att: dict) -> str:
+    payload = att.get("payload") or {}
+    return (att.get("filename") or payload.get("filename") or att.get("name") or "").strip()
+
+
+def _download_max_file(att: dict) -> "bytes | None":
+    """Скачать присланный боту файл. Ссылка обычно в attachment.payload.url."""
+    payload = att.get("payload") or {}
+    url = payload.get("url") or att.get("url")
+    if not url:
+        log.warning("У вложения нет url для скачивания: %s", json.dumps(att, ensure_ascii=False)[:300])
+        return None
+    last = None
+    for params in ({}, {"access_token": MAX_BOT_TOKEN}):  # вторая попытка — с токеном
+        try:
+            r = requests.get(url, params=params, timeout=60, verify=_VERIFY)
+            last = r.status_code
+            if r.status_code // 100 == 2:
+                return r.content
+        except requests.RequestException as e:
+            log.warning("Ошибка скачивания файла MAX: %s", e)
+            return None
+    log.warning("Скачивание файла MAX не удалось (код %s)", last)
+    return None
+
+
+def _price_keyboard(n: int) -> dict:
+    """Кнопки под очередью прайсов: обновить каталог / очистить очередь."""
+    return _kb([[
+        _btn_cb(f"✅ Обновить каталог ({n})", "priceupdate"),
+        _btn_cb("🗑 Очистить очередь", "priceclear"),
+    ]])
+
+
+def _handle_price_files(chat_id, file_atts: list) -> None:
+    """Приём прайсов от доверенного отправителя: скачать в очередь + показать кнопку."""
+    if str(chat_id) not in MAX_UPLOAD_CHAT_IDS:
+        max_send(chat_id, "Извините, приём прайсов доступен только оператору каталога.")
+        log.warning("Отклонён файл от chat_id=%s (не в allowlist загрузки)", chat_id)
+        return
+
+    # Ленивый импорт — избегаем циклической зависимости с app.py
+    from app import INCOMING_DIR, sanitize_filename, unique_path, list_files
+
+    INCOMING_DIR.mkdir(parents=True, exist_ok=True)
+    saved, skipped = 0, 0
+    for att in file_atts:
+        log.info("Входящий файл MAX: %s", json.dumps(att, ensure_ascii=False)[:600])  # разведка структуры
+        fname = _raw_filename(att) or "price.xlsx"
+        if not fname.lower().endswith(".xlsx"):
+            skipped += 1
+            continue
+        data = _download_max_file(att)
+        if not data:
+            skipped += 1
+            continue
+        dest = unique_path(INCOMING_DIR, sanitize_filename(fname))
+        try:
+            with open(dest, "wb") as f:
+                f.write(data)
+            saved += 1
+            log.info("MAX: сохранён прайс %s (%d байт)", dest.name, len(data))
+        except OSError as e:
+            log.warning("Не удалось сохранить файл MAX %s: %s", fname, e)
+            skipped += 1
+
+    if saved == 0:
+        msg = f"Принял 0 файлов (пропущено {skipped} — нужен формат .xlsx)." if skipped \
+              else "Не смог принять файлы. Пришлите прайсы в формате .xlsx."
+        max_send(chat_id, msg)
+        return
+
+    queue = list_files()
+    note = f"Принял {saved} файл(ов). В очереди: {len(queue)}."
+    if skipped:
+        note += f" Пропущено {skipped} (не .xlsx)."
+    note += "\nКогда пришлёте все прайсы — нажмите «Обновить каталог»."
+    max_send(chat_id, note, attachments=[_price_keyboard(len(queue))])
+
+
 # ── CORS ──
 
 def _cors_origin() -> str:
@@ -330,9 +427,26 @@ def _handle_started(chat_id, user: dict, payload: str) -> None:
     )
 
 
-def _handle_callback(callback_id: str, payload: str) -> None:
+def _handle_callback(callback_id: str, payload: str, chat_id=None) -> None:
     """Обработка нажатия инлайн-кнопки."""
     action, _, order_id = payload.partition(":")
+
+    # Кнопки прайсов (только для доверенных отправителей)
+    if action in ("priceupdate", "priceclear"):
+        if str(chat_id) not in MAX_UPLOAD_CHAT_IDS:
+            max_answer(callback_id, notification="Недоступно")
+            return
+        if action == "priceupdate":
+            from app import start_update_from_max
+            ok, msg = start_update_from_max(chat_id)
+            # Итог обработки уедет отдельным сообщением по завершении (_notify_max)
+            max_answer(callback_id, text=("🔄 " + msg) if ok else msg, notification=msg)
+        else:  # priceclear
+            from app import clear_incoming
+            n = clear_incoming()
+            max_answer(callback_id, text=f"Очередь очищена (удалено файлов: {n}).", notification="Очищено")
+        return
+
     order = _get_order(order_id)
 
     if action == "cancel":
@@ -392,16 +506,23 @@ def max_webhook():
             cb = update.get("callback") or {}
             callback_id = cb.get("callback_id")
             payload = (cb.get("payload") or "").strip()
+            chat_id = (update.get("message") or {}).get("recipient", {}).get("chat_id")
             if callback_id and payload:
-                _handle_callback(callback_id, payload)
+                _handle_callback(callback_id, payload, chat_id)
         elif utype == "message_created":
-            # Запасной разбор старта по диплинку через сообщение «/start <id>».
             msg = update.get("message") or {}
             body = msg.get("body") or {}
             text = (body.get("text") or "").strip()
             sender = msg.get("sender") or {}
             chat_id = (msg.get("recipient") or {}).get("chat_id")
-            if text.startswith("/start"):
+            attachments = body.get("attachments") or msg.get("attachments") or []
+            # Прайсы (файлы .xlsx) от оператора → мост загрузки каталога
+            file_atts = [a for a in attachments
+                         if a.get("type") == "file" or _raw_filename(a).lower().endswith(".xlsx")]
+            if file_atts:
+                _handle_price_files(chat_id, file_atts)
+            elif text.startswith("/start"):
+                # Запасной разбор старта по диплинку через сообщение «/start <id>».
                 parts = text.split(maxsplit=1)
                 payload = parts[1].strip() if len(parts) > 1 else ""
                 _handle_started(chat_id, sender, payload)
