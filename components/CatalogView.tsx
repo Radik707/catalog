@@ -37,7 +37,7 @@ interface CatalogViewProps {
 
 export default function CatalogView({ products: productsProp, initialMode }: CatalogViewProps) {
   // Настройки отображения (управляются шестерёнкой в шапке)
-  const { viewMode, gridPreset, showPhotos, showPrices, priceForm, priceColor } = useCatalogSettings();
+  const { viewMode, gridPreset, showPhotos, showPrices, priceForm, priceColor, panelOpen, panelHeight } = useCatalogSettings();
   // Состояние навигации (режим, раздел, подгруппа) — из общего контекста
   const { mode, section, subgroup, setMode } = useNav();
   // Избранное — для режима «fav»
@@ -378,11 +378,19 @@ export default function CatalogView({ products: productsProp, initialMode }: Cat
       {/* В режиме quick ScrollToTop ведёт себя как list (плотный список без сетки) */}
       <ScrollToTop viewMode={effectiveMode === "list" || effectiveMode === "quick" ? "list" : "grid"} />
 
-      {/* Строка поиска — липкая под шапкой (top-12) с выездом при прокрутке вверх.
-          z-40 ниже синей шапки (z-50): спрятанная панель уезжает под неё. */}
+      {/* Строка поиска — липкая под шапкой (высота шапки 48px).
+          z-40 ниже синей шапки (z-50): спрятанная строка уезжает под неё.
+          Когда открыта панель настроек — строка встаёт ПОД панелью (сдвиг на её
+          высоту через top + marginTop) и не прячется при прокрутке, чтобы не
+          наезжать на меню. Когда панель закрыта — обычное поведение: под шапкой
+          с выездом при прокрутке вверх. */}
       <div
-        className="sticky top-12 z-40 transition-transform duration-200 will-change-transform"
-        style={{ transform: searchVisible ? "translateY(0)" : "translateY(-130%)" }}
+        className="sticky z-40 transition-transform duration-200 will-change-transform"
+        style={{
+          top: panelOpen ? 48 + panelHeight : 48,
+          marginTop: panelOpen ? panelHeight : 0,
+          transform: panelOpen || searchVisible ? "translateY(0)" : "translateY(-130%)",
+        }}
       >
         <SearchBar
           value={search}

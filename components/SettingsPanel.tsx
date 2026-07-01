@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import {
   useCatalogSettings,
@@ -31,7 +31,32 @@ export default function SettingsPanel() {
     setPriceForm,
     panelOpen,
     setPanelOpen,
+    setPanelHeight,
   } = useCatalogSettings();
+
+  // Ссылка на саму панель — по ней замеряем высоту, чтобы строка поиска встала ПОД ней.
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // Сообщаем высоту открытой панели в контекст (строка поиска сдвигается на неё).
+  // Пока панель закрыта — высота 0. ResizeObserver ловит изменения высоты «на лету»
+  // (переключение режима «Презентация» добавляет ряд, смена роли — пункт «Набор»,
+  // поворот экрана меняет перенос строк).
+  useEffect(() => {
+    if (!panelOpen) {
+      setPanelHeight(0);
+      return;
+    }
+    const el = panelRef.current;
+    if (!el) return;
+    const measure = () => setPanelHeight(el.offsetHeight);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      setPanelHeight(0);
+    };
+  }, [panelOpen, setPanelHeight]);
 
   // Роль пользователя — первый элемент панели настроек (D-07).
   // WR-03: берём ещё и SSR-safe флаг ready (контракт useRole, D-04). До монтирования
@@ -77,7 +102,7 @@ export default function SettingsPanel() {
       />
 
       {/* Сама панель — закреплена под шапкой (высота шапки 48px = top-12) */}
-      <div className="fixed top-12 left-0 right-0 z-40 border-b border-gray-200 bg-white shadow-lg">
+      <div ref={panelRef} className="fixed top-12 left-0 right-0 z-40 border-b border-gray-200 bg-white shadow-lg">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
           {/* Роль: Клиент | Агент — первый элемент панели, самая влиятельная настройка (D-07) */}
           <div className="flex items-center gap-2">

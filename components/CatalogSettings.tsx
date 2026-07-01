@@ -72,6 +72,10 @@ interface CatalogSettings {
   priceColor: string; // цвет цены на карточках — настройка сайта из админ-панели
   panelOpen: boolean; // открыта ли выпадающая панель настроек
   setPanelOpen: (v: boolean) => void;
+  // Высота открытой панели настроек в пикселях (0 — когда закрыта). По ней строка
+  // поиска сдвигается вниз, чтобы вставать ПОД панелью, а не наезжать на неё.
+  panelHeight: number;
+  setPanelHeight: (h: number) => void;
 }
 
 const Ctx = createContext<CatalogSettings | null>(null);
@@ -98,6 +102,9 @@ export default function CatalogSettingsProvider({
   // фиолетовый; реальное значение подтянем с сервера, кэш в localStorage для офлайна.
   const [priceColor, setPriceColor] = useState<string>(DEFAULT_PRICE_COLOR);
   const [panelOpen, setPanelOpen] = useState(false);
+  // Высота открытой панели настроек — заполняется самой панелью (SettingsPanel),
+  // читается строкой поиска (CatalogView), чтобы сдвинуть её под панель.
+  const [panelHeight, setPanelHeight] = useState(0);
 
   // Загрузка сохранённых настроек из localStorage.
   // ВНИМАНИЕ (WR-03, осознанный компромисс): этот useEffect считает дефолт сетки
@@ -186,6 +193,8 @@ export default function CatalogSettingsProvider({
         priceColor,
         panelOpen,
         setPanelOpen,
+        panelHeight,
+        setPanelHeight,
       }}
     >
       {children}
