@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Опыт торгового (планшет)
-status: executing
-last_updated: "2026-07-01T18:30:00.000Z"
-last_activity: 2026-07-01 -- Plan 21-01 completed (getUnit + QuickOrderRow)
+status: verifying
+last_updated: "2026-07-01T18:17:05.660Z"
+last_activity: 2026-07-01
 progress:
   total_phases: 13
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
-  percent: 50
+  completed_plans: 2
+  percent: 8
 ---
 
 # Состояние проекта
@@ -20,18 +20,18 @@ progress:
 См.: .planning/PROJECT.md (обновлён 2026-06-30)
 
 **Суть:** Каталог всегда актуален — вечером залили прайсы, утром витрина корректна; клиент быстро находит нужное.
-**Текущий фокус:** Веха **v1.6 «Опыт торгового (планшет)»** — этап 21 выполняется, план 21-01 завершён (getUnit + QuickOrderRow). Следующий шаг — выполнить план 21-02 (подключение QuickOrderRow в витрину).
+**Текущий фокус:** Веха **v1.6 «Опыт торгового (планшет)»** — этап 21 ЗАВЕРШЁН (оба плана выполнены). Режим «Быстрый набор» подключён в витрину, виден только роли sales.
 
 ## Текущая позиция
 
-**Веха:** v1.6 «Опыт торгового (планшет)» (этапы 21–23) — этап 21, план 1 из 2 выполнен.
-**Статус:** Выполнение. Этап 21, план 21-01 завершён: `lib/getUnit.ts` и `components/QuickOrderRow.tsx` созданы и собраны (npm run build ✓). Следующий — план 21-02 (подключение к витрине: CatalogView, CatalogSettings, SettingsPanel).
+**Веха:** v1.6 «Опыт торгового (планшет)» (этапы 21–23) — этап 21 завершён (2/2 плана).
+**Статус:** Этап 21 завершён. Оба плана выполнены: `lib/getUnit.ts`, `components/QuickOrderRow.tsx` (план 01) + ViewMode quick, SettingsPanel visibleViews, CatalogView effectiveMode, cart/page.tsx getUnit (план 02). npm run build ✓. Следующий — этап 22 (Наличие числом + режим «Показ клиенту»).
 
 Финальная веха мастер-плана разделения аудиторий (v1.4 → v1.5 → v1.6). Все этапы ветвятся по роли «Торговый» (`role==='sales'`); клиентский опыт v1.4/v1.5 не задеваем.
 
 **Этапы вехи v1.6:**
 
-- [ ] Этап 21: Quick-order набор + кратность упаковки — QORD-01..05 (закрывает T1, T2)
+- [x] Этап 21: Quick-order набор + кратность упаковки — QORD-01..05 (закрывает T1, T2) — ЗАВЕРШЁН 2026-07-01
 - [ ] Этап 22: Наличие числом + режим «Показ клиенту» — STOCK-01..02, SHOW-01..02 (закрывает T3, T5)
 - [ ] Этап 23: Корзина с разбивкой по поставщику — SUPCART-01..04 (закрывает T4)
 
@@ -208,6 +208,10 @@ progress:
 - [19-02] Пункт «Мои заказы» в SettingsPanel безусловный (нет гейта ready/роль) — экран безвреден в обеих ролях, риска гидратации нет (D-10)
 - [20-02] pluralGoods не импортируется в orders/page напрямую — он живёт внутри ReorderSummaryModal; orders/page импортирует только pluralOrders/pluralItems
 - [20-02] Комментарий-заглушка оставлен в конце orders/page для ориентира о вынесенном коде (не мешает, не дублирует)
+- [21-02] effectiveMode как единственная точка откатного гейта в CatalogView: viewMode не меняется в стейте, только рендер корректируется (D-02)
+- [21-02] visibleViews derived list в SettingsPanel: базовый views без quick, гейт вынесен в производный список (QORD-04)
+- [21-02] D-10 выполнен: снимок заказа несёт реальную единицу через getUnit(product).replace(/^за\s+/i, '') || 'шт'
+- [21-02] D-09 подтверждён: виртуализация не введена; комментарий-заметка в CatalogView о react-virtual при реальных тормозах
 
 ### Ожидающие задачи
 
@@ -276,5 +280,5 @@ progress:
 
 Phase: 21 (quick-order) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-01
