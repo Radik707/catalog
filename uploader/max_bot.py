@@ -261,7 +261,10 @@ def _download_max_file(att: dict) -> "bytes | None":
     last = None
     for params in ({}, {"access_token": MAX_BOT_TOKEN}):  # вторая попытка — с токеном
         try:
-            r = requests.get(url, params=params, timeout=60, verify=_VERIFY)
+            # ВАЖНО: файловый CDN MAX (fd.oneme.ru) проверяется системным/`certifi`
+            # набором CA, а НЕ бандлом Минцифры (тот нужен только для platform-api2.max.ru).
+            # Поэтому здесь verify=True, иначе TLS падает с CERTIFICATE_VERIFY_FAILED.
+            r = requests.get(url, params=params, timeout=60, verify=True)
             last = r.status_code
             if r.status_code // 100 == 2:
                 return r.content
@@ -291,16 +294,17 @@ def _handle_price_files(chat_id, file_atts: list) -> None:
     from app import INCOMING_DIR, sanitize_filename, unique_path, list_files
 
     INCOMING_DIR.mkdir(parents=True, exist_ok=True)
-    saved, skipped = 0, 0
+    # Раздельные счётчики отказов, чтобы не путать «не тот формат» и «не скачалось»
+    saved, bad_format, dl_failed = 0, 0, 0
     for att in file_atts:
         log.info("Входящий файл MAX: %s", json.dumps(att, ensure_ascii=False)[:600])  # разведка структуры
         fname = _raw_filename(att) or "price.xlsx"
         if not fname.lower().endswith(".xlsx"):
-            skipped += 1
+            bad_format += 1
             continue
         data = _download_max_file(att)
         if not data:
-            skipped += 1
+            dl_failed += 1
             continue
         dest = unique_path(INCOMING_DIR, sanitize_filename(fname))
         try:
@@ -310,18 +314,27 @@ def _handle_price_files(chat_id, file_atts: list) -> None:
             log.info("MAX: сохранён прайс %s (%d байт)", dest.name, len(data))
         except OSError as e:
             log.warning("Не удалось сохранить файл MAX %s: %s", fname, e)
-            skipped += 1
+            dl_failed += 1
 
     if saved == 0:
-        msg = f"Принял 0 файлов (пропущено {skipped} — нужен формат .xlsx)." if skipped \
-              else "Не смог принять файлы. Пришлите прайсы в формате .xlsx."
-        max_send(chat_id, msg)
+        reasons = []
+        if bad_format:
+            reasons.append(f"{bad_format} не в формате .xlsx")
+        if dl_failed:
+            reasons.append(f"{dl_failed} не удалось скачать")
+        reason = "; ".join(reasons) or "неизвестная причина"
+        max_send(chat_id, f"Не принял ни одного файла ({reason}). Пришлите прайс .xlsx ещё раз.")
         return
 
     queue = list_files()
     note = f"Принял {saved} файл(ов). В очереди: {len(queue)}."
-    if skipped:
-        note += f" Пропущено {skipped} (не .xlsx)."
+    extra = []
+    if bad_format:
+        extra.append(f"{bad_format} не .xlsx")
+    if dl_failed:
+        extra.append(f"{dl_failed} не скачались")
+    if extra:
+        note += " Пропущено: " + ", ".join(extra) + "."
     note += "\nКогда пришлёте все прайсы — нажмите «Обновить каталог»."
     max_send(chat_id, note, attachments=[_price_keyboard(len(queue))])
 
