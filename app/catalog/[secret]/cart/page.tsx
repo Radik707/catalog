@@ -9,7 +9,9 @@ import QuantityInput from "@/components/QuantityInput";
 // История заказов — запись снимка при отправке (план 16-02).
 // Через общий провайдер (а не прямой хук) — иначе две кнопки отправки затирают записи друг друга (CR-01).
 import { useOrderHistoryContext } from "@/components/OrderHistoryProvider";
-import type { OrderHistoryEntry, OrderHistoryItem } from "@/lib/types";
+import type { OrderHistoryEntry, OrderHistoryItem, Product } from "@/lib/types";
+// Реальная единица товара в снимке заказа: «шт» / «блок» / «кг» / … (D-10, план 21-02).
+import { getUnit } from "@/lib/getUnit";
 
 const TELEGRAM_USERNAME = "ZhukOleh";
 // Параметры MAX: ник бота (для ссылки) и эндпоинт приёма заказа на daniella.
@@ -205,18 +207,25 @@ export default function CartPage({
 /* ---------- Хелпер: сборка снимка заказа для истории ---------- */
 // Строит массив OrderHistoryItem из корзины с ценами через effectivePrice (D-07, D-08).
 // Снимок сохраняет «цену, которую видел клиент», совпадающую с текстом заказа (D-08).
+// Тип параметра product расширен до Product — для getUnit нужны поля group/name (D-10, план 21-02).
 function buildOrderSnapshot(
-  items: Array<{ product: Parameters<typeof effectivePrice>[0]; quantity: number }>,
+  items: Array<{ product: Product; quantity: number }>,
   priceForm: Parameters<typeof effectivePrice>[1]
 ): { snapshot: OrderHistoryItem[]; total: number } {
-  const snapshot: OrderHistoryItem[] = items.map(({ product, quantity }) => ({
-    id: product.id,
-    name: product.name,
-    quantity,
-    priceAtOrder: effectivePrice(product, priceForm), // цена «как видел клиент» (D-08)
-    unit: 'шт',
-    imageUrl: product.imageUrl,
-  }));
+  const snapshot: OrderHistoryItem[] = items.map(({ product, quantity }) => {
+    // Реальная единица через getUnit: «за шт» → «шт», «за блок» → «блок», fallback «шт» (D-10).
+    // getUnit возвращает строку с предлогом «за …» — срезаем его перед записью в снимок.
+    const rawUnit = getUnit(product);
+    const unit = rawUnit ? rawUnit.replace(/^за\s+/i, "") || "шт" : "шт";
+    return {
+      id: product.id,
+      name: product.name,
+      quantity,
+      priceAtOrder: effectivePrice(product, priceForm), // цена «как видел клиент» (D-08)
+      unit,
+      imageUrl: product.imageUrl,
+    };
+  });
   const total = snapshot.reduce(
     (sum, item) => sum + item.priceAtOrder * item.quantity,
     0
