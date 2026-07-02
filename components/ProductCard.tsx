@@ -59,6 +59,9 @@ interface ProductCardProps {
   // Если пропы не переданы — карточка хранит переворот сама (обратная совместимость).
   flipped?: boolean;
   onFlipChange?: (next: boolean) => void;
+  // Грузить фото «жадно» (loading=eager) вместо ленивого — включается в офлайне,
+  // чтобы карточки не «белели» при быстрой прокрутке (ленивый триггер просыпает момент).
+  eagerImage?: boolean;
 }
 
 const BADGE_STYLES: Record<string, string> = {
@@ -151,6 +154,7 @@ export default function ProductCard({
   priceColor,
   flipped: flippedProp,
   onFlipChange,
+  eagerImage = false,
 }: ProductCardProps) {
   // Переворот карточки. Управляемый режим (родитель ведёт состояние) включается,
   // когда передан onFlipChange; иначе — собственное состояние карточки.
@@ -248,6 +252,7 @@ export default function ProductCard({
                     fill
                     className="object-contain"
                     unoptimized
+                    loading={eagerImage ? "eager" : "lazy"}
                     onError={() => setImgError(true)}
                   />
                 ) : (
@@ -427,6 +432,7 @@ export default function ProductCard({
                     height={56}
                     className="w-full h-full object-contain"
                     unoptimized
+                    loading={eagerImage ? "eager" : "lazy"}
                     onError={() => setImgError(true)}
                   />
                 ) : (

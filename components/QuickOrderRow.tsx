@@ -23,6 +23,9 @@ interface QuickOrderRowProps {
   product: Product;
   // Форма цен: "1" → +5% для Ефимовой; "2" → базовые цены (по умолчанию).
   priceForm: PriceForm;
+  // Грузить фото «жадно» (loading=eager) вместо ленивого — включается в офлайне,
+  // чтобы миниатюры не «белели» при быстрой прокрутке.
+  eager?: boolean;
 }
 
 // Локальная заглушка-иконка фото — аналог PhotoPlaceholder из ProductCard.
@@ -47,7 +50,7 @@ function PhotoPlaceholder() {
   );
 }
 
-export default function QuickOrderRow({ product, priceForm }: QuickOrderRowProps) {
+export default function QuickOrderRow({ product, priceForm, eager = false }: QuickOrderRowProps) {
   // Локальный флаг ошибки загрузки фото (офлайн без кэша или нет фото).
   const [imgError, setImgError] = useState(false);
   // Открыт ли увеличенный просмотр фото (по тапу на миниатюру).
@@ -87,6 +90,7 @@ export default function QuickOrderRow({ product, priceForm }: QuickOrderRowProps
             height={56}
             className="w-full h-full object-contain"
             unoptimized
+            loading={eager ? "eager" : "lazy"}
             onError={() => setImgError(true)}
           />
         ) : (

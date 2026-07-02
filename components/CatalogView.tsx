@@ -350,6 +350,12 @@ export default function CatalogView({ products: productsProp, initialMode }: Cat
 
   const visibleCount = isFlat ? flatFiltered.length : groupedCount;
 
+  // Офлайн: грузим фото сразу (eager), а не лениво. При ленивой загрузке (по умолчанию
+  // next/image) браузер во время быстрой прокрутки откладывает подгрузку — карточки
+  // «белеют», пока не пошевелишь экраном (триггер видимости просыпает момент).
+  // Онлайн оставляем lazy, чтобы не тянуть все ~700 фото разом при первом заходе.
+  const eagerImages = !sync.isOnline;
+
   // Карточка товара (общий рендер для обеих веток).
   // В режиме quick рендерим QuickOrderRow вместо ProductCard (QORD-01, D-03).
   const renderCard = (product: Product) => {
@@ -359,6 +365,7 @@ export default function CatalogView({ products: productsProp, initialMode }: Cat
           key={product.id}
           product={product}
           priceForm={priceForm}
+          eager={eagerImages}
         />
       );
     }
@@ -375,6 +382,7 @@ export default function CatalogView({ products: productsProp, initialMode }: Cat
         priceColor={priceColor}
         flipped={flippedIds.includes(product.id)}
         onFlipChange={(next) => handleFlipChange(product.id, next)}
+        eagerImage={eagerImages}
       />
     );
   };
