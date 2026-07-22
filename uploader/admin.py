@@ -80,6 +80,27 @@ STRUCTURE = _load_structure()
 # ensure_ascii=False — кириллица читаемо ложится в JS-литерал (страница в UTF-8)
 STRUCTURE_JSON = json.dumps(STRUCTURE, ensure_ascii=False)
 
+
+def _load_structure_full() -> dict:
+    """Полная 3-уровневая карта Раздел→Подгруппа→[Категории] для редактора порядка (Работа 2).
+
+    В отличие от _load_structure (только имена подгрупп) сохраняет и список категорий —
+    редактор порядка переставляет все три уровня. Порядок ключей сохраняется (dict упорядочен).
+    Graceful-fallback: любая ошибка → пустой dict, редактор просто покажет пустое дерево.
+    """
+    structure_path = SCRIPT_DIR.parent / "scripts" / "structure_map.json"
+    try:
+        with open(structure_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:  # noqa: BLE001
+        log.warning("Не удалось загрузить structure_map.json (полную): %s", e)
+        return {}
+
+
+# Полная карта с категориями и её JSON для редактора порядка (Работа 2)
+STRUCTURE_FULL = _load_structure_full()
+STRUCTURE_FULL_JSON = json.dumps(STRUCTURE_FULL, ensure_ascii=False)
+
 # --- Отдельный секрет панели администратора (независимо от APP_SECRET — D-02) ---
 ADMIN_SECRET = os.environ.get("ADMIN_SECRET", "")
 
@@ -167,7 +188,9 @@ def _run_py(script: Path, *args) -> tuple:
 def admin_index(token: str):
     """Главная страница панели — отдать одностраничный HTML."""
     check_admin(token)
-    return PAGE.replace("__TOKEN__", token).replace("__STRUCTURE__", STRUCTURE_JSON)
+    return (PAGE.replace("__TOKEN__", token)
+                .replace("__STRUCTURE_FULL__", STRUCTURE_FULL_JSON)
+                .replace("__STRUCTURE__", STRUCTURE_JSON))
 
 
 @admin_bp.get("/<token>/products")
@@ -572,6 +595,61 @@ def admin_set_setting(token: str):
     return jsonify(ok=True, message="Цвет цены сохранён. На сайте обновится в течение минуты.")
 
 
+def _validate_catalog_order(data: dict) -> bool:
+    """Проверить структуру порядка каталога перед записью (Работа 2).
+
+    Ждём: {"sections": [str], "subgroups": {str: [str]}, "categories": {str: [str]}}.
+    Любой уровень необязателен, но если есть — типы должны совпадать. Защита от мусора
+    в ячейке настроек (её потом читает upload.py).
+    """
+    if not isinstance(data, dict):
+        return False
+    sections = data.get("sections", [])
+    subgroups = data.get("subgroups", {})
+    categories = data.get("categories", {})
+    if not isinstance(sections, list) or not all(isinstance(s, str) for s in sections):
+        return False
+    for mapping in (subgroups, categories):
+        if not isinstance(mapping, dict):
+            return False
+        for k, v in mapping.items():
+            if not isinstance(k, str) or not isinstance(v, list) or not all(isinstance(x, str) for x in v):
+                return False
+    return True
+
+
+@admin_bp.post("/<token>/catalog-order")
+def admin_set_catalog_order(token: str):
+    """Сохранить пользовательский порядок витрины (Работа 2).
+
+    Принимает JSON {sections, subgroups, categories}. Валидирует структуру, пишет её
+    JSON-строкой в ячейку «catalog_order» вкладки «Настройки» через sheet_helper.
+    upload.py применит порядок при ближайшем прогоне («Применить сейчас» / загрузка прайсов).
+    """
+    check_admin(token)
+
+    data = request.get_json(silent=True) or {}
+    if not _validate_catalog_order(data):
+        return jsonify(ok=False, message="Неверный формат порядка."), 400
+
+    # Компактный JSON (без пробелов) — экономим место в ячейке
+    payload = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+    # Предел ячейки Google Sheets — 50000 символов; наш JSON много меньше, но проверим
+    if len(payload) > 45000:
+        return jsonify(ok=False, message="Порядок слишком большой для сохранения."), 400
+
+    try:
+        rc, output = _run_py(SHEET_HELPER, "set_setting", "--key", "catalog_order", "--value", payload)
+    except Exception as e:  # noqa: BLE001
+        log.warning("admin /catalog-order: ошибка запуска sheet_helper: %s", e)
+        return jsonify(ok=False, message="Не удалось сохранить порядок. Попробуйте ещё раз."), 500
+    if rc != 0:
+        log.warning("sheet_helper set_setting(catalog_order) rc=%d: %s", rc, output.strip()[-200:])
+        return jsonify(ok=False, message="Не удалось сохранить порядок. Попробуйте ещё раз."), 500
+
+    return jsonify(ok=True, message="Порядок сохранён. Нажмите «Применить сейчас», чтобы обновить сайт.")
+
+
 # ── Одностраничный HTML (PAGE) ──
 # Структура: Tabler CSS из CDN (только стили, без JS), mobile-first, адаптивный контейнер.
 # Один экран: сетка/список фото-карточек с инлайн-правкой группы, названия и фото.
@@ -959,6 +1037,52 @@ PAGE = r"""<!doctype html>
                  border: 1px solid rgba(0,0,0,.1); }
   /* Активный цвет — синяя обводка (как у других активных кнопок панели) */
   .pcolor.active { border-color: #2563eb; background: #eff6ff; color: #1e40af; font-weight: 600; }
+
+  /* ── Редактор порядка каталога (Работа 2): полноэкранная модалка ── */
+  .order-editor { position: fixed; inset: 0; z-index: 1200; background: #f3f4f6;
+                  display: none; flex-direction: column; }
+  .order-editor.open { display: flex; }
+  .oe-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px;
+             background: #fff; border-bottom: 1px solid #e5e7eb; }
+  .oe-title { font-size: 16px; font-weight: 600; color: #111827; margin: 0; flex: 1; }
+  .oe-btn { min-height: 40px; padding: 8px 16px; border-radius: 8px; border: 1px solid #d1d5db;
+            background: #fff; cursor: pointer; font-size: 14px; color: #374151; }
+  .oe-save { background: #2563eb; color: #fff; border-color: #2563eb; font-weight: 600; }
+  .oe-save:disabled { opacity: .6; cursor: default; }
+  .oe-body { flex: 1; overflow-y: auto; padding: 12px 12px 40px; }
+  .oe-hint { font-size: 13px; color: #6b7280; margin: 0 0 12px; padding: 0 4px; }
+
+  /* Узел дерева (раздел/подгруппа/категория) */
+  .ord-node { display: flex; align-items: center; gap: 8px; background: #fff;
+              border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 10px;
+              margin-bottom: 6px; touch-action: none; }
+  .ord-node.ord-section  { border-left: 4px solid #2563eb; font-weight: 600; }
+  .ord-node.ord-subgroup { border-left: 4px solid #16a34a; }
+  .ord-node.ord-category { border-left: 4px solid #d1d5db; font-size: 14px; }
+  /* Уровни-контейнеры детей — отступ слева */
+  .ord-children { margin-left: 16px; }
+  .ord-children.collapsed { display: none; }
+  /* Ручка перетаскивания */
+  .ord-handle { cursor: grab; color: #9ca3af; font-size: 18px; line-height: 1;
+                padding: 4px 2px; touch-action: none; user-select: none; flex-shrink: 0; }
+  .ord-name { flex: 1; color: #111827; line-height: 1.25; min-width: 0;
+              overflow-wrap: anywhere; }
+  /* Стрелки вверх/вниз и раскрытие */
+  .ord-arrows { display: flex; gap: 2px; flex-shrink: 0; }
+  .ord-arrow, .ord-toggle { border: 1px solid #e5e7eb; background: #f9fafb; border-radius: 6px;
+               width: 34px; height: 34px; font-size: 16px; line-height: 1; cursor: pointer;
+               color: #374151; display: inline-flex; align-items: center; justify-content: center;
+               flex-shrink: 0; }
+  .ord-arrow:disabled { opacity: .35; cursor: default; }
+  .ord-toggle { width: 30px; }
+  .ord-count { font-size: 12px; color: #9ca3af; flex-shrink: 0; }
+
+  /* Плавающий «призрак» при перетаскивании (общий для Работ 2 и 3) */
+  .drag-ghost { position: fixed; z-index: 1400; pointer-events: none; opacity: .95;
+                box-shadow: 0 10px 30px rgba(0,0,0,.25); border-radius: 10px;
+                transform: translate(-50%, -50%); }
+  /* Место, откуда взяли элемент (полупрозрачная «дырка») */
+  .drag-source { opacity: .35; }
 </style>
 </head>
 <body>
@@ -1036,8 +1160,34 @@ PAGE = r"""<!doctype html>
   <div class="drawer-body">
     <p class="drawer-section-label">Цвет цены на карточках</p>
     <div id="price-colors" class="price-colors"></div>
+
+    <hr style="margin:20px 0;border:none;border-top:1px solid #e5e7eb">
+
+    <p class="drawer-section-label">Порядок каталога</p>
+    <p style="font-size:13px;color:#6b7280;margin:0 0 10px">
+      Перетащите разделы, подгруппы и категории в нужном порядке — так они и встанут на сайте.
+    </p>
+    <button type="button" class="btn btn-outline-primary w-100" onclick="openOrderEditor()">
+      Изменить порядок
+    </button>
   </div>
 </aside>
+
+<!-- ── Редактор порядка каталога (Работа 2) ──
+     Полноэкранная модалка: дерево Раздел→Подгруппа→Категория. Каждый узел можно
+     двигать среди соседей стрелками ▲▼ или перетаскиванием за ручку ≡. «Сохранить» —
+     порядок пишется в «Настройки», применяется на сайте после «Применить сейчас». -->
+<div class="order-editor" id="order-editor" aria-hidden="true" role="dialog" aria-modal="true">
+  <div class="oe-head">
+    <button type="button" class="oe-btn" onclick="closeOrderEditor()">Отмена</button>
+    <h2 class="oe-title">Порядок каталога</h2>
+    <button type="button" class="oe-btn oe-save" id="oe-save-btn" onclick="saveOrder()">Сохранить</button>
+  </div>
+  <div class="oe-body">
+    <p class="oe-hint">Двигайте разделы, подгруппы и категории стрелками или перетаскиванием за ручку ≡. Нажмите ▸ чтобы раскрыть.</p>
+    <div id="ord-tree"></div>
+  </div>
+</div>
 
 <!-- Общий плавающий тост -->
 <div id="toast"></div>
@@ -1103,6 +1253,8 @@ const GROUPS = [
 // Внедряется сервером из scripts/structure_map.json (json.dumps, ensure_ascii=False).
 // Наполняет две зависимые выпадашки «Раздел» / «Подгруппа» на карточке товара.
 const STRUCTURE = __STRUCTURE__;
+// Полная карта Раздел→Подгруппа→[Категории] для редактора порядка (Работа 2).
+const STRUCTURE_FULL = __STRUCTURE_FULL__;
 // Обратный индекс: подгруппа → раздел (для предвыбора раздела по сохранённой подгруппе).
 const SUBGROUP_TO_SECTION = {};
 Object.keys(STRUCTURE).forEach(sec => {
@@ -2202,6 +2354,282 @@ function closeDrawer() {
 document.addEventListener("keydown", e => {
   if (e.key === "Escape") closeDrawer();
 });
+
+/* ── Переиспользуемый движок перетаскивания списка (Работы 2 и 3) ──
+   Перетаскивание среди соседей внутри одного контейнера, на указателях (pointer
+   events) — работает и мышью, и пальцем на планшете. Без сторонних библиотек (D-03).
+
+   enableDragReorder(container, opts):
+     container      — DOM-элемент, чьи прямые дети itemSelector переставляются
+     opts.itemSelector   — селектор перетаскиваемого элемента (прямой ребёнок container)
+     opts.handleSelector — селектор «ручки» внутри элемента (за неё начинается перенос)
+     opts.onDrop(orderedIds) — колбэк с новым порядком (значения data-id элементов)
+   Каждый перетаскиваемый элемент должен иметь атрибут data-id. */
+function enableDragReorder(container, opts) {
+  const itemSel = opts.itemSelector, handleSel = opts.handleSelector;
+  let dragEl = null, ghost = null, startY = 0, scrollTimer = null;
+
+  container.addEventListener("pointerdown", e => {
+    const handle = e.target.closest(handleSel);
+    if (!handle || !container.contains(handle)) return;
+    const item = handle.closest(itemSel);
+    if (!item || item.parentNode !== container) return;
+    e.preventDefault();
+    dragEl = item;
+    // «Призрак» — визуальная копия, следующая за пальцем
+    const r = item.getBoundingClientRect();
+    ghost = item.cloneNode(true);
+    ghost.classList.add("drag-ghost");
+    ghost.style.width = r.width + "px";
+    ghost.style.left = (r.left + r.width / 2) + "px";
+    ghost.style.top = e.clientY + "px";
+    document.body.appendChild(ghost);
+    item.classList.add("drag-source");
+    startY = e.clientY;
+    // Перехватываем указатель, чтобы получать move/up даже вне элемента
+    try { handle.setPointerCapture(e.pointerId); } catch (_) {}
+    handle.addEventListener("pointermove", onMove);
+    handle.addEventListener("pointerup", onUp, { once: true });
+    handle.addEventListener("pointercancel", onUp, { once: true });
+  });
+
+  function onMove(e) {
+    if (!dragEl || !ghost) return;
+    ghost.style.top = e.clientY + "px";
+    // Автопрокрутка у краёв экрана
+    autoScroll(e.clientY);
+    // Найти соседа под указателем и переставить перед/после него
+    const siblings = [...container.querySelectorAll(":scope > " + itemSel)]
+      .filter(s => s !== dragEl);
+    for (const s of siblings) {
+      const rect = s.getBoundingClientRect();
+      if (e.clientY >= rect.top && e.clientY <= rect.bottom) {
+        const before = e.clientY < rect.top + rect.height / 2;
+        container.insertBefore(dragEl, before ? s : s.nextSibling);
+        break;
+      }
+    }
+  }
+
+  function autoScroll(y) {
+    const scroller = container.closest(".oe-body, #products, .drawer-body") || document.scrollingElement;
+    const M = 70; // зона у края
+    let dy = 0;
+    if (y < M) dy = -(M - y) / 4;
+    else if (y > window.innerHeight - M) dy = (y - (window.innerHeight - M)) / 4;
+    clearInterval(scrollTimer);
+    if (dy !== 0) scrollTimer = setInterval(() => scroller.scrollBy(0, dy), 16);
+  }
+
+  function onUp() {
+    clearInterval(scrollTimer);
+    if (ghost) { ghost.remove(); ghost = null; }
+    if (dragEl) dragEl.classList.remove("drag-source");
+    dragEl = null;
+    const ids = [...container.querySelectorAll(":scope > " + itemSel)].map(el => el.dataset.id);
+    if (opts.onDrop) opts.onDrop(ids);
+  }
+}
+
+/* ── Редактор порядка каталога (Работа 2) ──
+   Модель — массив разделов, у каждого подгруппы, у каждой категории. Строим из
+   STRUCTURE_FULL, применяя сохранённый порядок (catalog_order). Перестановка —
+   стрелками ▲▼ и перетаскиванием; сохранение пишет JSON в «Настройки». */
+let orderModel = null;        // [{name, open, subs:[{name, open, cats:[str]}]}]
+let orderSaving = false;
+
+// Порт _reorder_by из upload.py: names по desired, остальное — в конце в исходном порядке
+function reorderBy(names, desired) {
+  const dset = new Set(desired || []), nset = new Set(names);
+  const ordered = (desired || []).filter(n => nset.has(n));
+  const rest = names.filter(n => !dset.has(n));
+  return ordered.concat(rest);
+}
+
+// Собрать модель из STRUCTURE_FULL, наложив сохранённый порядок (savedOrder может быть null)
+function buildOrderModel(savedOrder) {
+  const so = savedOrder || {};
+  const secOrder = so.sections || [];
+  const subOrder = so.subgroups || {};
+  const catOrder = so.categories || {};
+  const sections = reorderBy(Object.keys(STRUCTURE_FULL), secOrder);
+  return sections.map(sec => {
+    const subs = reorderBy(Object.keys(STRUCTURE_FULL[sec] || {}), subOrder[sec] || []);
+    return {
+      name: sec, open: false,
+      subs: subs.map(sub => ({
+        name: sub, open: false,
+        cats: reorderBy((STRUCTURE_FULL[sec][sub] || []).slice(), catOrder[sub] || []),
+      })),
+    };
+  });
+}
+
+// Сериализовать модель → {sections, subgroups, categories} для сохранения
+function serializeOrder() {
+  const out = { sections: [], subgroups: {}, categories: {} };
+  orderModel.forEach(sec => {
+    out.sections.push(sec.name);
+    out.subgroups[sec.name] = sec.subs.map(s => s.name);
+    sec.subs.forEach(sub => { out.categories[sub.name] = sub.cats.slice(); });
+  });
+  return out;
+}
+
+// Переместить элемент массива с i на i+dir (dir = -1 вверх / +1 вниз)
+function moveInArray(arr, i, dir) {
+  const j = i + dir;
+  if (j < 0 || j >= arr.length) return;
+  const [x] = arr.splice(i, 1);
+  arr.splice(j, 0, x);
+}
+
+function renderOrderTree() {
+  const tree = document.getElementById("ord-tree");
+  tree.innerHTML = "";
+  orderModel.forEach((sec, si) => {
+    tree.appendChild(orderNode("section", sec.name, si, orderModel.length,
+      sec.open, sec.subs.length + " подгр.", () => { sec.open = !sec.open; renderOrderTree(); }));
+    if (sec.open) {
+      const subBox = childBox("sec:" + si);
+      sec.subs.forEach((sub, ui) => {
+        subBox.appendChild(orderNode("subgroup", sub.name, ui, sec.subs.length,
+          sub.open, sub.cats.length + " кат.", () => { sub.open = !sub.open; renderOrderTree(); }, "sub", si, ui));
+        if (sub.open) {
+          const catBox = childBox("sub:" + si + ":" + ui);
+          sub.cats.forEach((cat, ci) => {
+            catBox.appendChild(orderNode("category", cat, ci, sub.cats.length,
+              null, "", null, "cat", si, ui, ci));
+          });
+          // Drag категорий внутри подгруппы
+          enableDragReorder(catBox, {
+            itemSelector: ".ord-node", handleSelector: ".ord-handle",
+            onDrop: ids => { sub.cats = ids.slice(); renderOrderTree(); },
+          });
+          subBox.appendChild(catBox);
+        }
+      });
+      // Drag подгрупп внутри раздела
+      enableDragReorder(subBox, {
+        itemSelector: ".ord-node.ord-subgroup", handleSelector: ".ord-handle",
+        onDrop: ids => {
+          const byName = {}; sec.subs.forEach(s => byName[s.name] = s);
+          sec.subs = ids.map(n => byName[n]).filter(Boolean);
+          renderOrderTree();
+        },
+      });
+      tree.appendChild(subBox);
+    }
+  });
+  // Drag разделов на верхнем уровне
+  enableDragReorder(tree, {
+    itemSelector: ".ord-node.ord-section", handleSelector: ".ord-handle",
+    onDrop: ids => {
+      const byName = {}; orderModel.forEach(s => byName[s.name] = s);
+      orderModel = ids.map(n => byName[n]).filter(Boolean);
+      renderOrderTree();
+    },
+  });
+}
+
+function childBox(key) {
+  const box = document.createElement("div");
+  box.className = "ord-children";
+  box.dataset.box = key;
+  return box;
+}
+
+// Собрать один узел дерева. level: section|subgroup|category. onToggle — раскрытие (или null).
+function orderNode(level, name, idx, total, open, countText, onToggle, moveKind, si, ui, ci) {
+  const node = document.createElement("div");
+  node.className = "ord-node ord-" + level;
+  node.dataset.id = name;
+
+  const handle = document.createElement("span");
+  handle.className = "ord-handle"; handle.textContent = "≡"; handle.title = "Перетащить";
+  node.appendChild(handle);
+
+  if (onToggle) {
+    const tog = document.createElement("button");
+    tog.type = "button"; tog.className = "ord-toggle";
+    tog.textContent = open ? "▾" : "▸";
+    tog.onclick = onToggle;
+    node.appendChild(tog);
+  }
+
+  const nm = document.createElement("span");
+  nm.className = "ord-name"; nm.textContent = name;
+  node.appendChild(nm);
+
+  if (countText) {
+    const cnt = document.createElement("span");
+    cnt.className = "ord-count"; cnt.textContent = countText;
+    node.appendChild(cnt);
+  }
+
+  const arrows = document.createElement("div");
+  arrows.className = "ord-arrows";
+  const up = document.createElement("button");
+  up.type = "button"; up.className = "ord-arrow"; up.textContent = "▲";
+  up.disabled = idx === 0;
+  up.onclick = () => doMove(moveKind || level, si, ui, ci, idx, -1);
+  const down = document.createElement("button");
+  down.type = "button"; down.className = "ord-arrow"; down.textContent = "▼";
+  down.disabled = idx === total - 1;
+  down.onclick = () => doMove(moveKind || level, si, ui, ci, idx, +1);
+  arrows.appendChild(up); arrows.appendChild(down);
+  node.appendChild(arrows);
+  return node;
+}
+
+// Перемещение стрелкой: определяем массив по уровню и двигаем
+function doMove(kind, si, ui, ci, idx, dir) {
+  if (kind === "section") moveInArray(orderModel, idx, dir);
+  else if (kind === "sub" || kind === "subgroup") moveInArray(orderModel[si].subs, idx, dir);
+  else if (kind === "cat" || kind === "category") moveInArray(orderModel[si].subs[ui].cats, idx, dir);
+  renderOrderTree();
+}
+
+async function openOrderEditor() {
+  closeDrawer();
+  // Тянем текущий сохранённый порядок, чтобы редактор открылся в актуальном виде
+  let saved = null;
+  try {
+    const r = await fetch("/" + TOKEN + "/settings");
+    const s = await r.json();
+    if (s && typeof s.catalog_order === "string" && s.catalog_order) {
+      saved = JSON.parse(s.catalog_order);
+    }
+  } catch (e) { /* нет порядка / офлайн — открываем из structure_map */ }
+  orderModel = buildOrderModel(saved);
+  renderOrderTree();
+  document.getElementById("order-editor").classList.add("open");
+  document.getElementById("order-editor").setAttribute("aria-hidden", "false");
+}
+
+function closeOrderEditor() {
+  document.getElementById("order-editor").classList.remove("open");
+  document.getElementById("order-editor").setAttribute("aria-hidden", "true");
+}
+
+async function saveOrder() {
+  if (orderSaving) return;
+  orderSaving = true;
+  const btn = document.getElementById("oe-save-btn");
+  btn.disabled = true;
+  const payload = serializeOrder();
+  const res = await apiCall("/" + TOKEN + "/catalog-order", {
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  orderSaving = false; btn.disabled = false;
+  if (res && res.ok) {
+    toast("ok", res.message || "Порядок сохранён.");
+    closeOrderEditor();
+  } else {
+    toast("err", (res && res.message) || "Не удалось сохранить порядок.");
+  }
+}
 
 /* ── Оформление: выбор цвета цены на карточках сайта ──
    Палитра синхронизирована с lib/priceColors.ts на фронте. Текущее значение

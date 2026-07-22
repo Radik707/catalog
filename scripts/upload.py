@@ -115,6 +115,102 @@ def load_structure_map() -> dict:
         return json.load(f)
 
 
+def load_catalog_order() -> dict:
+    """Загрузить пользовательский порядок витрины из вкладки «Настройки» (Работа 2).
+
+    Владелец задаёт порядок разделов/подгрупп/категорий в админ-панели; панель пишет
+    его JSON-строкой в ячейку «catalog_order» вкладки «Настройки». Формат JSON:
+        {
+          "sections":   ["Раздел A", "Раздел B", ...],
+          "subgroups":  { "Раздел A": ["Подгруппа1", "Подгруппа2", ...] },
+          "categories": { "Подгруппа1": ["КатА", "КатБ", ...] }
+        }
+    Любой уровень необязателен. Graceful-fallback: нет gspread/credentials/вкладки/ключа
+    или битый JSON → {} (порядок из structure_map.json остаётся как есть).
+    """
+    try:
+        import gspread  # noqa: F401
+    except ImportError:
+        return {}
+
+    creds_path = os.environ.get("GOOGLE_CREDENTIALS_PATH", "")
+    if not creds_path:
+        for d in (SCRIPT_DIR, PROJECT_ROOT):
+            c = d / "credentials.json"
+            if c.exists():
+                creds_path = str(c)
+                break
+    sheets_id = os.environ.get("GOOGLE_SHEETS_ID", "")
+    if not creds_path or not sheets_id:
+        return {}
+
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive",
+    ]
+    try:
+        from google.oauth2.service_account import Credentials
+        creds = Credentials.from_service_account_file(creds_path, scopes=scopes)
+        ss = gspread.authorize(creds).open_by_key(sheets_id)
+        values = ss.worksheet("Настройки").get_all_values()
+    except Exception as e:  # noqa: BLE001 — нет вкладки/сеть/доступ → порядок не задан
+        log.info("Порядок каталога не прочитан (%s) — остаётся порядок structure_map.json", e)
+        return {}
+
+    raw = ""
+    for row in values[1:]:  # пропускаем заголовок «Ключ | Значение»
+        if row and row[0].strip() == "catalog_order":
+            raw = row[1].strip() if len(row) > 1 else ""
+            break
+    if not raw:
+        return {}
+    try:
+        order = json.loads(raw)
+        return order if isinstance(order, dict) else {}
+    except json.JSONDecodeError as e:
+        log.warning("catalog_order: битый JSON (%s) — порядок игнорирован", e)
+        return {}
+
+
+def _reorder_by(names: list, desired: list) -> list:
+    """Переставить names согласно desired; элементы вне desired — в конце в исходном порядке.
+
+    Loss-free: возвращает ровно те же элементы, что и на входе (без дублей/потерь).
+    Новые категории/подгруппы, которых владелец ещё не касался, оседают в конце уровня.
+    """
+    desired_set = set(desired)
+    names_set = set(names)
+    ordered = [n for n in desired if n in names_set]        # заданные владельцем, что реально есть
+    rest = [n for n in names if n not in desired_set]       # новые/незаданные — в исходном порядке
+    return ordered + rest
+
+
+def apply_catalog_order(structure_map: dict, order: dict) -> dict:
+    """Переупорядочить structure_map согласно сохранённому порядку владельца (Работа 2).
+
+    Переставляет три уровня: разделы, подгруппы внутри раздела, категории внутри подгруппы.
+    Ничего не теряет: элементы, отсутствующие в сохранённом порядке, встают в конец
+    своего уровня в исходном порядке. Пустой order → карта возвращается без изменений.
+    Downstream (build_category_index/apply_structure_mapping) читает порядок из позиции
+    в dict — поэтому достаточно переставить ключи здесь, остальной код не меняется.
+    """
+    if not order:
+        return structure_map
+    sec_order = order.get("sections") or []
+    sub_order = order.get("subgroups") or {}
+    cat_order = order.get("categories") or {}
+
+    new_map: dict = {}
+    for section in _reorder_by(list(structure_map.keys()), sec_order):
+        subgroups = structure_map[section]
+        new_subs: dict = {}
+        for subgroup in _reorder_by(list(subgroups.keys()), sub_order.get(section, [])):
+            cats = list(subgroups[subgroup])
+            new_subs[subgroup] = _reorder_by(cats, cat_order.get(subgroup, []))
+        new_map[section] = new_subs
+    return new_map
+
+
 def build_category_index(structure_map: dict) -> dict:
     """Построить обратный индекс категорий для быстрого поиска раздела/подгруппы.
 
@@ -1330,6 +1426,13 @@ def main():
     # Вызов ПОСЛЕ apply_edit_memory, ПЕРЕД products_to_rows (позиция из D-04/D-05)
     structure_map = load_structure_map()
     if structure_map:
+        # [Работа 2] Переупорядочить разделы/подгруппы/категории по выбору владельца
+        # (порядок из вкладки «Настройки»). Вызов ДО построения индексов — они берут
+        # порядок из позиции ключей в карте. Пустой порядок → карта без изменений.
+        catalog_order = load_catalog_order()
+        if catalog_order:
+            structure_map = apply_catalog_order(structure_map, catalog_order)
+            log.info("Применён пользовательский порядок витрины (Работа 2)")
         category_index = build_category_index(structure_map)
         all_products = apply_structure_mapping(all_products, category_index)
         # [НОВОЕ, этап 7] Наложить ручные правки подгруппы поверх авто-маппинга по категории.
