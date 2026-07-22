@@ -918,16 +918,44 @@ PAGE = r"""<!doctype html>
   .pe-save:disabled { opacity: .6; cursor: default; }
 
   /* ── Оформление: выбор цвета цены на карточках сайта ── */
-  .appearance-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
-                    padding: 10px 12px; margin-bottom: 12px; background: #fff;
-                    border: 1px solid #e5e7eb; border-radius: 12px; }
-  .appearance-label { font-size: 14px; color: #374151; font-weight: 600; }
-  .price-colors { display: flex; gap: 8px; flex-wrap: wrap; }
+  /* Кнопка-триггер «Оформление» в панели инструментов (рядом с видом) */
+  .appearance-btn { min-height: 40px; padding: 6px 14px; border-radius: 8px;
+                    border: 1px solid #d1d5db; background: #fff; cursor: pointer;
+                    font-size: 14px; color: #374151; display: inline-flex;
+                    align-items: center; gap: 6px; }
+  .appearance-btn:hover { background: #f9fafb; }
+
+  /* Полупрозрачная подложка за шторкой (перехватывает клик «мимо» → закрыть) */
+  .drawer-overlay { position: fixed; inset: 0; background: rgba(17,24,39,.4);
+                    z-index: 1100; opacity: 0; visibility: hidden;
+                    transition: opacity .2s ease, visibility .2s ease; }
+  .drawer-overlay.open { opacity: 1; visibility: visible; }
+
+  /* Выезжающая справа шторка настроек оформления */
+  .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 320px; max-width: 88vw;
+            background: #fff; z-index: 1101; box-shadow: -8px 0 32px rgba(0,0,0,.18);
+            transform: translateX(100%); transition: transform .24s ease;
+            display: flex; flex-direction: column; }
+  .drawer.open { transform: translateX(0); }
+  .drawer-head { display: flex; align-items: center; justify-content: space-between;
+                 padding: 16px; border-bottom: 1px solid #e5e7eb; }
+  .drawer-title { font-size: 16px; font-weight: 600; color: #111827; margin: 0; }
+  .drawer-close { border: none; background: #f3f4f6; border-radius: 8px; width: 36px;
+                  height: 36px; font-size: 20px; line-height: 1; cursor: pointer;
+                  color: #374151; }
+  .drawer-close:hover { background: #e5e7eb; }
+  .drawer-body { padding: 16px; overflow-y: auto; }
+  .drawer-section-label { font-size: 13px; color: #6b7280; font-weight: 600;
+                          margin: 0 0 10px; text-transform: uppercase;
+                          letter-spacing: .02em; }
+
+  .price-colors { display: flex; flex-direction: column; gap: 8px; }
   /* Кнопка-образец: цветной кружок + подпись, тач-цель ≥40px */
-  .pcolor { display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
-            min-height: 40px; padding: 4px 12px 4px 8px; border-radius: 999px;
-            border: 2px solid #e5e7eb; background: #fff; font-size: 13px; color: #374151; }
-  .pcolor .dot { width: 18px; height: 18px; border-radius: 50%; flex-shrink: 0;
+  .pcolor { display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+            min-height: 44px; padding: 6px 14px 6px 10px; border-radius: 999px;
+            border: 2px solid #e5e7eb; background: #fff; font-size: 14px; color: #374151;
+            width: 100%; }
+  .pcolor .dot { width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0;
                  border: 1px solid rgba(0,0,0,.1); }
   /* Активный цвет — синяя обводка (как у других активных кнопок панели) */
   .pcolor.active { border-color: #2563eb; background: #eff6ff; color: #1e40af; font-weight: 600; }
@@ -980,13 +1008,10 @@ PAGE = r"""<!doctype html>
         <button data-view="grid">Сетка</button>
         <button data-view="list">Список</button>
       </div>
+      <!-- Триггер выезжающей шторки оформления сайта -->
+      <button type="button" class="appearance-btn" id="appearance-btn"
+              onclick="openDrawer()">🎨 Оформление</button>
     </div>
-  </div>
-
-  <!-- Оформление: цвет цены на карточках сайта (общая настройка) -->
-  <div class="appearance-bar">
-    <span class="appearance-label">Цвет цены на сайте</span>
-    <div id="price-colors" class="price-colors"></div>
   </div>
 
   <!-- Сетка/список карточек товаров -->
@@ -996,6 +1021,23 @@ PAGE = r"""<!doctype html>
   <div id="status" class="status mb-5"></div>
 
 </div><!-- /container -->
+
+<!-- ── Выезжающая шторка «Оформление сайта» ──
+     Триггер — кнопка «🎨 Оформление» в панели инструментов. Внутри — общие
+     настройки внешнего вида витрины (сейчас цвет цены; задел под будущие). -->
+<div class="drawer-overlay" id="drawer-overlay" onclick="closeDrawer()"></div>
+<aside class="drawer" id="appearance-drawer" aria-hidden="true"
+       role="dialog" aria-modal="true" aria-label="Оформление сайта">
+  <div class="drawer-head">
+    <h2 class="drawer-title">Оформление сайта</h2>
+    <button type="button" class="drawer-close" onclick="closeDrawer()"
+            aria-label="Закрыть">×</button>
+  </div>
+  <div class="drawer-body">
+    <p class="drawer-section-label">Цвет цены на карточках</p>
+    <div id="price-colors" class="price-colors"></div>
+  </div>
+</aside>
 
 <!-- Общий плавающий тост -->
 <div id="toast"></div>
@@ -2142,6 +2184,23 @@ function photoButtonLabel(hasPhoto) {
 document.getElementById("search-input").addEventListener("input", () => {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(() => render(), 300);
+});
+
+/* ── Выезжающая шторка «Оформление сайта» ──
+   Открытие/закрытие переключает класс .open у шторки и подложки. Закрытие —
+   по крестику, клику мимо (по подложке) и клавише Escape. */
+function openDrawer() {
+  document.getElementById("appearance-drawer").classList.add("open");
+  document.getElementById("drawer-overlay").classList.add("open");
+  document.getElementById("appearance-drawer").setAttribute("aria-hidden", "false");
+}
+function closeDrawer() {
+  document.getElementById("appearance-drawer").classList.remove("open");
+  document.getElementById("drawer-overlay").classList.remove("open");
+  document.getElementById("appearance-drawer").setAttribute("aria-hidden", "true");
+}
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") closeDrawer();
 });
 
 /* ── Оформление: выбор цвета цены на карточках сайта ──
