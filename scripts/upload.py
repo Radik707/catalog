@@ -115,18 +115,10 @@ def load_structure_map() -> dict:
         return json.load(f)
 
 
-def load_catalog_order() -> dict:
-    """Загрузить пользовательский порядок витрины из вкладки «Настройки» (Работа 2).
+def _load_settings_map() -> dict:
+    """Прочитать вкладку «Настройки» целиком → {ключ: значение-строка} (Работы 2, 3).
 
-    Владелец задаёт порядок разделов/подгрупп/категорий в админ-панели; панель пишет
-    его JSON-строкой в ячейку «catalog_order» вкладки «Настройки». Формат JSON:
-        {
-          "sections":   ["Раздел A", "Раздел B", ...],
-          "subgroups":  { "Раздел A": ["Подгруппа1", "Подгруппа2", ...] },
-          "categories": { "Подгруппа1": ["КатА", "КатБ", ...] }
-        }
-    Любой уровень необязателен. Graceful-fallback: нет gspread/credentials/вкладки/ключа
-    или битый JSON → {} (порядок из structure_map.json остаётся как есть).
+    Graceful-fallback: нет gspread/credentials/вкладки/сети → {}.
     """
     try:
         import gspread  # noqa: F401
@@ -153,23 +145,94 @@ def load_catalog_order() -> dict:
         creds = Credentials.from_service_account_file(creds_path, scopes=scopes)
         ss = gspread.authorize(creds).open_by_key(sheets_id)
         values = ss.worksheet("Настройки").get_all_values()
-    except Exception as e:  # noqa: BLE001 — нет вкладки/сеть/доступ → порядок не задан
-        log.info("Порядок каталога не прочитан (%s) — остаётся порядок structure_map.json", e)
+    except Exception as e:  # noqa: BLE001 — нет вкладки/сеть/доступ → настроек нет
+        log.info("Вкладка «Настройки» не прочитана (%s) — настройки по умолчанию", e)
         return {}
 
-    raw = ""
+    out: dict = {}
     for row in values[1:]:  # пропускаем заголовок «Ключ | Значение»
-        if row and row[0].strip() == "catalog_order":
-            raw = row[1].strip() if len(row) > 1 else ""
-            break
+        if row and row[0].strip():
+            out[row[0].strip()] = row[1].strip() if len(row) > 1 else ""
+    return out
+
+
+def _parse_setting_json(settings: dict, key: str) -> dict:
+    """Достать и распарсить JSON-значение настройки. Битый JSON / нет ключа → {}."""
+    raw = (settings.get(key) or "").strip()
     if not raw:
         return {}
     try:
-        order = json.loads(raw)
-        return order if isinstance(order, dict) else {}
+        val = json.loads(raw)
+        return val if isinstance(val, dict) else {}
     except json.JSONDecodeError as e:
-        log.warning("catalog_order: битый JSON (%s) — порядок игнорирован", e)
+        log.warning("%s: битый JSON (%s) — игнорирован", key, e)
         return {}
+
+
+def load_catalog_order(settings: "dict | None" = None) -> dict:
+    """Загрузить пользовательский порядок витрины из вкладки «Настройки» (Работа 2).
+
+    Владелец задаёт порядок разделов/подгрупп/категорий в админ-панели; панель пишет
+    его JSON-строкой в ячейку «catalog_order» вкладки «Настройки». Формат JSON:
+        {
+          "sections":   ["Раздел A", "Раздел B", ...],
+          "subgroups":  { "Раздел A": ["Подгруппа1", "Подгруппа2", ...] },
+          "categories": { "Подгруппа1": ["КатА", "КатБ", ...] }
+        }
+    Любой уровень необязателен. Graceful-fallback: нет вкладки/ключа или битый JSON → {}.
+    settings — уже прочитанная карта настроек (чтобы не читать вкладку дважды).
+    """
+    if settings is None:
+        settings = _load_settings_map()
+    return _parse_setting_json(settings, "catalog_order")
+
+
+def load_product_order(settings: "dict | None" = None) -> dict:
+    """Загрузить пользовательский порядок товаров внутри подгрупп (Работа 3).
+
+    Формат JSON в ячейке «product_order» вкладки «Настройки»:
+        { "Подгруппа": ["Полное имя товара 1", "Полное имя товара 2", ...] }
+    Имена сопоставляются по normalize_name (переживает смену хвостовой единицы).
+    Graceful-fallback: нет вкладки/ключа или битый JSON → {}.
+    """
+    if settings is None:
+        settings = _load_settings_map()
+    return _parse_setting_json(settings, "product_order")
+
+
+def apply_product_order(products: list[dict], product_order: dict) -> int:
+    """Наложить ручной порядок товаров внутри подгрупп (Работа 3).
+
+    Достраивает _sort_key до 4-кортежа (sec_idx, sub_idx, bucket, tiebreak):
+      - товар есть в сохранённом списке своей подгруппы → bucket=0, tiebreak=позиция;
+      - иначе (новый/незаданный) → bucket=1, tiebreak=прежний cat_idx (естественный порядок,
+        встаёт ПОСЛЕ вручную расставленных).
+    Пустой product_order → ключи не трогаем (возврат 0), поведение витрины прежнее.
+    Возвращает число товаров, получивших ручную позицию.
+    """
+    if not product_order:
+        return 0
+    # Индекс позиций: подгруппа → { нормализованное имя: позиция }
+    pos_index: dict = {}
+    for sub, names in product_order.items():
+        if isinstance(names, list):
+            pos_index[sub] = {normalize_name(str(n)): i for i, n in enumerate(names)}
+
+    applied = 0
+    for p in products:
+        key = p.get("_sort_key", (9999, 9999, 9999))
+        sec_i = key[0] if len(key) > 0 else 9999
+        sub_i = key[1] if len(key) > 1 else 9999
+        rest = key[2] if len(key) > 2 else 0
+        sub = p.get("display_subgroup", "")
+        sub_positions = pos_index.get(sub)
+        norm = normalize_name(p.get("name", ""))
+        if sub_positions and norm in sub_positions:
+            p["_sort_key"] = (sec_i, sub_i, 0, sub_positions[norm])
+            applied += 1
+        else:
+            p["_sort_key"] = (sec_i, sub_i, 1, rest)
+    return applied
 
 
 def _reorder_by(names: list, desired: list) -> list:
@@ -1426,10 +1489,12 @@ def main():
     # Вызов ПОСЛЕ apply_edit_memory, ПЕРЕД products_to_rows (позиция из D-04/D-05)
     structure_map = load_structure_map()
     if structure_map:
+        # Настройки витрины (порядок разделов и порядок товаров) читаем один раз
+        catalog_settings = _load_settings_map()
         # [Работа 2] Переупорядочить разделы/подгруппы/категории по выбору владельца
         # (порядок из вкладки «Настройки»). Вызов ДО построения индексов — они берут
         # порядок из позиции ключей в карте. Пустой порядок → карта без изменений.
-        catalog_order = load_catalog_order()
+        catalog_order = load_catalog_order(catalog_settings)
         if catalog_order:
             structure_map = apply_catalog_order(structure_map, catalog_order)
             log.info("Применён пользовательский порядок витрины (Работа 2)")
@@ -1441,7 +1506,14 @@ def main():
         subgroup_index = build_subgroup_index(structure_map)
         applied_subgroups = apply_subgroup_overrides(all_products, subgroup_index)
         log.info("применено ручных правок подгруппы: %d", applied_subgroups)
-        # Сортировать товары по структуре: раздел → подгруппа → категория (D-05)
+        # [Работа 3] Наложить ручной порядок товаров внутри подгрупп. Вызов ПОСЛЕ
+        # apply_subgroup_overrides (позиция товара учитывает финальную подгруппу) и
+        # ПЕРЕД сортировкой — достраивает _sort_key до 4-кортежа с позицией товара.
+        product_order = load_product_order(catalog_settings)
+        applied_products = apply_product_order(all_products, product_order)
+        if applied_products:
+            log.info("применено ручных позиций товаров: %d", applied_products)
+        # Сортировать товары по структуре: раздел → подгруппа → (позиция товара | категория)
         # _sort_key проставлен apply_structure_mapping(); товары без структуры уходят в конец
         all_products.sort(key=lambda p: p.get("_sort_key", (9999, 9999, 9999)))
         log.info("Товары отсортированы по двухуровневой структуре (%d разделов)", len(structure_map))

@@ -650,6 +650,46 @@ def admin_set_catalog_order(token: str):
     return jsonify(ok=True, message="Порядок сохранён. Нажмите «Применить сейчас», чтобы обновить сайт.")
 
 
+def _validate_product_order(data: dict) -> bool:
+    """Проверить структуру порядка товаров: {"Подгруппа": ["Имя товара", ...]} (Работа 3)."""
+    if not isinstance(data, dict):
+        return False
+    for k, v in data.items():
+        if not isinstance(k, str) or not isinstance(v, list) or not all(isinstance(x, str) for x in v):
+            return False
+    return True
+
+
+@admin_bp.post("/<token>/product-order")
+def admin_set_product_order(token: str):
+    """Сохранить порядок товаров внутри подгрупп (Работа 3).
+
+    Принимает полную карту {Подгруппа: [Имя товара, ...]} (панель хранит остальные
+    подгруппы нетронутыми). Пишет JSON-строкой в ячейку «product_order» вкладки
+    «Настройки»; upload.py применит при ближайшем прогоне.
+    """
+    check_admin(token)
+
+    data = request.get_json(silent=True) or {}
+    if not _validate_product_order(data):
+        return jsonify(ok=False, message="Неверный формат порядка товаров."), 400
+
+    payload = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+    if len(payload) > 45000:
+        return jsonify(ok=False, message="Порядок слишком большой для сохранения."), 400
+
+    try:
+        rc, output = _run_py(SHEET_HELPER, "set_setting", "--key", "product_order", "--value", payload)
+    except Exception as e:  # noqa: BLE001
+        log.warning("admin /product-order: ошибка запуска sheet_helper: %s", e)
+        return jsonify(ok=False, message="Не удалось сохранить порядок. Попробуйте ещё раз."), 500
+    if rc != 0:
+        log.warning("sheet_helper set_setting(product_order) rc=%d: %s", rc, output.strip()[-200:])
+        return jsonify(ok=False, message="Не удалось сохранить порядок. Попробуйте ещё раз."), 500
+
+    return jsonify(ok=True, message="Порядок товаров сохранён. Нажмите «Применить сейчас».")
+
+
 # ── Одностраничный HTML (PAGE) ──
 # Структура: Tabler CSS из CDN (только стили, без JS), mobile-first, адаптивный контейнер.
 # Один экран: сетка/список фото-карточек с инлайн-правкой группы, названия и фото.
@@ -1083,6 +1123,38 @@ PAGE = r"""<!doctype html>
                 transform: translate(-50%, -50%); }
   /* Место, откуда взяли элемент (полупрозрачная «дырка») */
   .drag-source { opacity: .35; }
+
+  /* ── Редактор порядка товаров (Работа 3): сетка карточек ── */
+  .poe-picker { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .poe-picker-label { font-size: 14px; color: #374151; font-weight: 600; flex-shrink: 0; }
+  #poe-subgroup { max-width: 100%; }
+  .poe-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+              gap: 10px; }
+  /* Карточка товара в редакторе: фото + название, вся карточка — ручка перетаскивания */
+  .poe-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
+              padding: 8px; cursor: grab; touch-action: none; user-select: none;
+              display: flex; flex-direction: column; gap: 6px; position: relative; }
+  .poe-card-photo { width: 100%; aspect-ratio: 1/1; background: #fff; border-radius: 8px;
+                    display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .poe-card-photo img { width: 100%; height: 100%; object-fit: contain; }
+  .poe-card-photo .ph-empty { color: #d1d5db; }
+  .poe-card-name { font-size: 12px; color: #111827; line-height: 1.2;
+                   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+                   overflow: hidden; }
+  .poe-card-pos { position: absolute; top: 4px; left: 4px; background: #2563eb; color: #fff;
+                  font-size: 11px; font-weight: 600; min-width: 20px; height: 20px; padding: 0 5px;
+                  border-radius: 10px; display: flex; align-items: center; justify-content: center; }
+  /* Лёгкое «подрагивание», как значки приложений на телефоне (можно отключить в prefers-reduced-motion) */
+  @keyframes poe-jiggle {
+    0%   { transform: rotate(-1.1deg); }
+    50%  { transform: rotate(1.1deg); }
+    100% { transform: rotate(-1.1deg); }
+  }
+  .poe-grid.jiggle .poe-card { animation: poe-jiggle .28s ease-in-out infinite; }
+  .poe-grid.jiggle .poe-card:nth-child(even) { animation-delay: .14s; }
+  @media (prefers-reduced-motion: reduce) {
+    .poe-grid.jiggle .poe-card { animation: none; }
+  }
 </style>
 </head>
 <body>
@@ -1170,6 +1242,16 @@ PAGE = r"""<!doctype html>
     <button type="button" class="btn btn-outline-primary w-100" onclick="openOrderEditor()">
       Изменить порядок
     </button>
+
+    <hr style="margin:20px 0;border:none;border-top:1px solid #e5e7eb">
+
+    <p class="drawer-section-label">Порядок товаров</p>
+    <p style="font-size:13px;color:#6b7280;margin:0 0 10px">
+      Внутри выбранной подгруппы перетаскивайте карточки, как значки на телефоне.
+    </p>
+    <button type="button" class="btn btn-outline-primary w-100" onclick="openProductOrderEditor()">
+      Переставить товары
+    </button>
   </div>
 </aside>
 
@@ -1186,6 +1268,26 @@ PAGE = r"""<!doctype html>
   <div class="oe-body">
     <p class="oe-hint">Двигайте разделы, подгруппы и категории стрелками или перетаскиванием за ручку ≡. Нажмите ▸ чтобы раскрыть.</p>
     <div id="ord-tree"></div>
+  </div>
+</div>
+
+<!-- ── Редактор порядка товаров (Работа 3) ──
+     Полноэкранная модалка: выбираем подгруппу → карточки товаров «подрагивают»
+     (как значки на телефоне), перетаскиваем за карточку. «Сохранить» — порядок
+     товаров подгруппы пишется в «Настройки», применяется после «Применить сейчас». -->
+<div class="order-editor" id="product-order-editor" aria-hidden="true" role="dialog" aria-modal="true">
+  <div class="oe-head">
+    <button type="button" class="oe-btn" onclick="closeProductOrderEditor()">Отмена</button>
+    <h2 class="oe-title">Порядок товаров</h2>
+    <button type="button" class="oe-btn oe-save" id="poe-save-btn" onclick="saveProductOrder()">Сохранить</button>
+  </div>
+  <div class="oe-body">
+    <div class="poe-picker">
+      <label class="poe-picker-label" for="poe-subgroup">Подгруппа</label>
+      <select id="poe-subgroup" class="form-select" onchange="onProductSubgroupChange()"></select>
+    </div>
+    <p class="oe-hint" id="poe-hint">Зажмите карточку и перетащите на место другой.</p>
+    <div id="poe-grid" class="poe-grid"></div>
   </div>
 </div>
 
@@ -2364,55 +2466,95 @@ document.addEventListener("keydown", e => {
      opts.itemSelector   — селектор перетаскиваемого элемента (прямой ребёнок container)
      opts.handleSelector — селектор «ручки» внутри элемента (за неё начинается перенос)
      opts.onDrop(orderedIds) — колбэк с новым порядком (значения data-id элементов)
+     opts.longPress — мс удержания до старта переноса (для карточек: свайп = прокрутка,
+                      удержание = перенос, как значки на телефоне). 0/нет → перенос сразу.
    Каждый перетаскиваемый элемент должен иметь атрибут data-id. */
 function enableDragReorder(container, opts) {
   const itemSel = opts.itemSelector, handleSel = opts.handleSelector;
-  let dragEl = null, ghost = null, startY = 0, scrollTimer = null;
+  const longPress = opts.longPress || 0;
+  const scrollerOf = () => container.closest(".oe-body, #products, .drawer-body") || document.scrollingElement;
+  let dragEl = null, ghost = null, scrollTimer = null;
+  let pressTimer = null, mode = null, startX = 0, startY = 0, lastY = 0, curHandle = null;
 
   container.addEventListener("pointerdown", e => {
     const handle = e.target.closest(handleSel);
     if (!handle || !container.contains(handle)) return;
     const item = handle.closest(itemSel);
     if (!item || item.parentNode !== container) return;
-    e.preventDefault();
-    dragEl = item;
-    // «Призрак» — визуальная копия, следующая за пальцем
-    const r = item.getBoundingClientRect();
-    ghost = item.cloneNode(true);
-    ghost.classList.add("drag-ghost");
-    ghost.style.width = r.width + "px";
-    ghost.style.left = (r.left + r.width / 2) + "px";
-    ghost.style.top = e.clientY + "px";
-    document.body.appendChild(ghost);
-    item.classList.add("drag-source");
-    startY = e.clientY;
-    // Перехватываем указатель, чтобы получать move/up даже вне элемента
+    curHandle = handle;
+    startX = e.clientX; startY = e.clientY; lastY = e.clientY;
     try { handle.setPointerCapture(e.pointerId); } catch (_) {}
     handle.addEventListener("pointermove", onMove);
     handle.addEventListener("pointerup", onUp, { once: true });
     handle.addEventListener("pointercancel", onUp, { once: true });
+    if (longPress) {
+      // Ждём удержания: если палец поедет раньше — это прокрутка (см. onMove)
+      mode = "pending";
+      pressTimer = setTimeout(() => { if (mode === "pending") beginDrag(item, startX, startY); }, longPress);
+    } else {
+      // Перенос сразу (ручка дерева Работы 2)
+      e.preventDefault();
+      beginDrag(item, e.clientX, e.clientY);
+    }
   });
 
+  // Начать перенос: создать «призрак», подсветить источник
+  function beginDrag(item, x, y) {
+    mode = "drag";
+    dragEl = item;
+    const r = item.getBoundingClientRect();
+    ghost = item.cloneNode(true);
+    ghost.classList.add("drag-ghost");
+    ghost.style.width = r.width + "px";
+    ghost.style.left = x + "px";
+    ghost.style.top = y + "px";
+    document.body.appendChild(ghost);
+    item.classList.add("drag-source");
+    if (navigator.vibrate) { try { navigator.vibrate(15); } catch (_) {} }
+  }
+
   function onMove(e) {
-    if (!dragEl || !ghost) return;
-    ghost.style.top = e.clientY + "px";
-    // Автопрокрутка у краёв экрана
-    autoScroll(e.clientY);
-    // Найти соседа под указателем и переставить перед/после него
-    const siblings = [...container.querySelectorAll(":scope > " + itemSel)]
-      .filter(s => s !== dragEl);
-    for (const s of siblings) {
-      const rect = s.getBoundingClientRect();
-      if (e.clientY >= rect.top && e.clientY <= rect.bottom) {
-        const before = e.clientY < rect.top + rect.height / 2;
-        container.insertBefore(dragEl, before ? s : s.nextSibling);
-        break;
+    if (mode === "drag") { e.preventDefault(); moveDrag(e); return; }
+    if (mode === "pending") {
+      // Палец сдвинулся до срабатывания удержания → трактуем как прокрутку
+      if (Math.abs(e.clientX - startX) > 10 || Math.abs(e.clientY - startY) > 10) {
+        clearTimeout(pressTimer);
+        mode = "scroll";
       }
+    }
+    if (mode === "scroll") {
+      // Ручная прокрутка (touch-action:none на карточке блокирует нативную)
+      e.preventDefault();
+      scrollerOf().scrollBy(0, lastY - e.clientY);
+      lastY = e.clientY;
     }
   }
 
+  // Перемещение при активном переносе: двигаем призрак + переставляем среди соседей
+  function moveDrag(e) {
+    if (!dragEl || !ghost) return;
+    ghost.style.left = e.clientX + "px";
+    ghost.style.top = e.clientY + "px";
+    autoScroll(e.clientY);
+    // Ближайший сосед по центру (работает и для списка, и для сетки-многоколонки)
+    const siblings = [...container.querySelectorAll(":scope > " + itemSel)].filter(s => s !== dragEl);
+    let best = null, bestDist = Infinity, bestBefore = true;
+    for (const s of siblings) {
+      const rect = s.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
+      const dist = Math.hypot(e.clientX - cx, e.clientY - cy);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = s;
+        bestBefore = (e.clientY < cy - rect.height / 2) ||
+                     (e.clientY <= cy + rect.height / 2 && e.clientX < cx);
+      }
+    }
+    if (best) container.insertBefore(dragEl, bestBefore ? best : best.nextSibling);
+  }
+
   function autoScroll(y) {
-    const scroller = container.closest(".oe-body, #products, .drawer-body") || document.scrollingElement;
+    const scroller = scrollerOf();
     const M = 70; // зона у края
     let dy = 0;
     if (y < M) dy = -(M - y) / 4;
@@ -2422,12 +2564,17 @@ function enableDragReorder(container, opts) {
   }
 
   function onUp() {
+    clearTimeout(pressTimer);
     clearInterval(scrollTimer);
+    if (curHandle) curHandle.removeEventListener("pointermove", onMove);
+    const wasDrag = (mode === "drag" && dragEl);
     if (ghost) { ghost.remove(); ghost = null; }
     if (dragEl) dragEl.classList.remove("drag-source");
-    dragEl = null;
-    const ids = [...container.querySelectorAll(":scope > " + itemSel)].map(el => el.dataset.id);
-    if (opts.onDrop) opts.onDrop(ids);
+    dragEl = null; mode = null; curHandle = null;
+    if (wasDrag) {
+      const ids = [...container.querySelectorAll(":scope > " + itemSel)].map(el => el.dataset.id);
+      if (opts.onDrop) opts.onDrop(ids);
+    }
   }
 }
 
@@ -2628,6 +2775,162 @@ async function saveOrder() {
     closeOrderEditor();
   } else {
     toast("err", (res && res.message) || "Не удалось сохранить порядок.");
+  }
+}
+
+/* ── Редактор порядка товаров (Работа 3) ──
+   Выбираем подгруппу → карточки её товаров в сетке, перетаскиваем (тот же движок
+   enableDragReorder). Порядок пишется в product_order[подгруппа]. Ключ товара —
+   полное имя (upload.py сопоставляет по normalize_name). */
+let poeSavedMap = {};      // сохранённая карта {подгруппа: [имена]} — прочих подгрупп не теряем
+let poeOrder = [];         // текущий порядок имён выбранной подгруппы
+let poeSubgroup = "";      // выбранная подгруппа
+let poeSaving = false;
+
+// Подгруппы, в которых есть товары; порядок — как в STRUCTURE_FULL, затем прочие
+function poeSubgroupsWithProducts() {
+  const present = new Set();
+  allProducts.forEach(p => { if (p.subgroup) present.add(p.subgroup); });
+  const ordered = [];
+  Object.keys(STRUCTURE_FULL).forEach(sec => {
+    Object.keys(STRUCTURE_FULL[sec] || {}).forEach(sub => {
+      if (present.has(sub) && !ordered.includes(sub)) ordered.push(sub);
+    });
+  });
+  // подгруппы, которых нет в карте (напр. «Прочее») — в конец
+  [...present].forEach(sub => { if (!ordered.includes(sub)) ordered.push(sub); });
+  return ordered;
+}
+
+// Товары выбранной подгруппы (объекты) в порядке текущего poeOrder
+function poeProductsFor(subgroup) {
+  return allProducts.filter(p => p.subgroup === subgroup);
+}
+
+async function openProductOrderEditor() {
+  closeDrawer();
+  if (!allProducts.length) { toast("info", "Сначала подождите загрузку товаров."); return; }
+  // Тянем сохранённый порядок товаров
+  poeSavedMap = {};
+  try {
+    const r = await fetch("/" + TOKEN + "/settings");
+    const s = await r.json();
+    if (s && typeof s.product_order === "string" && s.product_order) {
+      const parsed = JSON.parse(s.product_order);
+      if (parsed && typeof parsed === "object") poeSavedMap = parsed;
+    }
+  } catch (e) { /* нет порядка / офлайн */ }
+
+  // Заполнить выпадашку подгрупп
+  const sel = document.getElementById("poe-subgroup");
+  const subs = poeSubgroupsWithProducts();
+  sel.innerHTML = "";
+  subs.forEach(sub => {
+    const opt = document.createElement("option");
+    opt.value = sub; opt.textContent = sub;
+    sel.appendChild(opt);
+  });
+  poeSubgroup = subs[0] || "";
+  sel.value = poeSubgroup;
+  renderProductGrid();
+
+  document.getElementById("product-order-editor").classList.add("open");
+  document.getElementById("product-order-editor").setAttribute("aria-hidden", "false");
+}
+
+function onProductSubgroupChange() {
+  poeSubgroup = document.getElementById("poe-subgroup").value;
+  renderProductGrid();
+}
+
+function renderProductGrid() {
+  const grid = document.getElementById("poe-grid");
+  grid.innerHTML = "";
+  const prods = poeProductsFor(poeSubgroup);
+  const byName = {};
+  prods.forEach(p => { byName[p.name] = p; });
+  // Текущий порядок: сохранённый список этой подгруппы, наложенный на реальные товары
+  poeOrder = reorderBy(prods.map(p => p.name), poeSavedMap[poeSubgroup] || []);
+
+  if (!prods.length) {
+    grid.classList.remove("jiggle");
+    grid.innerHTML = '<p class="oe-hint" style="grid-column:1/-1">В этой подгруппе нет товаров.</p>';
+    return;
+  }
+
+  poeOrder.forEach((name, i) => {
+    const p = byName[name];
+    if (!p) return;
+    grid.appendChild(buildPoeCard(p, i + 1));
+  });
+  grid.classList.add("jiggle");
+
+  // Перетаскивание карточек внутри сетки; вся карточка — ручка, долгое нажатие —
+  // старт переноса (быстрый свайп прокручивает), как значки на телефоне.
+  enableDragReorder(grid, {
+    itemSelector: ".poe-card", handleSelector: ".poe-card", longPress: 200,
+    onDrop: ids => { poeOrder = ids.slice(); renumberPoe(); },
+  });
+}
+
+// Построить карточку товара для редактора порядка
+function buildPoeCard(p, pos) {
+  const card = document.createElement("div");
+  card.className = "poe-card";
+  card.dataset.id = p.name;
+
+  const photo = document.createElement("div");
+  photo.className = "poe-card-photo";
+  if (p.image_url) {
+    photo.innerHTML = '<img src="' + esc(p.image_url) + '" alt="" loading="lazy" decoding="async">';
+  } else {
+    photo.innerHTML = '<svg class="ph-empty" width="32" height="32" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v13.5a1.5 1.5 0 001.5 1.5z"/></svg>';
+  }
+  card.appendChild(photo);
+
+  const posBadge = document.createElement("span");
+  posBadge.className = "poe-card-pos"; posBadge.textContent = pos;
+  card.appendChild(posBadge);
+
+  const nm = document.createElement("div");
+  nm.className = "poe-card-name"; nm.textContent = p.name;
+  card.appendChild(nm);
+  return card;
+}
+
+// Обновить номера позиций на карточках без полного перерендера (после перетаскивания)
+function renumberPoe() {
+  const grid = document.getElementById("poe-grid");
+  [...grid.querySelectorAll(":scope > .poe-card")].forEach((card, i) => {
+    const badge = card.querySelector(".poe-card-pos");
+    if (badge) badge.textContent = i + 1;
+  });
+}
+
+function closeProductOrderEditor() {
+  document.getElementById("product-order-editor").classList.remove("open");
+  document.getElementById("product-order-editor").setAttribute("aria-hidden", "true");
+}
+
+async function saveProductOrder() {
+  if (poeSaving) return;
+  poeSaving = true;
+  const btn = document.getElementById("poe-save-btn");
+  btn.disabled = true;
+  // Обновляем в сохранённой карте только текущую подгруппу — прочие не трогаем
+  const map = Object.assign({}, poeSavedMap);
+  map[poeSubgroup] = poeOrder.slice();
+  const res = await apiCall("/" + TOKEN + "/product-order", {
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(map),
+  });
+  poeSaving = false; btn.disabled = false;
+  if (res && res.ok) {
+    poeSavedMap = map;   // фиксируем локально, чтобы повторное сохранение не потеряло
+    toast("ok", res.message || "Порядок товаров сохранён.");
+    closeProductOrderEditor();
+  } else {
+    toast("err", (res && res.message) || "Не удалось сохранить порядок товаров.");
   }
 }
 

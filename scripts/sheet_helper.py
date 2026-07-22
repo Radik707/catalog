@@ -328,7 +328,7 @@ def append_edit(product_key: str, edit_type: str, value: str) -> None:
 # Белый список допустимых ключей настроек — защита от записи произвольных полей.
 # catalog_order (Работа 2) — JSON с пользовательским порядком разделов/подгрупп/категорий
 # витрины; хранится одной ячейкой (JSON до ~50000 символов помещается в ячейку Google Sheets).
-ALLOWED_SETTINGS = {"price_color", "catalog_order"}
+ALLOWED_SETTINGS = {"price_color", "catalog_order", "product_order"}
 
 
 def load_settings() -> dict:
