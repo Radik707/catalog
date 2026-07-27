@@ -1117,12 +1117,19 @@ PAGE = r"""<!doctype html>
   .ord-toggle { width: 30px; }
   .ord-count { font-size: 12px; color: #9ca3af; flex-shrink: 0; }
 
-  /* Плавающий «призрак» при перетаскивании (общий для Работ 2 и 3) */
-  .drag-ghost { position: fixed; z-index: 1400; pointer-events: none; opacity: .95;
-                box-shadow: 0 10px 30px rgba(0,0,0,.25); border-radius: 10px;
-                transform: translate(-50%, -50%); }
-  /* Место, откуда взяли элемент (полупрозрачная «дырка») */
-  .drag-source { opacity: .35; }
+  /* Плавающий «призрак» при перетаскивании (общий для Работ 2 и 3) —
+     приподнятая копия карточки, следует за пальцем/курсором */
+  .drag-ghost { position: fixed; z-index: 1400; pointer-events: none; opacity: .96;
+                box-shadow: 0 12px 34px rgba(0,0,0,.28); border-radius: 12px;
+                transform: translate(-50%, -50%) scale(1.06); }
+  /* Место, откуда взяли элемент — пустой слот-«дырка» (пунктир), содержимое спрятано */
+  .drag-source { opacity: 1; }
+  .poe-card.drag-source { background: #eef2ff; border: 2px dashed #93c5fd; }
+  .poe-card.drag-source > * { visibility: hidden; }
+  .ord-node.drag-source { background: #eef2ff; border-style: dashed; }
+  .ord-node.drag-source > * { visibility: hidden; }
+  /* Плавное «раздвигание» соседей при переносе (FLIP) — задаётся классом на контейнере */
+  .poe-grid.dragging .poe-card { animation: none !important; }
 
   /* ── Редактор порядка товаров (Работа 3): сетка карточек ── */
   .poe-picker { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
@@ -2506,11 +2513,35 @@ function enableDragReorder(container, opts) {
     ghost = item.cloneNode(true);
     ghost.classList.add("drag-ghost");
     ghost.style.width = r.width + "px";
+    ghost.style.height = r.height + "px";
     ghost.style.left = x + "px";
     ghost.style.top = y + "px";
     document.body.appendChild(ghost);
     item.classList.add("drag-source");
+    container.classList.add("dragging");   // пауза «подрагивания», чтобы не мешало FLIP
     if (navigator.vibrate) { try { navigator.vibrate(15); } catch (_) {} }
+  }
+
+  // FLIP-анимация: соседи ПЛАВНО съезжают на новые места при перестановке
+  // (эффект «пятнашек» — карточки раздвигаются, а не мгновенно меняются местами).
+  function flip(mutate) {
+    const items = [...container.querySelectorAll(":scope > " + itemSel)];
+    const first = new Map();
+    items.forEach(el => first.set(el, el.getBoundingClientRect()));  // First
+    mutate();                                                        // перестановка в DOM
+    items.forEach(el => {
+      if (el === dragEl) return;                 // источник-«дырку» не анимируем
+      const f = first.get(el);
+      const l = el.getBoundingClientRect();      // Last
+      const dx = f.left - l.left, dy = f.top - l.top;
+      if (!dx && !dy) return;
+      el.style.transition = "none";              // Invert
+      el.style.transform = "translate(" + dx + "px," + dy + "px)";
+      requestAnimationFrame(() => {              // Play
+        el.style.transition = "transform .18s ease";
+        el.style.transform = "";
+      });
+    });
   }
 
   function onMove(e) {
@@ -2546,11 +2577,16 @@ function enableDragReorder(container, opts) {
       if (dist < bestDist) {
         bestDist = dist;
         best = s;
+        // «До» — если указатель выше центра (другая строка) или левее в той же строке
         bestBefore = (e.clientY < cy - rect.height / 2) ||
                      (e.clientY <= cy + rect.height / 2 && e.clientX < cx);
       }
     }
-    if (best) container.insertBefore(dragEl, bestBefore ? best : best.nextSibling);
+    if (!best) return;
+    const ref = bestBefore ? best : best.nextSibling;
+    // Ничего не делаем, если карточка уже стоит на этом месте (иначе лишний FLIP-мигание)
+    if (ref === dragEl || dragEl.nextSibling === ref) return;
+    flip(() => container.insertBefore(dragEl, ref));   // плавно раздвигаем соседей
   }
 
   function autoScroll(y) {
@@ -2570,6 +2606,11 @@ function enableDragReorder(container, opts) {
     const wasDrag = (mode === "drag" && dragEl);
     if (ghost) { ghost.remove(); ghost = null; }
     if (dragEl) dragEl.classList.remove("drag-source");
+    container.classList.remove("dragging");
+    // Снять остаточные inline-трансформы от FLIP (на случай прерывания анимации)
+    container.querySelectorAll(":scope > " + itemSel).forEach(el => {
+      el.style.transition = ""; el.style.transform = "";
+    });
     dragEl = null; mode = null; curHandle = null;
     if (wasDrag) {
       const ids = [...container.querySelectorAll(":scope > " + itemSel)].map(el => el.dataset.id);
