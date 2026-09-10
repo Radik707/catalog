@@ -60,6 +60,11 @@ PROJECT_ROOT = SCRIPT_DIR.parent
 # --- Путь к Excel-файлам по умолчанию ---
 DEFAULT_EXCEL_DIR = r"C:\price"
 
+# Доля товаров, которые должны дойти до витрины (остаток > 1 и не скрыт).
+# Ниже порога — пишем предупреждение в лог: почти наверняка в прайсе не
+# прочиталась колонка «Остаток», и витрина окажется почти пустой.
+VISIBLE_WARN_RATIO = 0.5
+
 
 def load_badges() -> dict:
     """Загрузить метки из badges.json. При отсутствии файла возвращает пустую структуру."""
@@ -405,14 +410,35 @@ def is_category_row(a, b, c) -> bool:
     return a is not None and str(a).strip() != "" and b is None and c is None
 
 
-def parse_excel_file(filepath: str) -> list[dict]:
+def cell_stock(value) -> int:
+    """Остаток из ячейки. Пусто / не число → 0. Терпит пробелы-разделители и запятую."""
+    if value is None:
+        return 0
+    try:
+        txt = str(value).replace("\xa0", "").replace(" ", "").replace(",", ".")
+        return int(float(txt))
+    except (TypeError, ValueError):
+        return 0
+
+
+def parse_excel_file(filepath: str, stock_cols: list[int] | None = None) -> list[dict]:
     """Распарсить один Excel-файл поставщика.
+
+    stock_cols — индексы ВСЕХ колонок «Остаток» (у выгрузки 1С складов бывает
+    несколько: «Основной», «Склад ИП Лазуткина» и т.д.). Остаток товара = сумма
+    по всем складам. По умолчанию [2] — колонка C, как в простых прайсах.
+
+    Зачем сумма: раньше читалась только колонка C, поэтому товары, лежащие на
+    втором складе, получали остаток 0 и пропадали с витрины (она прячет остаток
+    <= 1). Случай 09.2026: из 631 товара видимыми остались 115 — только блок
+    Акконда, единственный со складом «Основной».
 
     Возвращает список словарей:
     [{name, price, stock, source_category, supplier_file}]
     """
     filename = Path(filepath).name
-    log.info("Парсинг файла: %s", filename)
+    cols = stock_cols if stock_cols else [2]
+    log.info("Парсинг файла: %s (колонки остатка: %s)", filename, cols)
 
     wb = openpyxl.load_workbook(filepath, data_only=True, read_only=True)
     ws = wb.active
@@ -420,10 +446,13 @@ def parse_excel_file(filepath: str) -> list[dict]:
     current_category = "Без категории"
 
     for row in ws.iter_rows(min_row=1, values_only=True):
-        # Извлекаем первые 3 колонки
+        # Извлекаем название, цену и ячейки остатка по всем складам
         a = row[0] if len(row) > 0 else None
         b = row[1] if len(row) > 1 else None
-        c = row[2] if len(row) > 2 else None
+        stocks = [row[j] if len(row) > j else None for j in cols]
+        # Признак «в строке есть хоть какой-то остаток» — для классификации строки
+        # ниже (заголовок/категория). None только если пусты ВСЕ склады сразу.
+        c = next((v for v in stocks if v is not None), None)
 
         # Пропускаем пустые строки
         if a is None and b is None and c is None:
@@ -450,10 +479,8 @@ def parse_excel_file(filepath: str) -> list[dict]:
                 log.warning("  Не удалось прочитать цену: '%s' (строка: %s)", b, name)
                 continue
 
-            try:
-                stock = int(float(c)) if c is not None else 0
-            except (ValueError, TypeError):
-                stock = 0
+            # Остаток — сумма по всем складам: товар доступен, если лежит хоть на одном
+            stock = sum(cell_stock(v) for v in stocks)
 
             products.append({
                 "name": name,
@@ -475,10 +502,17 @@ def parse_excel_file(filepath: str) -> list[dict]:
 NEW_FORMAT_NAME_COL = 3  # колонка D
 
 
-def find_header_cols(ws) -> tuple[int | None, int | None]:
-    """Найти индексы колонок «Цена» и «Остаток» в первых строках листа."""
+def find_stock_cols(ws) -> tuple[int | None, list[int]]:
+    """Найти колонку «Цена» и ВСЕ колонки «Остаток» в первых строках листа.
+
+    В общем прайсе (одна выгрузка 1С на всех поставщиков) складов несколько, и у
+    каждого своя колонка «Остаток» — например «Основной» и «Склад ИП Лазуткина».
+    Шапка двухэтажная: сверху имя склада, ниже слово «Остаток». Ищем именно
+    «Остаток» и собираем ВСЕ такие колонки, а не первую попавшуюся.
+    """
     for row in ws.iter_rows(min_row=1, max_row=10, values_only=True):
-        price_col = stock_col = None
+        price_col = None
+        stock_cols: list[int] = []
         for j, v in enumerate(row):
             if v is None:
                 continue
@@ -486,10 +520,20 @@ def find_header_cols(ws) -> tuple[int | None, int | None]:
             if s == "цена":
                 price_col = j
             elif s == "остаток":
-                stock_col = j
-        if price_col is not None and stock_col is not None:
-            return price_col, stock_col
-    return None, None
+                stock_cols.append(j)
+        if price_col is not None and stock_cols:
+            return price_col, stock_cols
+    return None, []
+
+
+def find_header_cols(ws) -> tuple[int | None, int | None]:
+    """Совместимость: колонка «Цена» и ПОСЛЕДНЯЯ колонка «Остаток».
+
+    Используется веткой нового формата 1С (там склад один). Разбор старого формата
+    берёт все склады сразу — см. find_stock_cols / parse_excel_file.
+    """
+    price_col, stock_cols = find_stock_cols(ws)
+    return price_col, (stock_cols[-1] if stock_cols else None)
 
 
 def is_new_format(price_col: int | None) -> bool:
@@ -1383,6 +1427,33 @@ def upload_to_google_sheet(rows: list[list], num_files: int) -> None:
         num_files,
     )
 
+    # --- Сколько товаров реально ДОЙДЁТ до витрины ---
+    # Витрина прячет остаток <= 1 (CatalogView/nav.ts) и товары с флагом «Скрыт».
+    # Метрика «сколько строк записано» этого не видит: прайс БЕЗ колонки «Остаток»
+    # даёт полный лист и почти пустую витрину. Реальный случай 09.2026: 631 строка
+    # записана, а на витрине осталось 115 товаров (только блок Акконда — у остальных
+    # блоков остаток не прочитался и лёг нулём). Загрузчик тогда отрапортовал «успех».
+    # Поэтому логируем ОБА числа и предупреждаем, если витрина схлопнулась.
+    def _row_stock(row) -> int:
+        """Остаток из строки листа (колонка C). Пусто/не число → 0, как читает витрина."""
+        try:
+            return int(float(str(row[2]).replace(",", ".")))
+        except (TypeError, ValueError, IndexError):
+            return 0
+
+    visible = sum(
+        1 for r in rows[1:]
+        if _row_stock(r) > 1 and str(r[11] if len(r) > 11 else "") != "1"
+    )
+    log.info("Видимых на витрине: %d из %d товаров", visible, num_products)
+    if num_products and visible < num_products * VISIBLE_WARN_RATIO:
+        log.warning(
+            "ВНИМАНИЕ: на витрину попадёт только %d из %d товаров (%.0f%%). "
+            "Обычная причина — в прайсе не прочиталась колонка «Остаток»: "
+            "витрина прячет товары с остатком <= 1.",
+            visible, num_products, 100.0 * visible / num_products,
+        )
+
 
 def main():
     # Загрузить переменные окружения из .env
@@ -1444,13 +1515,19 @@ def main():
     new_format_used = False
     for filepath in xlsx_files:
         wb = openpyxl.load_workbook(filepath, data_only=True, read_only=True)
-        price_col, stock_col = find_header_cols(wb.active)
+        price_col, stock_cols = find_stock_cols(wb.active)
         wb.close()
         if is_new_format(price_col):
             new_format_used = True
-            all_products.extend(parse_new_format(filepath, price_col, stock_col))
+            # В новом формате склад один — берём последнюю найденную колонку «Остаток».
+            all_products.extend(
+                parse_new_format(filepath, price_col, stock_cols[-1] if stock_cols else None)
+            )
         else:
-            all_products.extend(parse_excel_file(filepath))
+            # Старый формат: складов может быть несколько — суммируем все.
+            if len(stock_cols) > 1:
+                log.info("В прайсе %d колонок «Остаток» — суммирую склады", len(stock_cols))
+            all_products.extend(parse_excel_file(filepath, stock_cols))
 
     log.info("Всего товаров из %d файлов: %d", len(xlsx_files), len(all_products))
 

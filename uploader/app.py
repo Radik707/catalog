@@ -76,6 +76,9 @@ UPLOAD_TIMEOUT = int(os.environ.get("UPLOAD_TIMEOUT", "600"))
 LAST_BATCH_DIR = Path(os.environ.get("LAST_BATCH_DIR", str(SCRIPT_DIR / "last_batch")))
 NOTIFY_SCRIPT = UPLOAD_SCRIPT.parent / "notify_tg.py"  # отправка уведомлений в Telegram
 WARN_RATIO = float(os.environ.get("WARN_RATIO", "0.5"))  # порог «подозрительно мало»
+# Порог второй проверки: какая доля загруженных товаров обязана дойти до витрины.
+# Ниже — считаем загрузку неудачной (обычно не прочитался «Остаток»).
+VISIBLE_WARN_RATIO = float(os.environ.get("VISIBLE_WARN_RATIO", "0.5"))
 # Путь к файлу истории загрузок (env с дефолтом)
 HISTORY_FILE = Path(os.environ.get("HISTORY_FILE", str(SCRIPT_DIR / "history.json")))
 
@@ -179,7 +182,7 @@ def _process_async(entry_id: str, max_chat_id=None) -> None:
             return
 
         # 2. Само обновление
-        ok, err, count = run_upload()
+        ok, err, count, visible = run_upload()
 
         if not ok:
             # Ошибка разбора/записи: возвращаем рабочую версию, файлы — в архив
@@ -201,21 +204,36 @@ def _process_async(entry_id: str, max_chat_id=None) -> None:
 
         # 3. Обновление прошло. Файлы — в архив
         archive_incoming()
+        # Проверка №1 (была): резко упало ЧИСЛО СТРОК каталога.
         warn = bool(count is not None and b_rows and count < b_rows * WARN_RATIO)
+        # Проверка №2 (новая): строк много, а на витрину доходит горстка товаров.
+        # Именно этот случай проскочил 09.2026: 631 строка (больше прежних 565 — первая
+        # проверка довольна), но остаток прочитался только у блока Акконда, и клиент
+        # увидел 115 товаров вместо 541. Считаем это такой же поломкой и откатываемся.
+        blind = bool(
+            visible is not None and count and visible < count * VISIBLE_WARN_RATIO
+        )
+        warn = warn or blind
 
         if warn:
             # Подозрительно мало: откладываем новую, возвращаем прошлую, спрашиваем владельца
             stash_new()
             rollback_catalog()
-            notify(
-                "decision",
+            reason = (
+                f"⚠️ Загрузка дала {count} товаров, а на витрину попадает только {visible} — "
+                "у остальных не прочитался «Остаток» (витрина прячет остаток ≤ 1).\n"
+                "Скорее всего, в прайсе нет колонки с остатками или она называется иначе.\n"
+                if blind else
                 f"⚠️ Загрузка дала {count} товаров, а было {b_rows} — это сильно меньше обычного.\n"
-                "Я вернул прошлую версию каталога. Что делать?",
             )
+            notify("decision", reason + "Я вернул прошлую версию каталога. Что делать?")
             _notify_max(
                 max_chat_id,
-                f"⚠️ Получилось {count} товаров — подозрительно мало (было {b_rows}). "
-                "Вернул прошлую версию каталога, проверьте файлы.",
+                (f"⚠️ Из {count} товаров на витрину попадает только {visible} — "
+                 "проверьте колонку «Остаток» в прайсе. "
+                 if blind else
+                 f"⚠️ Получилось {count} товаров — подозрительно мало (было {b_rows}). ")
+                + "Вернул прошлую версию каталога.",
             )
             update_history(
                 entry_id,
@@ -339,30 +357,39 @@ def rollback_catalog() -> tuple[bool, str]:
                   f"({rows} товаров). Сайт вернётся к ней за минуту.")
 
 
-def run_upload(source_dir: "Path | None" = None) -> tuple[bool, str, int | None]:
-    """Запустить upload.py на папке прайсов. Вернуть (успех, текст_ошибки, число_товаров).
+def run_upload(source_dir: "Path | None" = None) -> tuple[bool, str, int | None, int | None]:
+    """Запустить upload.py. Вернуть (успех, текст_ошибки, число_товаров, число_видимых).
+
+    «Число видимых» — сколько товаров реально попадёт на витрину (остаток > 1 и не
+    скрыт). Считает upload.py и печатает строкой «Видимых на витрине: N из M товаров».
+    Отдельная метрика нужна потому, что число ЗАПИСАННЫХ строк ничего не говорит о
+    витрине: прайс без колонки «Остаток» пишет полный лист и оставляет витрину пустой.
 
     source_dir по умолчанию = INCOMING_DIR (очередь оператора). Админ-панель
     («Применить сейчас») передаёт LAST_BATCH_DIR — пересборка из архива последней
     партии, т.к. очередь после загрузки очищается (иначе сборка падала на пустой папке).
     """
     if not UPLOAD_SCRIPT.exists():
-        return False, f"Скрипт не найден: {UPLOAD_SCRIPT}", None
+        return False, f"Скрипт не найден: {UPLOAD_SCRIPT}", None, None
 
     src = source_dir if source_dir is not None else INCOMING_DIR
     log.info("Запуск upload.py на папке %s", src)
     try:
         rc, output = _run_py(UPLOAD_SCRIPT, "--path", str(src))
     except subprocess.TimeoutExpired:
-        return False, "Обновление прервано по таймауту.", None
+        return False, "Обновление прервано по таймауту.", None, None
 
     if rc != 0:
         tail = "\n".join(output.strip().splitlines()[-8:])
-        return False, f"Ошибка при обновлении:\n{tail}", None
+        return False, f"Ошибка при обновлении:\n{tail}", None, None
 
     m = re.search(r"Загружено (\d+) товаров", output)
     count = int(m.group(1)) if m else None
-    return True, "", count
+    # Строку печатает upload.py сразу после записи листа. Старая версия скрипта её
+    # не печатает — тогда visible=None и проверка витрины просто не применяется.
+    mv = re.search(r"Видимых на витрине: (\d+) из \d+ товаров", output)
+    visible = int(mv.group(1)) if mv else None
+    return True, "", count, visible
 
 
 def stash_new() -> bool:

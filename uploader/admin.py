@@ -510,7 +510,9 @@ def admin_apply(token: str):
         try:
             # Пересборка из АРХИВА последней партии (LAST_BATCH_DIR), а не из очереди
             # оператора (она пустеет после загрузки) — иначе сборка падает на пустой папке.
-            ok, err, count = run_upload(LAST_BATCH_DIR)
+            # visible — сколько товаров дойдёт до витрины; здесь не используется
+            # (админ применяет свои правки осознанно), но кортеж распаковываем целиком.
+            ok, err, count, _visible = run_upload(LAST_BATCH_DIR)
             if ok:
                 log.info("admin /apply: каталог успешно пересобран, %s товаров", count)
             else:
