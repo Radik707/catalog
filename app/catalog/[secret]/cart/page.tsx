@@ -13,7 +13,9 @@ import type { OrderHistoryEntry, OrderHistoryItem, Product } from "@/lib/types";
 // Реальная единица товара в снимке заказа: «шт» / «блок» / «кг» / … (D-10, план 21-02).
 import { getUnit } from "@/lib/getUnit";
 
-const TELEGRAM_USERNAME = "ZhukOleh";
+// Telegram-ник агента, которому уходят заказы. Можно переопределить переменной
+// NEXT_PUBLIC_TELEGRAM_USERNAME в Vercel без правки кода (смена агента).
+const TELEGRAM_USERNAME = process.env.NEXT_PUBLIC_TELEGRAM_USERNAME || "Jojonemoooo";
 // Параметры MAX: ник бота (для ссылки) и эндпоинт приёма заказа на daniella.
 // Если переменные не заданы — кнопка MAX не рендерится (фича выключена).
 const MAX_BOT = process.env.NEXT_PUBLIC_MAX_BOT;
