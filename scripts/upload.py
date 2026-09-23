@@ -34,6 +34,9 @@ from datetime import date
 
 import openpyxl
 
+# Автоперенос фото при переименовании товара (чистый модуль, без сети и файлов)
+import photo_rebind
+
 # --- Кодировка вывода консоли ---
 # Консоль Windows по умолчанию работает в cp1252 и не умеет печатать кириллицу
 # через print()/логи — это роняло предпросмотр --dry-run с UnicodeEncodeError.
@@ -1146,6 +1149,22 @@ def _build_url_index(photo_urls: dict[str, str]) -> dict[str, str]:
     return index
 
 
+def _load_auto_json(file_name: str) -> dict:
+    """Прочитать runtime-файл автопереноса. Нет файла или битый — пустой словарь.
+
+    Эти файлы живут только на сервере (в .gitignore): их пишет persist_rebinds
+    после каждого перегона, и в репозиторий они не попадают.
+    """
+    path = SCRIPT_DIR / file_name
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as e:
+        log.warning("%s не прочитан (%s) — автопривязки пропущены", file_name, e)
+        return {}
+
+
 def load_url_index() -> dict[str, str]:
     """Загрузить индекс {folder/filename → url} и {filename → url} из photo_urls.json.
 
@@ -1158,6 +1177,8 @@ def load_url_index() -> dict[str, str]:
         return {}
     with open(photo_urls_path, "r", encoding="utf-8") as f:
         photo_urls: dict[str, str] = json.load(f)
+    # Ссылки, добытые автопереносом (серверный runtime, вне git) — см. persist_rebinds
+    photo_urls.update(_load_auto_json("photo_urls_auto.json"))
     return _build_url_index(photo_urls)
 
 
@@ -1199,10 +1220,13 @@ def load_photo_data() -> dict[str, dict[str, str]]:
                 "description": description,
             }
 
-    # Ручные привязки перезаписывают авто-маппинг (description не перезаписывается)
+    # Порядок важен: сначала автоперенос (сервер), поверх — ручные привязки из git.
+    # Если владелец задал фото руками, его выбор должен побеждать автоматику.
+    overrides: dict[str, str] = dict(_load_auto_json("photo_overrides_auto.json"))
     if overrides_path.exists():
         with open(overrides_path, "r", encoding="utf-8") as f:
-            overrides: dict[str, str] = json.load(f)
+            overrides.update(json.load(f))
+    if overrides:
         for product_name, file_key in overrides.items():
             if file_key in url_index:
                 existing = name_to_data.get(product_name.lower(), {})
@@ -1214,6 +1238,145 @@ def load_photo_data() -> dict[str, dict[str, str]]:
 
     log.info("Загружено фото в маппинге: %d", len(name_to_data))
     return name_to_data
+
+
+def load_current_photos() -> dict[str, str]:
+    """Прочитать лист «Товары» ДО перезаписи → {название: URL фото}.
+
+    Это снимок «как было вчера» — источник для автопереноса фото при
+    переименовании товара (см. photo_rebind.py). Читаем именно рабочий лист, а не
+    «Товары_BACKUP»: бэкап делает загрузчик перед перегоном, и на момент вызова
+    он совпадает с рабочим, а при ручном запуске скрипта бэкапа может и не быть.
+
+    Любой сбой → пустой словарь: автоперенос просто не сработает, перегон не упадёт.
+    """
+    try:
+        import gspread
+        from google.oauth2.service_account import Credentials
+    except ImportError:
+        return {}
+    creds_path = os.environ.get("GOOGLE_CREDENTIALS_PATH", "")
+    if not creds_path:
+        for d in (SCRIPT_DIR, PROJECT_ROOT):
+            c = d / "credentials.json"
+            if c.exists():
+                creds_path = str(c)
+                break
+    sheets_id = os.environ.get("GOOGLE_SHEETS_ID", "")
+    if not creds_path or not sheets_id:
+        return {}
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive",
+    ]
+    try:
+        creds = Credentials.from_service_account_file(creds_path, scopes=scopes)
+        ss = gspread.authorize(creds).open_by_key(sheets_id)
+        values = ss.worksheet("Товары").get_all_values()
+    except Exception as e:  # noqa: BLE001
+        log.warning("Не удалось прочитать прошлые фото (автоперенос пропущен): %s", e)
+        return {}
+    if not values:
+        return {}
+    header = values[0]
+    try:
+        name_i = header.index("Наименование")
+        img_i = header.index("ImageUrl")
+    except ValueError:
+        return {}
+    return {
+        r[name_i]: r[img_i]
+        for r in values[1:]
+        if len(r) > max(name_i, img_i) and r[name_i] and r[img_i].strip()
+    }
+
+
+# Регулярка «обычной» ссылки Cloudinary: /upload/<версия>/<папка>/<файл>.
+# У ссылок с ручной обрезкой (/upload/c_crop,.../v.../папка/файл) версия идёт не
+# сразу, папка не определяется — такие привязываем коротким ключом (см. ниже).
+_PLAIN_URL = re.compile(r"/upload/v\d+/([^/]+)/")
+
+
+def persist_rebinds(suggestions: list) -> int:
+    """Записать автоперенесённые фото в photo_urls.json и photo_overrides.json.
+
+    Зачем писать на диск, а не только применить на лету: так связь закрепляется
+    навсегда. Со следующего перегона товар находит фото обычным точным матчингом,
+    и повторно пересчитывать ничего не нужно. Старые ключи не трогаем — только
+    добавляем, чтобы вернувшийся под прежним именем товар тоже нашёл своё фото.
+
+    Возвращает число новых привязок.
+    """
+    auto = [s for s in suggestions if s.auto]
+    if not auto:
+        return 0
+    # ВАЖНО: пишем в ОТДЕЛЬНЫЕ файлы, а не в photo_overrides.json из git.
+    # Перегон идёт на сервере, а эти JSON лежат в репозитории: правь скрипт их —
+    # следующий `git pull` упёрся бы в локальные изменения и деплой встал. Поэтому
+    # автоперенос — серверное runtime-состояние, как novelty_dates.json (в .gitignore).
+    # Ручные привязки остаются в git и имеют приоритет: их владелец задал осознанно.
+    urls_path = SCRIPT_DIR / "photo_urls_auto.json"
+    ov_path = SCRIPT_DIR / "photo_overrides_auto.json"
+    try:
+        urls = json.loads(urls_path.read_text(encoding="utf-8")) if urls_path.exists() else {}
+        overrides = json.loads(ov_path.read_text(encoding="utf-8")) if ov_path.exists() else {}
+        # Ключи из основного файла нужны, чтобы не выдумать занятое имя файла.
+        main_urls_path = SCRIPT_DIR / "photo_urls.json"
+        main_urls = json.loads(main_urls_path.read_text(encoding="utf-8")) if main_urls_path.exists() else {}
+    except (OSError, json.JSONDecodeError) as e:
+        log.warning("Автоперенос не записан (%s) — фото вернутся вручную", e)
+        return 0
+
+    key_by_url = {v: k for k, v in {**main_urls, **urls}.items()}
+    taken = set(main_urls) | set(urls)
+    added = 0
+    for s in auto:
+        key = key_by_url.get(s.url)
+        if key is None:
+            file_name = s.url.rsplit("/", 1)[-1]
+            key = file_name
+            # Одно имя файла может встретиться с разной обрезкой — разводим суффиксом.
+            if key in taken and urls.get(key) != s.url:
+                base, _, ext = file_name.rpartition(".")
+                n = 2
+                while f"{base}-{n}.{ext}" in taken:
+                    n += 1
+                key = f"{base}-{n}.{ext}"
+            urls[key] = s.url
+            taken.add(key)
+            key_by_url[s.url] = key
+        m = _PLAIN_URL.search(s.url)
+        overrides[s.new_name] = f"{m.group(1)}/{key}" if m else key
+        added += 1
+
+    try:
+        with open(urls_path, "w", encoding="utf-8") as f:
+            json.dump(urls, f, ensure_ascii=False, indent=2)
+            f.write("\n")
+        with open(ov_path, "w", encoding="utf-8") as f:
+            json.dump(overrides, f, ensure_ascii=False, indent=2)
+            f.write("\n")
+    except OSError as e:
+        log.warning("Не удалось сохранить автоперенос: %s", e)
+        return 0
+    return added
+
+
+def report_rebinds(suggestions: list) -> None:
+    """Показать в логе итог автопереноса: что переехало само, что ждёт человека."""
+    auto = [s for s in suggestions if s.auto]
+    manual = [s for s in suggestions if not s.auto]
+    if auto:
+        log.info("Фото перенесено автоматически после переименования: %d", len(auto))
+        for s in auto:
+            log.info("  ✓ %s", s.new_name[:70])
+            log.info("      было: %s", s.old_name[:70])
+    if manual:
+        log.warning("Фото НЕ перенесено, нужен взгляд владельца: %d", len(manual))
+        for s in manual:
+            log.warning("  ? %s", s.new_name[:70])
+            log.warning("      ближайший: %s", s.old_name[:66])
+            log.warning("      причина: %s", s.reason)
 
 
 def _find_photo_entry(name: str, photo_data: dict[str, dict[str, str]]) -> dict[str, str] | None:
@@ -1671,6 +1834,35 @@ def main():
     # Авто-новинка с истечением: метка «новинка» только в течение окна
     # NOVELTY_WINDOW_DAYS с даты первого появления. В --dry-run состояние не пишем.
     novelty_names = compute_novelty(all_products, new_names, persist=not args.dry_run)
+
+    # ── Автоперенос фото после переименования товара в прайсе ──
+    # Поставщик переставляет слова в названиях, и привязка фото (она держится на
+    # названии) рвётся пачками. Здесь товары, оставшиеся без фото, сопоставляются
+    # с прошлой версией каталога по устойчивому отпечатку (photo_rebind.py).
+    # Уверенные совпадения применяются сразу И закрепляются в photo_overrides.json,
+    # спорные — уходят в лог владельцу. Ни при каком сбое перегон не падает.
+    try:
+        orphans = [
+            p["name"] for p in all_products
+            if _find_photo_entry(p.get("name", ""), photo_data) is None
+        ]
+        if orphans:
+            log.info("Товаров без фото до автопереноса: %d", len(orphans))
+            previous_photos = load_current_photos()
+            if previous_photos:
+                rebinds = photo_rebind.suggest(orphans, previous_photos)
+                report_rebinds(rebinds)
+                saved = persist_rebinds(rebinds)
+                if saved:
+                    # Перечитываем маппинг, чтобы новые привязки сработали уже сейчас,
+                    # а не со следующего перегона.
+                    photo_data = load_photo_data()
+                    url_index = load_url_index()
+                    log.info("Автоперенос применён к текущему перегону: %d фото", saved)
+    except Exception as e:  # noqa: BLE001
+        # Автоперенос — улучшение, а не обязательный шаг: его сбой не должен
+        # ронять обновление каталога.
+        log.warning("Автоперенос фото пропущен из-за ошибки: %s", e)
 
     # Подготовить строки для Google Sheet (метку «новинка» получают актуальные новинки)
     rows = products_to_rows(all_products, badges, photo_data, novelty_names, url_index)
