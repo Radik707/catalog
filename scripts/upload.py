@@ -293,6 +293,55 @@ def build_category_index(structure_map: dict) -> dict:
     return index
 
 
+def load_product_category_overrides() -> dict:
+    """Загрузить точечные правки КАТЕГОРИИ товаров из product_category_overrides.json.
+
+    Зачем: поставщик иногда записывает товар не в тот блок прайса, и товар уезжает
+    в чужой раздел витрины. Реальные случаи 09.2026: «Батончик Баунти ТРИО Райская
+    клубника» оказался в блоке «Б/питание» и улетел в «Прочее», а «Киндер» и «Кофе
+    Карт Нуар» — в блоке «Знатные» (это макароны) и попали в бакалею.
+
+    Формат: {"подстрока названия": "правильная категория"}. Ключи, начинающиеся
+    с «_», игнорируются — под комментарии внутри JSON.
+    Файла нет или он битый → пустой словарь, перегон не падает.
+    """
+    path = SCRIPT_DIR / "product_category_overrides.json"
+    if not path.exists():
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        log.warning("product_category_overrides.json не прочитан (%s) — правки категорий пропущены", e)
+        return {}
+    return {k: v for k, v in data.items() if not k.startswith("_")}
+
+
+def apply_product_category_overrides(products: list[dict], overrides: dict) -> int:
+    """Переписать source_category у товаров, попавших не в тот блок прайса.
+
+    Матчинг — по подстроке названия, регистронезависимо; выигрывает ПЕРВОЕ совпадение
+    (порядок ключей в JSON), поэтому узкие ключи держим выше общих.
+    Вызывать ДО apply_structure_mapping — тогда товар разложится уже по верной категории.
+    Возвращает число применённых правок.
+    """
+    if not overrides:
+        return 0
+    pairs = [(k.lower(), v) for k, v in overrides.items()]
+    applied = 0
+    for p in products:
+        name = (p.get("name") or "").lower()
+        for needle, category in pairs:
+            if needle in name:
+                if p.get("source_category") != category:
+                    log.info("категория: «%s» → %s (было «%s»)",
+                             p.get("name", "")[:50], category, p.get("source_category", ""))
+                    p["source_category"] = category
+                    applied += 1
+                break
+    return applied
+
+
 def apply_structure_mapping(
     products: list[dict],
     category_index: dict,
@@ -1581,6 +1630,12 @@ def main():
         if catalog_order:
             structure_map = apply_catalog_order(structure_map, catalog_order)
             log.info("Применён пользовательский порядок витрины (Работа 2)")
+        # Точечные правки категории ДО раскладки: товар, записанный поставщиком не
+        # в тот блок прайса, иначе уедет в чужой раздел витрины.
+        cat_overrides = load_product_category_overrides()
+        fixed_cats = apply_product_category_overrides(all_products, cat_overrides)
+        if fixed_cats:
+            log.info("применено точечных правок категории: %d", fixed_cats)
         category_index = build_category_index(structure_map)
         all_products = apply_structure_mapping(all_products, category_index)
         # [НОВОЕ, этап 7] Наложить ручные правки подгруппы поверх авто-маппинга по категории.
