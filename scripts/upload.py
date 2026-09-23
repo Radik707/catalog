@@ -1362,6 +1362,28 @@ def persist_rebinds(suggestions: list) -> int:
     return added
 
 
+def find_photo_orphans(products: list[dict], photo_data: dict) -> list[str]:
+    """Товары, у которых фото не будет — кандидаты на автоперенос.
+
+    Источников фото три, и проверить надо ВСЕ, иначе механизм возьмётся чинить
+    то, что не сломано:
+      1. p['photo_override'] — правка владельца из вкладки «Правки» (главнее всего,
+         подставляется в products_to_rows);
+      2. photo_overrides.json — ручные привязки из git;
+      3. авто-маппинг photo_map.json.
+    Пункты 2 и 3 сидят внутри photo_data, пункт 1 живёт на самом товаре.
+
+    Без проверки пункта 1 полторы сотни товаров с фото из админки выглядели бы
+    потерявшими его: механизм перепривязывал бы их сам к себе и слал владельцу
+    ложные «нужен взгляд» (поймано на боевом предпросмотре 2026-09-23).
+    """
+    return [
+        p["name"] for p in products
+        if not p.get("photo_override")
+        and _find_photo_entry(p.get("name", ""), photo_data) is None
+    ]
+
+
 def report_rebinds(suggestions: list) -> None:
     """Показать в логе итог автопереноса: что переехало само, что ждёт человека."""
     auto = [s for s in suggestions if s.auto]
@@ -1842,23 +1864,31 @@ def main():
     # Уверенные совпадения применяются сразу И закрепляются в photo_overrides.json,
     # спорные — уходят в лог владельцу. Ни при каком сбое перегон не падает.
     try:
-        orphans = [
-            p["name"] for p in all_products
-            if _find_photo_entry(p.get("name", ""), photo_data) is None
-        ]
+        # Товар считается «без фото», только если его нет НИ в привязках, НИ в
+        # правках владельца из вкладки «Правки» (p['photo_override'] — его
+        # подставляет products_to_rows и он главнее всего остального). Без этой
+        # проверки полторы сотни товаров, у которых фото задано из админки,
+        # выглядели бы потерявшими его: механизм перепривязывал бы их сам к себе
+        # и засыпал владельца ложными «нужен взгляд».
+        orphans = find_photo_orphans(all_products, photo_data)
         if orphans:
             log.info("Товаров без фото до автопереноса: %d", len(orphans))
             previous_photos = load_current_photos()
             if previous_photos:
                 rebinds = photo_rebind.suggest(orphans, previous_photos)
                 report_rebinds(rebinds)
-                saved = persist_rebinds(rebinds)
-                if saved:
-                    # Перечитываем маппинг, чтобы новые привязки сработали уже сейчас,
-                    # а не со следующего перегона.
-                    photo_data = load_photo_data()
-                    url_index = load_url_index()
-                    log.info("Автоперенос применён к текущему перегону: %d фото", saved)
+                if args.dry_run:
+                    # Предпросмотр обязан быть read-only: он показывает, что
+                    # произойдёт, но ничего не закрепляет (как compute_novelty).
+                    log.info("--dry-run: автоперенос показан, но не записан")
+                else:
+                    saved = persist_rebinds(rebinds)
+                    if saved:
+                        # Перечитываем маппинг, чтобы новые привязки сработали уже
+                        # сейчас, а не со следующего перегона.
+                        photo_data = load_photo_data()
+                        url_index = load_url_index()
+                        log.info("Автоперенос применён к текущему перегону: %d фото", saved)
     except Exception as e:  # noqa: BLE001
         # Автоперенос — улучшение, а не обязательный шаг: его сбой не должен
         # ронять обновление каталога.

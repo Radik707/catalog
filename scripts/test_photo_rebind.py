@@ -294,3 +294,44 @@ class TestФиксацияПривязок:
                 {"Стоевъ Кетчуп Острый с/бут 310г/12": "https://cdn/x/upload/v1/presenter/1.jpg"},
             )
         ) == 0
+
+
+# ── Кто считается потерявшим фото (upload.find_photo_orphans) ────────────────
+
+
+class TestКтоОсталсяБезФото:
+    """Механизм должен браться только за тех, у кого фото ДЕЙСТВИТЕЛЬНО нет.
+
+    Дефект, пойманный на боевом предпросмотре 2026-09-23: товары с фото из
+    админки («Правки») считались потерявшими его — 148 бессмысленных привязок
+    товара к самому себе и 12 ложных «нужен взгляд владельца».
+    """
+
+    @pytest.fixture
+    def upload(self):
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "upload_orphans", str(Path(__file__).parent / "upload.py")
+        )
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def test_фото_из_правок_не_считается_потерей(self, upload):
+        products = [{"name": "Товар А", "photo_override": "presenter/1.jpg"}]
+        assert upload.find_photo_orphans(products, {}) == []
+
+    def test_фото_из_привязок_не_считается_потерей(self, upload):
+        products = [{"name": "Товар А"}]
+        photo_data = {"товар а": {"url": "https://cdn/1.jpg", "description": ""}}
+        assert upload.find_photo_orphans(products, photo_data) == []
+
+    def test_товар_совсем_без_фото_попадает_в_кандидаты(self, upload):
+        products = [{"name": "Товар без картинки"}]
+        assert upload.find_photo_orphans(products, {}) == ["Товар без картинки"]
+
+    def test_пустая_строка_в_правке_не_спасает(self, upload):
+        """Пустой photo_override — это отсутствие фото, а не фото."""
+        products = [{"name": "Товар А", "photo_override": ""}]
+        assert upload.find_photo_orphans(products, {}) == ["Товар А"]
